@@ -25,26 +25,21 @@ LPD3DXMESH g_pMeshSphere = NULL;
 std::vector<D3DMATERIAL9> g_pMaterials;
 std::vector<LPDIRECT3DTEXTURE9> g_pTextures;
 DWORD g_dwNumMaterials = 0;
-LPD3DXEFFECT g_pEffect1 = NULL;
-LPD3DXEFFECT g_pEffect2 = NULL;
+LPD3DXEFFECT g_pEffect1 = NULL; // simple.fx  (GBuffer: depth)
+LPD3DXEFFECT g_pEffect2 = NULL; // simple2.fx (SSAO visualize)
 
 bool g_bClose = false;
 
+// 1パス目のレンダーターゲット（深度格納用）
+// A16B16G16R16F に変更（深度をRGB複製して格納）
 LPDIRECT3DTEXTURE9 g_pRenderTarget = NULL;
 
 LPDIRECT3DVERTEXDECLARATION9 g_pQuadDecl = NULL;
 
 struct QuadVertex
 {
-    // クリップ空間用（-1..1, w=1）
-    float x;
-    float y;
-    float z;
-    float w;
-
-    // テクスチャ座標（今回は未使用でも可）
-    float u;
-    float v;
+    float x, y, z, w; // クリップ空間
+    float u, v;       // テクスチャ座標
 };
 
 static void TextDraw(LPD3DXFONT pFont, TCHAR* text, int X, int Y);
@@ -95,7 +90,7 @@ int WINAPI _tWinMain(_In_ HINSTANCE hInstance,
     rect.left = 0;
 
     HWND hWnd = CreateWindow(_T("Window1"),
-                             _T("Hello DirectX9 World !!"),
+                             _T("DX9 Minimal SSAO"),
                              WS_OVERLAPPEDWINDOW,
                              CW_USEDEFAULT,
                              CW_USEDEFAULT,
@@ -141,16 +136,12 @@ int WINAPI _tWinMain(_In_ HINSTANCE hInstance,
 void TextDraw(LPD3DXFONT pFont, TCHAR* text, int X, int Y)
 {
     RECT rect = { X, Y, 0, 0 };
-
-    // DrawTextの戻り値は文字数である。
-    // そのため、hResultの中身が整数でもエラーが起きているわけではない。
     HRESULT hResult = pFont->DrawText(NULL,
                                       text,
                                       -1,
                                       &rect,
                                       DT_LEFT | DT_NOCLIP,
                                       D3DCOLOR_ARGB(255, 0, 0, 0));
-
     assert((int)hResult >= 0);
 }
 
@@ -191,23 +182,15 @@ void InitD3D(HWND hWnd)
                                        D3DCREATE_SOFTWARE_VERTEXPROCESSING,
                                        &d3dpp,
                                        &g_pd3dDevice);
-
         assert(hResult == S_OK);
     }
 
     hResult = D3DXCreateFont(g_pd3dDevice,
-                             20,
-                             0,
-                             FW_HEAVY,
-                             1,
-                             FALSE,
-                             SHIFTJIS_CHARSET,
-                             OUT_TT_ONLY_PRECIS,
+                             20, 0, FW_HEAVY, 1, FALSE,
+                             SHIFTJIS_CHARSET, OUT_TT_ONLY_PRECIS,
                              CLEARTYPE_NATURAL_QUALITY,
-                             FF_DONTCARE,
-                             _T("ＭＳ ゴシック"),
+                             FF_DONTCARE, _T("ＭＳ ゴシック"),
                              &g_pFont);
-
     assert(hResult == S_OK);
 
     LPD3DXBUFFER pD3DXMtrlBuffer = NULL;
@@ -220,7 +203,6 @@ void InitD3D(HWND hWnd)
                                 NULL,
                                 &g_dwNumMaterials,
                                 &g_pMesh);
-
     assert(hResult == S_OK);
 
     D3DXMATERIAL* d3dxMaterials = (D3DXMATERIAL*)pD3DXMtrlBuffer->GetBufferPointer();
@@ -232,95 +214,57 @@ void InitD3D(HWND hWnd)
         g_pMaterials[i] = d3dxMaterials[i].MatD3D;
         g_pMaterials[i].Ambient = g_pMaterials[i].Diffuse;
         g_pTextures[i] = NULL;
-        
-        //--------------------------------------------------------------
-        // Unicode文字セットでもマルチバイト文字セットでも
-        // "d3dxMaterials[i].pTextureFilename"はマルチバイト文字セットになる。
-        // 
-        // 一方で、D3DXCreateTextureFromFileはプロジェクト設定で
-        // Unicode文字セットかマルチバイト文字セットか変わる。
-        //--------------------------------------------------------------
 
         std::string pTexPath(d3dxMaterials[i].pTextureFilename);
-
         if (!pTexPath.empty())
         {
-            bool bUnicode = false;
-
 #ifdef UNICODE
-            bUnicode = true;
+            int len = MultiByteToWideChar(CP_ACP, 0, pTexPath.c_str(), -1, nullptr, 0);
+            std::wstring pTexPathW(len, 0);
+            MultiByteToWideChar(CP_ACP, 0, pTexPath.c_str(), -1, &pTexPathW[0], len);
+            hResult = D3DXCreateTextureFromFileW(g_pd3dDevice, pTexPathW.c_str(), &g_pTextures[i]);
+#else
+            hResult = D3DXCreateTextureFromFileA(g_pd3dDevice, pTexPath.c_str(), &g_pTextures[i]);
 #endif
-
-            if (!bUnicode)
-            {
-                hResult = D3DXCreateTextureFromFileA(g_pd3dDevice, pTexPath.c_str(), &g_pTextures[i]);
-                assert(hResult == S_OK);
-            }
-            else
-            {
-                int len = MultiByteToWideChar(CP_ACP, 0, pTexPath.c_str(), -1, nullptr, 0);
-                std::wstring pTexPathW(len, 0);
-                MultiByteToWideChar(CP_ACP, 0, pTexPath.c_str(), -1, &pTexPathW[0], len);
-
-                hResult = D3DXCreateTextureFromFileW(g_pd3dDevice, pTexPathW.c_str(), &g_pTextures[i]);
-                assert(hResult == S_OK);
-            }
+            assert(hResult == S_OK);
         }
     }
 
     hResult = pD3DXMtrlBuffer->Release();
     assert(hResult == S_OK);
 
-    hResult = D3DXCreateEffectFromFile(g_pd3dDevice,
-                                       _T("simple.fx"),
-                                       NULL,
-                                       NULL,
-                                       D3DXSHADER_DEBUG,
-                                       NULL,
-                                       &g_pEffect1,
-                                       NULL);
-
+    // エフェクト読み込み（ファイル名は据え置き）
+    hResult = D3DXCreateEffectFromFile(g_pd3dDevice, _T("simple.fx"),
+                                       NULL, NULL, D3DXSHADER_DEBUG, NULL, &g_pEffect1, NULL);
     assert(hResult == S_OK);
 
-    hResult = D3DXCreateEffectFromFile(g_pd3dDevice,
-                                       _T("simple2.fx"),
-                                       NULL,
-                                       NULL,
-                                       D3DXSHADER_DEBUG,
-                                       NULL,
-                                       &g_pEffect2,
-                                       NULL);
-
+    hResult = D3DXCreateEffectFromFile(g_pd3dDevice, _T("simple2.fx"),
+                                       NULL, NULL, D3DXSHADER_DEBUG, NULL, &g_pEffect2, NULL);
     assert(hResult == S_OK);
 
-    hResult = D3DXCreateSphere(g_pd3dDevice,
-                               20.f,
-                               32,
-                               32,
-                               &g_pMeshSphere,
-                               NULL);
-
+    // 球メッシュ
+    hResult = D3DXCreateSphere(g_pd3dDevice, 20.f, 32, 32, &g_pMeshSphere, NULL);
     assert(hResult == S_OK);
 
+    // 1パス目ターゲット：A16B16G16R16F（Rに線形深度を格納・RGB複製）
     hResult = D3DXCreateTexture(g_pd3dDevice,
-                                640,
-                                480,
+                                640, 480,
                                 1,
                                 D3DUSAGE_RENDERTARGET,
-                                D3DFMT_A8R8G8B8,
+                                D3DFMT_A16B16G16R16F,
                                 D3DPOOL_DEFAULT,
                                 &g_pRenderTarget);
     assert(hResult == S_OK);
 
+    // フルスクリーンクアッド宣言
     D3DVERTEXELEMENT9 elems[] =
     {
         { 0,  0, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },
         { 0, 16, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0 },
         D3DDECL_END()
     };
-
-    HRESULT hr = g_pd3dDevice->CreateVertexDeclaration(elems, &g_pQuadDecl);
-    assert(hr == S_OK);
+    hResult = g_pd3dDevice->CreateVertexDeclaration(elems, &g_pQuadDecl);
+    assert(hResult == S_OK);
 }
 
 void Cleanup()
@@ -343,11 +287,11 @@ void RenderPass1()
 {
     HRESULT hResult = E_FAIL;
 
-    LPDIRECT3DSURFACE9 pOldRenderTarget = nullptr;
+    LPDIRECT3DSURFACE9 pOldRenderTarget = NULL;
     hResult = g_pd3dDevice->GetRenderTarget(0, &pOldRenderTarget);
     assert(hResult == S_OK);
 
-    LPDIRECT3DSURFACE9 pRenderTarget;
+    LPDIRECT3DSURFACE9 pRenderTarget = NULL;
     hResult = g_pRenderTarget->GetSurfaceLevel(0, &pRenderTarget);
     assert(hResult == S_OK);
 
@@ -357,8 +301,7 @@ void RenderPass1()
     static float f = 0.0f;
     f += 0.025f;
 
-    D3DXMATRIX mat;
-    D3DXMATRIX View, Proj;
+    D3DXMATRIX View, Proj, WVP;
 
     D3DXMatrixPerspectiveFovLH(&Proj,
                                D3DXToRadian(45),
@@ -366,50 +309,47 @@ void RenderPass1()
                                1.0f,
                                10000.0f);
 
-    D3DXVECTOR3 vec1(10 * sinf(f), 5, -10 * cosf(f));
-    D3DXVECTOR3 vec2(0, 0, 0);
-    D3DXVECTOR3 vec3(0, 1, 0);
-    D3DXMatrixLookAtLH(&View, &vec1, &vec2, &vec3);
-    D3DXMatrixIdentity(&mat);
-    mat = mat * View * Proj;
+    D3DXVECTOR3 eye(10 * sinf(f), 5, -10 * cosf(f));
+    D3DXVECTOR3 at(0, 0, 0);
+    D3DXVECTOR3 up(0, 1, 0);
+    D3DXMatrixLookAtLH(&View, &eye, &at, &up);
+    D3DXMatrixIdentity(&WVP);
+    WVP = WVP * View * Proj;
 
-    hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &mat);
+    hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &WVP);
+    assert(hResult == S_OK);
+    hResult = g_pEffect1->SetMatrix("g_matView", &View);
+    assert(hResult == S_OK);
+    hResult = g_pEffect1->SetFloat("g_Far", 10000.0f);
     assert(hResult == S_OK);
 
-    hResult = g_pd3dDevice->Clear(0,
-                                  NULL,
+    // 深度RTなので “空” は最遠=1.0（白）でクリア
+    hResult = g_pd3dDevice->Clear(0, NULL,
                                   D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
-                                  D3DCOLOR_XRGB(100, 100, 100),
-                                  1.0f,
-                                  0);
-
+                                  D3DCOLOR_XRGB(255, 255, 255),
+                                  1.0f, 0);
     assert(hResult == S_OK);
 
     hResult = g_pd3dDevice->BeginScene();
     assert(hResult == S_OK);
 
     TCHAR msg[100];
-    _tcscpy_s(msg, 100, _T("SSAOに挑戦"));
-    TextDraw(g_pFont, msg, 0, 0);
+    _tcscpy_s(msg, 100, _T("SSAO: Pass1 (Linear Depth)"));
+    TextDraw(g_pFont, msg, 8, 8);
 
     hResult = g_pEffect1->SetTechnique("Technique1");
     assert(hResult == S_OK);
 
-    UINT numPass;
+    UINT numPass = 0;
     hResult = g_pEffect1->Begin(&numPass, 0);
     assert(hResult == S_OK);
 
     hResult = g_pEffect1->BeginPass(0);
     assert(hResult == S_OK);
 
-    hResult = g_pEffect1->SetBool("g_bUseTexture", TRUE);
-    assert(hResult == S_OK);
-
+    // メッシュ描画（テクスチャ設定は不要。深度のみ出力）
     for (DWORD i = 0; i < g_dwNumMaterials; i++)
     {
-        hResult = g_pEffect1->SetTexture("texture1", g_pTextures[i]);
-        assert(hResult == S_OK);
-
         hResult = g_pEffect1->CommitChanges();
         assert(hResult == S_OK);
 
@@ -417,10 +357,8 @@ void RenderPass1()
         assert(hResult == S_OK);
     }
 
+    // 球も同様に描画（深度のみ）
     {
-        hResult = g_pEffect1->SetBool("g_bUseTexture", FALSE);
-        assert(hResult == S_OK);
-
         hResult = g_pEffect1->CommitChanges();
         assert(hResult == S_OK);
 
@@ -428,14 +366,10 @@ void RenderPass1()
         assert(hResult == S_OK);
     }
 
-    hResult = g_pEffect1->EndPass();
-    assert(hResult == S_OK);
+    hResult = g_pEffect1->EndPass();  assert(hResult == S_OK);
+    hResult = g_pEffect1->End();      assert(hResult == S_OK);
 
-    hResult = g_pEffect1->End();
-    assert(hResult == S_OK);
-
-    hResult = g_pd3dDevice->EndScene();
-    assert(hResult == S_OK);
+    hResult = g_pd3dDevice->EndScene(); assert(hResult == S_OK);
 
     hResult = g_pd3dDevice->SetRenderTarget(0, pOldRenderTarget);
     assert(hResult == S_OK);
@@ -445,90 +379,60 @@ void RenderPass2()
 {
     HRESULT hResult = E_FAIL;
 
-    hResult = g_pd3dDevice->Clear(0,
-                                  NULL,
+    hResult = g_pd3dDevice->Clear(0, NULL,
                                   D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
                                   D3DCOLOR_XRGB(0, 0, 0),
-                                  1.0f,
-                                  0);
+                                  1.0f, 0);
     assert(hResult == S_OK);
 
     // 2Dフルスクリーン描画なのでZは不要
     hResult = g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
     assert(hResult == S_OK);
 
-    hResult = g_pd3dDevice->BeginScene();
-    assert(hResult == S_OK);
+    hResult = g_pd3dDevice->BeginScene(); assert(hResult == S_OK);
 
-    hResult = g_pEffect2->SetTechnique("Technique1");
-    assert(hResult == S_OK);
+    hResult = g_pEffect2->SetTechnique("Technique1"); assert(hResult == S_OK);
 
     UINT numPass = 0;
-    hResult = g_pEffect2->Begin(&numPass, 0);
-    assert(hResult == S_OK);
+    hResult = g_pEffect2->Begin(&numPass, 0); assert(hResult == S_OK);
+    hResult = g_pEffect2->BeginPass(0);       assert(hResult == S_OK);
 
-    hResult = g_pEffect2->BeginPass(0);
-    assert(hResult == S_OK);
+    // 深度テクスチャを入力
+    hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget); assert(hResult == S_OK);
 
-    hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget);
-    assert(hResult == S_OK);
+    // 画素サイズとSSAOパラメータ
+    D3DXVECTOR4 texelSize(1.0f / 640.0f, 1.0f / 480.0f, 0, 0);
+    g_pEffect2->SetVector("g_TexelSize", &texelSize);
+    g_pEffect2->SetFloat("g_RadiusPixels", 4.0f);
+    g_pEffect2->SetFloat("g_Bias", 0.001f);
+    g_pEffect2->SetFloat("g_Intensity", 1.2f);
 
-    hResult = g_pEffect2->CommitChanges();
-    assert(hResult == S_OK);
+    hResult = g_pEffect2->CommitChanges(); assert(hResult == S_OK);
 
     DrawFullscreenQuad();
 
-    hResult = g_pEffect2->EndPass();
-    assert(hResult == S_OK);
+    hResult = g_pEffect2->EndPass(); assert(hResult == S_OK);
+    hResult = g_pEffect2->End();     assert(hResult == S_OK);
 
-    hResult = g_pEffect2->End();
-    assert(hResult == S_OK);
+    hResult = g_pd3dDevice->EndScene(); assert(hResult == S_OK);
 
-    hResult = g_pd3dDevice->EndScene();
-    assert(hResult == S_OK);
+    hResult = g_pd3dDevice->Present(NULL, NULL, NULL, NULL); assert(hResult == S_OK);
 
-    hResult = g_pd3dDevice->Present(NULL, NULL, NULL, NULL);
-    assert(hResult == S_OK);
-
-    hResult = g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, TRUE);
-    assert(hResult == S_OK);
+    hResult = g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, TRUE); assert(hResult == S_OK);
 }
 
 void DrawFullscreenQuad()
 {
-    QuadVertex v[4] { };
+    QuadVertex v[4] = { };
 
     // クリップ空間の矩形（TriangleStrip）
     float du = 0.5f / 640.f;
     float dv = 0.5f / 480.f;
 
-    v[0].x = -1.0f;
-    v[0].y = -1.0f;
-    v[0].z = 0.0f;
-    v[0].w = 1.0f;
-    v[0].u = 0.0f + du;
-    v[0].v = 1.0f - dv;
-
-    v[1].x = -1.0f;
-    v[1].y = 1.0f;
-    v[1].z = 0.0f;
-    v[1].w = 1.0f;
-    v[1].u = 0.0f + du;
-    v[1].v = 0.0f + dv;
-
-    v[2].x = 1.0f;
-    v[2].y = -1.0f;
-    v[2].z = 0.0f;
-    v[2].w = 1.0f;
-    v[2].u = 1.0f - du;
-    v[2].v = 1.0f - dv;
-
-    v[3].x = 1.0f;
-    v[3].y = 1.0f;
-    v[3].z = 0.0f;
-    v[3].w = 1.0f;
-    v[3].u = 1.0f - du;
-    v[3].v = 0.0f + dv;
+    v[0].x = -1.0f; v[0].y = -1.0f; v[0].z = 0.0f; v[0].w = 1.0f; v[0].u = 0.0f + du; v[0].v = 1.0f - dv;
+    v[1].x = -1.0f; v[1].y = 1.0f; v[1].z = 0.0f; v[1].w = 1.0f; v[1].u = 0.0f + du; v[1].v = 0.0f + dv;
+    v[2].x = 1.0f; v[2].y = -1.0f; v[2].z = 0.0f; v[2].w = 1.0f; v[2].u = 1.0f - du; v[2].v = 1.0f - dv;
+    v[3].x = 1.0f; v[3].y = 1.0f; v[3].z = 0.0f; v[3].w = 1.0f; v[3].u = 1.0f - du; v[3].v = 0.0f + dv;
 
     g_pd3dDevice->SetVertexDeclaration(g_pQuadDecl);
     g_pd3dDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, v, sizeof(QuadVertex));
@@ -545,7 +449,5 @@ LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         return 0;
     }
     }
-
     return DefWindowProc(hWnd, msg, wParam, lParam);
 }
-

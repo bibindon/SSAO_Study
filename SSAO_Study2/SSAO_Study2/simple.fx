@@ -1,59 +1,47 @@
 float4x4 g_matWorldViewProj;
-float4 g_lightNormal = { 0.3f, 1.0f, 0.5f, 0.0f };
-float3 g_ambient = { 0.3f, 0.3f, 0.3f };
+float4x4 g_matView;
+float g_Far = 10000.0f; // 遠クリップ。main.cpp側でセット
 
-bool g_bUseTexture = true;
-
-texture texture1;
-sampler textureSampler = sampler_state {
-    Texture = (texture1);
-    MipFilter = LINEAR;
-    MinFilter = LINEAR;
-    MagFilter = LINEAR;
+struct VSIn
+{
+    float4 pos : POSITION;
+    float3 nrm : NORMAL0;
+    float2 uv : TEXCOORD0;
 };
 
-void VertexShader1(in  float4 inPosition  : POSITION,
-                   in  float4 inNormal    : NORMAL0,
-                   in  float4 inTexCood   : TEXCOORD0,
-
-                   out float4 outPosition : POSITION,
-                   out float4 outDiffuse  : COLOR0,
-                   out float4 outTexCood  : TEXCOORD0)
+struct VSOut
 {
-    outPosition = mul(inPosition, g_matWorldViewProj);
+    float4 pos : POSITION;
+    float depth : TEXCOORD0;
+};
 
-    float lightIntensity = dot(inNormal, g_lightNormal);
-    outDiffuse.rgb = max(0, lightIntensity) + g_ambient;
-    outDiffuse.a = 1.0f;
+VSOut VS(VSIn i)
+{
+    VSOut o;
+    o.pos = mul(i.pos, g_matWorldViewProj);
 
-    outTexCood = inTexCood;
+    // ビュー空間Zを取り出し、[0..1]の線形深度に正規化（LH系なので+Z）
+    float3 viewPos = mul(i.pos, g_matView).xyz;
+    float linZ = viewPos.z / g_Far; // 0(近)～1(遠)  ※near/far比により近端は厳密には0になりません
+    o.depth = saturate(linZ);
+    return o;
 }
 
-void PixelShader1(in float4 inScreenColor : COLOR0,
-                  in float2 inTexCood     : TEXCOORD0,
-
-                  out float4 outColor     : COLOR)
+float4 PS(VSOut i) : COLOR
 {
-    float4 workColor = (float4)0;
-    workColor = tex2D(textureSampler, inTexCood);
-
-    if (g_bUseTexture)
-    {
-        outColor = inScreenColor * workColor;
-    }
-    else
-    {
-        outColor = inScreenColor;
-    }
+    float d = i.depth;
+    // 16bit浮動小数フォーマットでも見やすいようにRGBへ複製
+    return float4(d, d, d, 1.0);
 }
 
 technique Technique1
 {
-    pass Pass1
+    pass P0
     {
         CullMode = NONE;
+        ZEnable = TRUE;
 
-        VertexShader = compile vs_3_0 VertexShader1();
-        PixelShader = compile ps_3_0 PixelShader1();
-   }
+        VertexShader = compile vs_3_0 VS();
+        PixelShader = compile ps_3_0 PS();
+    }
 }
