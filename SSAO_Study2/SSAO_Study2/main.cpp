@@ -28,10 +28,16 @@ DWORD g_dwNumMaterials = 0;
 LPD3DXEFFECT g_pEffect = NULL;
 bool g_bClose = false;
 
+LPDIRECT3DTEXTURE9 g_pRenderTarget = NULL;
+LPD3DXSPRITE g_pSprite = NULL;
+
 static void TextDraw(LPD3DXFONT pFont, TCHAR* text, int X, int Y);
 static void InitD3D(HWND hWnd);
 static void Cleanup();
-static void Render();
+
+static void RenderPass1();
+static void RenderPass2();
+
 LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 extern int WINAPI _tWinMain(_In_ HINSTANCE hInstance,
@@ -98,7 +104,9 @@ int WINAPI _tWinMain(_In_ HINSTANCE hInstance,
         else
         {
             Sleep(16);
-            Render();
+
+            RenderPass1();
+            RenderPass2();
         }
 
         if (g_bClose)
@@ -265,6 +273,19 @@ void InitD3D(HWND hWnd)
                                NULL);
 
     assert(hResult == S_OK);
+
+    hResult = D3DXCreateTexture(g_pd3dDevice,
+                                640,
+                                480,
+                                1,
+                                D3DUSAGE_RENDERTARGET,
+                                D3DFMT_A8R8G8B8,
+                                D3DPOOL_DEFAULT,
+                                &g_pRenderTarget);
+    assert(hResult == S_OK);
+
+    hResult = D3DXCreateSprite(g_pd3dDevice, &g_pSprite);
+    assert(hResult == S_OK);
 }
 
 void Cleanup()
@@ -281,9 +302,20 @@ void Cleanup()
     SAFE_RELEASE(g_pD3D);
 }
 
-void Render()
+void RenderPass1()
 {
     HRESULT hResult = E_FAIL;
+
+    LPDIRECT3DSURFACE9 pOldRenderTarget = nullptr;
+    hResult = g_pd3dDevice->GetRenderTarget(0, &pOldRenderTarget);
+    assert(hResult == S_OK);
+
+    LPDIRECT3DSURFACE9 pRenderTarget;
+    hResult = g_pRenderTarget->GetSurfaceLevel(0, &pRenderTarget);
+    assert(hResult == S_OK);
+
+    hResult = g_pd3dDevice->SetRenderTarget(0, pRenderTarget);
+    assert(hResult == S_OK);
 
     static float f = 0.0f;
     f += 0.025f;
@@ -368,8 +400,28 @@ void Render()
     hResult = g_pd3dDevice->EndScene();
     assert(hResult == S_OK);
 
-    hResult = g_pd3dDevice->Present(NULL, NULL, NULL, NULL);
+    hResult = g_pd3dDevice->SetRenderTarget(0, pOldRenderTarget);
     assert(hResult == S_OK);
+}
+
+void RenderPass2()
+{
+    HRESULT hResult = E_FAIL;
+
+    if (SUCCEEDED(g_pSprite->Begin(D3DXSPRITE_ALPHABLEND)))
+    {
+        RECT* pSrcRect = NULL;
+        D3DCOLOR color = D3DCOLOR_ARGB(255, 255, 255, 255);
+
+        D3DXVECTOR3 pos { 0.f, 0.f, 0.f };
+
+        g_pSprite->Draw(g_pRenderTarget, pSrcRect, NULL, &pos, color);
+
+        g_pSprite->End();
+
+        hResult = g_pd3dDevice->Present(NULL, NULL, NULL, NULL);
+        assert(hResult == S_OK);
+    }
 }
 
 LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
