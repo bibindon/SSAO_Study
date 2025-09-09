@@ -320,7 +320,7 @@ void Render()
     assert(hResult == S_OK);
 
     TCHAR msg[100];
-    _tcscpy_s(msg, 100, _T("Xファイルの読み込みと表示"));
+    _tcscpy_s(msg, 100, _T("SSAOに挑戦"));
     TextDraw(g_pFont, msg, 0, 0);
 
     hResult = g_pEffect->SetTechnique("Technique1");
