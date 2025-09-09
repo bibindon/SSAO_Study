@@ -25,11 +25,27 @@ LPD3DXMESH g_pMeshSphere = NULL;
 std::vector<D3DMATERIAL9> g_pMaterials;
 std::vector<LPDIRECT3DTEXTURE9> g_pTextures;
 DWORD g_dwNumMaterials = 0;
-LPD3DXEFFECT g_pEffect = NULL;
+LPD3DXEFFECT g_pEffect1 = NULL;
+LPD3DXEFFECT g_pEffect2 = NULL;
+
 bool g_bClose = false;
 
 LPDIRECT3DTEXTURE9 g_pRenderTarget = NULL;
-LPD3DXSPRITE g_pSprite = NULL;
+
+LPDIRECT3DVERTEXDECLARATION9 g_pQuadDecl = NULL;
+
+struct QuadVertex
+{
+    // クリップ空間用（-1..1, w=1）
+    float x;
+    float y;
+    float z;
+    float w;
+
+    // テクスチャ座標（今回は未使用でも可）
+    float u;
+    float v;
+};
 
 static void TextDraw(LPD3DXFONT pFont, TCHAR* text, int X, int Y);
 static void InitD3D(HWND hWnd);
@@ -37,6 +53,7 @@ static void Cleanup();
 
 static void RenderPass1();
 static void RenderPass2();
+static void DrawFullscreenQuad();
 
 LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -260,7 +277,18 @@ void InitD3D(HWND hWnd)
                                        NULL,
                                        D3DXSHADER_DEBUG,
                                        NULL,
-                                       &g_pEffect,
+                                       &g_pEffect1,
+                                       NULL);
+
+    assert(hResult == S_OK);
+
+    hResult = D3DXCreateEffectFromFile(g_pd3dDevice,
+                                       _T("simple2.fx"),
+                                       NULL,
+                                       NULL,
+                                       D3DXSHADER_DEBUG,
+                                       NULL,
+                                       &g_pEffect2,
                                        NULL);
 
     assert(hResult == S_OK);
@@ -284,8 +312,15 @@ void InitD3D(HWND hWnd)
                                 &g_pRenderTarget);
     assert(hResult == S_OK);
 
-    hResult = D3DXCreateSprite(g_pd3dDevice, &g_pSprite);
-    assert(hResult == S_OK);
+    D3DVERTEXELEMENT9 elems[] =
+    {
+        { 0,  0, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },
+        { 0, 16, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0 },
+        D3DDECL_END()
+    };
+
+    HRESULT hr = g_pd3dDevice->CreateVertexDeclaration(elems, &g_pQuadDecl);
+    assert(hr == S_OK);
 }
 
 void Cleanup()
@@ -296,7 +331,9 @@ void Cleanup()
     }
 
     SAFE_RELEASE(g_pMesh);
-    SAFE_RELEASE(g_pEffect);
+    SAFE_RELEASE(g_pMeshSphere);
+    SAFE_RELEASE(g_pEffect1);
+    SAFE_RELEASE(g_pEffect2);
     SAFE_RELEASE(g_pFont);
     SAFE_RELEASE(g_pd3dDevice);
     SAFE_RELEASE(g_pD3D);
@@ -336,7 +373,7 @@ void RenderPass1()
     D3DXMatrixIdentity(&mat);
     mat = mat * View * Proj;
 
-    hResult = g_pEffect->SetMatrix("g_matWorldViewProj", &mat);
+    hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &mat);
     assert(hResult == S_OK);
 
     hResult = g_pd3dDevice->Clear(0,
@@ -355,25 +392,25 @@ void RenderPass1()
     _tcscpy_s(msg, 100, _T("SSAOに挑戦"));
     TextDraw(g_pFont, msg, 0, 0);
 
-    hResult = g_pEffect->SetTechnique("Technique1");
+    hResult = g_pEffect1->SetTechnique("Technique1");
     assert(hResult == S_OK);
 
     UINT numPass;
-    hResult = g_pEffect->Begin(&numPass, 0);
+    hResult = g_pEffect1->Begin(&numPass, 0);
     assert(hResult == S_OK);
 
-    hResult = g_pEffect->BeginPass(0);
+    hResult = g_pEffect1->BeginPass(0);
     assert(hResult == S_OK);
 
-    hResult = g_pEffect->SetBool("g_bUseTexture", TRUE);
+    hResult = g_pEffect1->SetBool("g_bUseTexture", TRUE);
     assert(hResult == S_OK);
 
     for (DWORD i = 0; i < g_dwNumMaterials; i++)
     {
-        hResult = g_pEffect->SetTexture("texture1", g_pTextures[i]);
+        hResult = g_pEffect1->SetTexture("texture1", g_pTextures[i]);
         assert(hResult == S_OK);
 
-        hResult = g_pEffect->CommitChanges();
+        hResult = g_pEffect1->CommitChanges();
         assert(hResult == S_OK);
 
         hResult = g_pMesh->DrawSubset(i);
@@ -381,20 +418,20 @@ void RenderPass1()
     }
 
     {
-        hResult = g_pEffect->SetBool("g_bUseTexture", FALSE);
+        hResult = g_pEffect1->SetBool("g_bUseTexture", FALSE);
         assert(hResult == S_OK);
 
-        hResult = g_pEffect->CommitChanges();
+        hResult = g_pEffect1->CommitChanges();
         assert(hResult == S_OK);
 
         hResult = g_pMeshSphere->DrawSubset(0);
         assert(hResult == S_OK);
     }
 
-    hResult = g_pEffect->EndPass();
+    hResult = g_pEffect1->EndPass();
     assert(hResult == S_OK);
 
-    hResult = g_pEffect->End();
+    hResult = g_pEffect1->End();
     assert(hResult == S_OK);
 
     hResult = g_pd3dDevice->EndScene();
@@ -408,20 +445,93 @@ void RenderPass2()
 {
     HRESULT hResult = E_FAIL;
 
-    if (SUCCEEDED(g_pSprite->Begin(D3DXSPRITE_ALPHABLEND)))
-    {
-        RECT* pSrcRect = NULL;
-        D3DCOLOR color = D3DCOLOR_ARGB(255, 255, 255, 255);
+    hResult = g_pd3dDevice->Clear(0,
+                                  NULL,
+                                  D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
+                                  D3DCOLOR_XRGB(0, 0, 0),
+                                  1.0f,
+                                  0);
+    assert(hResult == S_OK);
 
-        D3DXVECTOR3 pos { 0.f, 0.f, 0.f };
+    // 2Dフルスクリーン描画なのでZは不要
+    hResult = g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
+    assert(hResult == S_OK);
 
-        g_pSprite->Draw(g_pRenderTarget, pSrcRect, NULL, &pos, color);
+    hResult = g_pd3dDevice->BeginScene();
+    assert(hResult == S_OK);
 
-        g_pSprite->End();
+    hResult = g_pEffect2->SetTechnique("Technique1");
+    assert(hResult == S_OK);
 
-        hResult = g_pd3dDevice->Present(NULL, NULL, NULL, NULL);
-        assert(hResult == S_OK);
-    }
+    UINT numPass = 0;
+    hResult = g_pEffect2->Begin(&numPass, 0);
+    assert(hResult == S_OK);
+
+    hResult = g_pEffect2->BeginPass(0);
+    assert(hResult == S_OK);
+
+    hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget);
+    assert(hResult == S_OK);
+
+    hResult = g_pEffect2->CommitChanges();
+    assert(hResult == S_OK);
+
+    DrawFullscreenQuad();
+
+    hResult = g_pEffect2->EndPass();
+    assert(hResult == S_OK);
+
+    hResult = g_pEffect2->End();
+    assert(hResult == S_OK);
+
+    hResult = g_pd3dDevice->EndScene();
+    assert(hResult == S_OK);
+
+    hResult = g_pd3dDevice->Present(NULL, NULL, NULL, NULL);
+    assert(hResult == S_OK);
+
+    hResult = g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, TRUE);
+    assert(hResult == S_OK);
+}
+
+void DrawFullscreenQuad()
+{
+    QuadVertex v[4] { };
+
+    // クリップ空間の矩形（TriangleStrip）
+    float du = 0.5f / 640.f;
+    float dv = 0.5f / 480.f;
+
+    v[0].x = -1.0f;
+    v[0].y = -1.0f;
+    v[0].z = 0.0f;
+    v[0].w = 1.0f;
+    v[0].u = 0.0f + du;
+    v[0].v = 1.0f - dv;
+
+    v[1].x = -1.0f;
+    v[1].y = 1.0f;
+    v[1].z = 0.0f;
+    v[1].w = 1.0f;
+    v[1].u = 0.0f + du;
+    v[1].v = 0.0f + dv;
+
+    v[2].x = 1.0f;
+    v[2].y = -1.0f;
+    v[2].z = 0.0f;
+    v[2].w = 1.0f;
+    v[2].u = 1.0f - du;
+    v[2].v = 1.0f - dv;
+
+    v[3].x = 1.0f;
+    v[3].y = 1.0f;
+    v[3].z = 0.0f;
+    v[3].w = 1.0f;
+    v[3].u = 1.0f - du;
+    v[3].v = 0.0f + dv;
+
+    g_pd3dDevice->SetVertexDeclaration(g_pQuadDecl);
+    g_pd3dDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, v, sizeof(QuadVertex));
 }
 
 LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)

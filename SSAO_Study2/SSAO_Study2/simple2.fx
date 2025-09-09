@@ -7,29 +7,22 @@ bool g_bUseTexture = true;
 texture texture1;
 sampler textureSampler = sampler_state {
     Texture = (texture1);
-    MipFilter = LINEAR;
-    MinFilter = LINEAR;
-    MagFilter = LINEAR;
+    MipFilter = NONE;
+    MinFilter = POINT;
+    MagFilter = POINT;
 };
 
 void VertexShader1(in  float4 inPosition  : POSITION,
-                   in  float4 inNormal    : NORMAL0,
-                   in  float4 inTexCood   : TEXCOORD0,
+                   in  float2 inTexCood   : TEXCOORD0,
 
                    out float4 outPosition : POSITION,
-                   out float4 outDiffuse  : COLOR0,
-                   out float4 outTexCood  : TEXCOORD0)
+                   out float2 outTexCood  : TEXCOORD0)
 {
-    outPosition = mul(inPosition, g_matWorldViewProj);
-
-    float lightIntensity = dot(inNormal, g_lightNormal);
-    outDiffuse.rgb = max(0, lightIntensity) + g_ambient;
-    outDiffuse.a = 1.0f;
-
+    outPosition = inPosition;
     outTexCood = inTexCood;
 }
 
-void PixelShader1(in float4 inScreenColor : COLOR0,
+void PixelShader1(in float4 inPosition    : POSITION,
                   in float2 inTexCood     : TEXCOORD0,
 
                   out float4 outColor     : COLOR)
@@ -37,14 +30,26 @@ void PixelShader1(in float4 inScreenColor : COLOR0,
     float4 workColor = (float4)0;
     workColor = tex2D(textureSampler, inTexCood);
 
-    if (g_bUseTexture)
+    float average = (workColor.r + workColor.g + workColor.b) / 3;
+
+    // ééÇµÇ…ç ìxÇè„Ç∞ÇΩÇËâ∫Ç∞ÇΩÇËÇµÇƒÇ›ÇÈ
+    if (true)
     {
-        outColor = inScreenColor * workColor;
+        workColor.r += (workColor.r - average);
+        workColor.g += (workColor.g - average);
+        workColor.b += (workColor.b - average);
     }
     else
     {
-        outColor = inScreenColor;
+        workColor.r -= (workColor.r - average) / 2.f;
+        workColor.g -= (workColor.g - average) / 2.f;
+        workColor.b -= (workColor.b - average) / 2.f;
     }
+
+    workColor = saturate(workColor);
+
+    outColor = workColor;
+    
 }
 
 technique Technique1
