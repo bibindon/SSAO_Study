@@ -20,43 +20,50 @@ enum ViewMode {
     MODE_0_GREEN = 0,       // 固定機能の緑
     MODE_1_SHOW_SCENE_FFP,  // RTT(Scene) を固定機能で表示
     MODE_2_SHOW_SCENE_EFX,  // RTT(Scene) を Effect(PS) で表示
-    MODE_3_SHOW_DN_DIRECT,  // DepthNormal を直接描画（RTT経由しない）
+    MODE_3_SHOW_DN_DIRECT,  // DepthNormal を“直接”描画（RTT経由しない）
     MODE_4_SSAO,            // SSAO 合成
     MODE_5_SHOW_DN_RTT,     // RTT から DepthNormal を表示
     MODE_6_SHOW_DEPTH_ONLY, // RTT から Depthのみ表示
 };
 static ViewMode g_ViewMode = MODE_0_GREEN;
 
-// SSAO パラメータ（ランタイム変更可）
+// 調整パラメータ（ランタイム変更可）
 static float g_Radius = 12.0f;  // Q/A で ±1
 static float g_Intensity = 1.20f;  // W/S で ±0.1
-static float g_Bias = 0.002f; // E/D で ±0.001
+static float g_BiasUser = 0.002f; // E/D で ±0.001（自動調整の下限として使う）
 
+// D3D
 LPDIRECT3D9        g_pD3D = NULL;
 LPDIRECT3DDEVICE9  g_pd3d = NULL;
 LPDIRECT3DSURFACE9 g_BackBuf = NULL;
 LPDIRECT3DSURFACE9 g_DefaultZ = NULL;
 
+// メッシュ
 LPD3DXMESH         g_Mesh = NULL;
 DWORD              g_SubsetCount = 0;
 
+// エフェクト
 LPD3DXEFFECT       g_Effect = NULL;
 
 // RTT
 LPDIRECT3DTEXTURE9 g_TexScene = NULL;
 LPDIRECT3DSURFACE9 g_RTScene = NULL;
 
-LPDIRECT3DTEXTURE9 g_TexDN = NULL;
+LPDIRECT3DTEXTURE9 g_TexDN = NULL;  // Depth+Normal（FP16推奨）
 LPDIRECT3DSURFACE9 g_RTDN = NULL;
 
 // RTT 用 Z
 LPDIRECT3DSURFACE9 g_RTZ = NULL;
 
+// DN が低精度（A8R8G8B8）にフォールバックしたか
+static bool g_LowPrecisionDN = false;
+
 static void UpdateTitle(HWND wnd)
 {
     TCHAR buf[256];
-    _stprintf_s(buf, _T("DX9 SSAO Minimal  [mode=%d]  R=%.1f  I=%.2f  B=%.4f"),
-                (int)g_ViewMode, g_Radius, g_Intensity, g_Bias);
+    _stprintf_s(buf, _T("DX9 SSAO Minimal  [mode=%d]  R=%.1f  I=%.2f  B=%.4f%s"),
+                (int)g_ViewMode, g_Radius, g_Intensity, g_BiasUser,
+                g_LowPrecisionDN ? _T("  (DN=8bit)") : _T("  (DN=FP16)"));
     SetWindowText(wnd, buf);
 }
 
@@ -146,16 +153,24 @@ static bool DrawMeshWithTechnique(const char* tech,
 static void CreateRTT()
 {
     HRESULT hr;
+    // Scene RTT
     hr = g_pd3d->CreateTexture(WIN_W, WIN_H, 1, D3DUSAGE_RENDERTARGET,
                                D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_TexScene, NULL);
     assert(SUCCEEDED(hr));
     g_TexScene->GetSurfaceLevel(0, &g_RTScene);
 
+    // Depth+Normal RTT：A16B16G16R16F を試し、ダメなら A8R8G8B8
     hr = g_pd3d->CreateTexture(WIN_W, WIN_H, 1, D3DUSAGE_RENDERTARGET,
-                               D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_TexDN, NULL);
+                               D3DFMT_A16B16G16R16F, D3DPOOL_DEFAULT, &g_TexDN, NULL);
+    if (FAILED(hr)) {
+        g_LowPrecisionDN = true;
+        hr = g_pd3d->CreateTexture(WIN_W, WIN_H, 1, D3DUSAGE_RENDERTARGET,
+                                   D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_TexDN, NULL);
+    }
     assert(SUCCEEDED(hr));
     g_TexDN->GetSurfaceLevel(0, &g_RTDN);
 
+    // RTT 用 Z
     hr = g_pd3d->CreateDepthStencilSurface(WIN_W, WIN_H, D3DFMT_D24S8,
                                            D3DMULTISAMPLE_NONE, 0, TRUE, &g_RTZ, NULL);
     assert(SUCCEEDED(hr));
@@ -171,8 +186,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l)
         else if (w == 'A') { g_Radius = max(1.0f, g_Radius - 1.0f); UpdateTitle(h); }
         else if (w == 'W') { g_Intensity += 0.1f; UpdateTitle(h); }
         else if (w == 'S') { g_Intensity = max(0.1f, g_Intensity - 0.1f); UpdateTitle(h); }
-        else if (w == 'E') { g_Bias += 0.001f; UpdateTitle(h); }
-        else if (w == 'D') { g_Bias = max(0.0001f, g_Bias - 0.001f); UpdateTitle(h); }
+        else if (w == 'E') { g_BiasUser += 0.001f; UpdateTitle(h); }
+        else if (w == 'D') { g_BiasUser = max(0.0001f, g_BiasUser - 0.001f); UpdateTitle(h); }
         break;
     case WM_DESTROY: PostQuitMessage(0); return 0;
     }
@@ -251,8 +266,13 @@ static void Render()
     g_Effect->SetFloatArray("g_NearFar", nf, 2);
     g_Effect->SetFloatArray("g_TexelSize", texel, 2);
     g_Effect->SetFloat("g_SampleRadius", g_Radius);
-    g_Effect->SetFloat("g_Bias", g_Bias);
     g_Effect->SetFloat("g_Intensity", g_Intensity);
+
+    // 量子化幅に応じて閾値を自動調整
+    const float depthEps = g_LowPrecisionDN ? (1.0f / 255.0f) : (1.0f / 1024.0f); // 目安
+    const float biasUse = max(g_BiasUser, depthEps * 1.5f);
+    g_Effect->SetFloat("g_DepthEps", depthEps);
+    g_Effect->SetFloat("g_Bias", biasUse);
 
     // ---------- 1) DepthNormal → RTT ----------
     g_pd3d->SetRenderTarget(0, g_RTDN);
@@ -298,7 +318,9 @@ static void Render()
         break;
 
     case MODE_3_SHOW_DN_DIRECT:
-        DrawMeshWithTechnique("Tech_DepthNormal", W, V, P); break;
+        // RTTを使わず DepthNormal を直接描く（シェーダの出力確認）
+        DrawMeshWithTechnique("Tech_DepthNormal", W, V, P);
+        break;
 
     case MODE_4_SSAO:
         g_Effect->SetTexture("tScene", g_TexScene);

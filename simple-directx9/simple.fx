@@ -5,7 +5,7 @@ float4x4 g_matProj;
 float4x4 g_matWorldViewProj;
 
 // ===== Camera params =====
-float2 g_NearFar; // (near, far)  ¶èŒn
+float2 g_NearFar; // (near, far)  å·¦æ‰‹ç³»
 
 // ===== Scene lighting (simple) =====
 float3 g_LightDir = normalize(float3(0.3, 1.0, 0.5));
@@ -36,20 +36,23 @@ sampler2D sDepthNormal = sampler_state
 
 // ===== SSAO params =====
 float2 g_TexelSize; // (1/w, 1/h)
-float g_SampleRadius = 12.0;
-float g_Bias = 0.002;
+float g_SampleRadius = 12.0; // ç”»é¢ä¸ŠåŠå¾„ï¼ˆpxï¼‰
+float g_Bias = 0.002; // å¾®å°é–¾å€¤ï¼ˆC++å´ã§è‡ªå‹•ã§ä¸‹é™èª¿æ•´ï¼‰
 float g_Intensity = 1.2;
 
+// é‡å­åŒ–æ®µå·®ã®ç›®å®‰ï¼ˆC++ã‹ã‚‰è¨­å®šï¼šFP16â‰ˆ1/1024, 8bitâ‰ˆ1/255ï¼‰
+float g_DepthEps = 0.004;
+
 // ---------------------------------------------------------
-// 1) Depth + Normal : view‹óŠÔ–@ü + **üŒ`[“x(LH)** ‚ğŠi”[
+// 1) Depth + Normal : viewç©ºé–“æ³•ç·š + **ç·šå½¢æ·±åº¦(LH)**
 //   RGB = (nx, ny, depthLinear)
-//   ¦ LH ‚Å‚Í vpos.z ‚Í near..far ‚Ì³’lB•‰†‚Í‚Â‚¯‚È‚¢B
+//   â€» LH ã§ã¯ vpos.z ã¯ near..far ã®æ­£å€¤ã€‚
 // ---------------------------------------------------------
 struct DN_VSOUT
 {
     float4 pos : POSITION;
     float3 nrmVS : TEXCOORD0;
-    float zView : TEXCOORD1; // view-space ziLH: ‘O•û‚ª +j
+    float zView : TEXCOORD1; // view-space zï¼ˆLH: å‰æ–¹ãŒ +ï¼‰
 };
 DN_VSOUT VS_DepthNormal(float4 pos : POSITION, float3 nrm : NORMAL)
 {
@@ -61,7 +64,7 @@ DN_VSOUT VS_DepthNormal(float4 pos : POSITION, float3 nrm : NORMAL)
 
     o.pos = mul(vpos, g_matProj);
     o.nrmVS = nV;
-    o.zView = vpos.z; // © LH ‚Í³‚Ì[“x
+    o.zView = vpos.z; // LHã¯æ­£ã®æ·±åº¦
     return o;
 }
 float4 PS_DepthNormal(DN_VSOUT IN) : COLOR
@@ -69,15 +72,15 @@ float4 PS_DepthNormal(DN_VSOUT IN) : COLOR
     float nearZ = g_NearFar.x;
     float farZ = g_NearFar.y;
 
-    // **LH³‚Ì[“x**‚ğ 0..1 ‚É³‹K‰»i‘O=0, ‰œ=1j
+    // LH æ­£ã®æ·±åº¦ã‚’ 0..1 ã«æ­£è¦åŒ–ï¼ˆå‰=0, å¥¥=1ï¼‰
     float depthLinear = saturate((IN.zView - nearZ) / (farZ - nearZ));
 
-    float2 encN = IN.nrmVS.xy * 0.5 + 0.5; // [-1,1]¨[0,1]
+    float2 encN = IN.nrmVS.xy * 0.5 + 0.5; // [-1,1]â†’[0,1]
     return float4(encN, depthLinear, 1.0);
 }
 
 // ---------------------------------------------------------
-// 2) Scene color iLambertj
+// 2) Scene colorï¼ˆLambertï¼‰
 // ---------------------------------------------------------
 struct SC_VSOUT
 {
@@ -100,7 +103,7 @@ float4 PS_Scene(SC_VSOUT IN) : COLOR
 }
 
 // ---------------------------------------------------------
-// 3) ‡¬ & ƒfƒoƒbƒO
+// 3) åˆæˆ & ãƒ‡ãƒãƒƒã‚°
 // ---------------------------------------------------------
 float4 PS_ShowScene(float2 uv : TEXCOORD0) : COLOR
 {
@@ -116,7 +119,7 @@ float4 PS_ShowDepthOnly(float2 uv : TEXCOORD0) : COLOR
     return float4(d, d, d, 1);
 }
 
-// SSAOi16ƒTƒ“ƒvƒ‹A‰~Œ`ƒJ[ƒlƒ‹{‹——£Œ¸Š{[“xˆË‘¶ƒXƒP[ƒ‹j
+// SSAOï¼ˆ16ã‚µãƒ³ãƒ—ãƒ«ã€å††å½¢ã‚«ãƒ¼ãƒãƒ«ï¼‹è·é›¢æ¸›è¡°ã€‚smoothstepã§æ®µå·®ã‚’ç·©å’Œï¼‰
 float4 PS_SSAO(float2 uv : TEXCOORD0) : COLOR
 {
     float4 dnC = tex2D(sDepthNormal, uv);
@@ -125,7 +128,7 @@ float4 PS_SSAO(float2 uv : TEXCOORD0) : COLOR
     if (depthC <= 0.0001 || depthC >= 0.9999)
         return tex2D(sScene, uv);
 
-    // screen-space ”¼Œa‚ğ[“x‚ÅƒXƒP[ƒ‹i‰“‚¢‚Ù‚Ç¬‚³‚­j
+    // é ã„ã»ã©ç”»é¢ä¸Šã®åŠå¾„ã‚’å°ã•ãï¼ˆç°¡æ˜“ã‚¹ã‚±ãƒ¼ãƒ«ï¼‰
     float scale = lerp(1.5, 0.6, depthC);
     float r = g_SampleRadius * scale;
 
@@ -142,14 +145,17 @@ float4 PS_SSAO(float2 uv : TEXCOORD0) : COLOR
     for (int i = 0; i < 16; i++)
     {
         float2 duv = dir[i] * g_TexelSize * r;
-        float ds = tex2D(sDepthNormal, uv + duv).b;
+        float ds = tex2D(sDepthNormal, uv + duv).b; // ã‚µãƒ³ãƒ—ãƒ«æ·±åº¦ï¼ˆ0..1ï¼‰
 
-        // **LHüŒ`[“x**: è‘O‚Ù‚Ç¬‚³‚¢ ¨ ‹ß–T‚ªgè‘Oh‚È‚çÕ•Á
-        float stepOcc = (depthC - ds > g_Bias) ? 1.0 : 0.0;
-        float w = 1.0 - (float) i / 15.0; // ‹ß–T‚Ù‚Çd‚­
+        // æ‰‹å‰ï¼ˆdepthC > dsï¼‰ãªã‚‰é®è”½æ–¹å‘ã€‚é‡å­åŒ–æ®µå·® g_DepthEps ã«å¹…ã‚’æŒãŸã›ã¦ smoothstepã€‚
+        float diff = depthC - ds - g_Bias;
+        float t = saturate(diff / (g_DepthEps * 2.0)); // 2*eps ã®å¹…ã§0â†’1
+        float stepOcc = t * t * (3.0 - 2.0 * t); // smoothstep
+
+        float w = 1.0 - (float) i / 15.0; // è¿‘å‚ã»ã©é‡ã
         occ += stepOcc * w;
     }
-    occ /= 8.0; // ³‹K‰»ŒW”iŒoŒ±“Ij
+    occ /= 8.0; // æ­£è¦åŒ–ä¿‚æ•°ï¼ˆçµŒé¨“çš„ï¼‰
 
     float ao = saturate(1.0 - occ * g_Intensity);
     float3 sceneCol = tex2D(sScene, uv).rgb;
