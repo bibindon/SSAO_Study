@@ -1,5 +1,8 @@
 float4x4 g_matWorldViewProj;
 float4 g_lightNormal = { 0.3f, 1.0f, 0.5f, 0.0f };
+float3 g_ambient = { 0.3f, 0.3f, 0.3f };
+
+bool g_bUseTexture = true;
 
 texture texture1;
 sampler textureSampler = sampler_state {
@@ -20,7 +23,7 @@ void VertexShader1(in  float4 inPosition  : POSITION,
     outPosition = mul(inPosition, g_matWorldViewProj);
 
     float lightIntensity = dot(inNormal, g_lightNormal);
-    outDiffuse.rgb = max(0, lightIntensity);
+    outDiffuse.rgb = max(0, lightIntensity) + g_ambient;
     outDiffuse.a = 1.0f;
 
     outTexCood = inTexCood;
@@ -33,14 +36,24 @@ void PixelShader1(in float4 inScreenColor : COLOR0,
 {
     float4 workColor = (float4)0;
     workColor = tex2D(textureSampler, inTexCood);
-    outColor = inScreenColor * workColor;
+
+    if (g_bUseTexture)
+    {
+        outColor = inScreenColor * workColor;
+    }
+    else
+    {
+        outColor = inScreenColor;
+    }
 }
 
 technique Technique1
 {
-   pass Pass1
-   {
-      VertexShader = compile vs_2_0 VertexShader1();
-      PixelShader = compile ps_2_0 PixelShader1();
+    pass Pass1
+    {
+        CullMode = NONE;
+
+        VertexShader = compile vs_3_0 VertexShader1();
+        PixelShader = compile ps_3_0 PixelShader1();
    }
 }

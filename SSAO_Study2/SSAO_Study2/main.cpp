@@ -19,6 +19,9 @@ LPDIRECT3D9 g_pD3D = NULL;
 LPDIRECT3DDEVICE9 g_pd3dDevice = NULL;
 LPD3DXFONT g_pFont = NULL;
 LPD3DXMESH g_pMesh = NULL;
+
+LPD3DXMESH g_pMeshSphere = NULL;
+
 std::vector<D3DMATERIAL9> g_pMaterials;
 std::vector<LPDIRECT3DTEXTURE9> g_pTextures;
 DWORD g_dwNumMaterials = 0;
@@ -253,6 +256,15 @@ void InitD3D(HWND hWnd)
                                        NULL);
 
     assert(hResult == S_OK);
+
+    hResult = D3DXCreateSphere(g_pd3dDevice,
+                               20.f,
+                               32,
+                               32,
+                               &g_pMeshSphere,
+                               NULL);
+
+    assert(hResult == S_OK);
 }
 
 void Cleanup()
@@ -285,7 +297,7 @@ void Render()
                                1.0f,
                                10000.0f);
 
-    D3DXVECTOR3 vec1(10 * sinf(f), 10, -10 * cosf(f));
+    D3DXVECTOR3 vec1(10 * sinf(f), 5, -10 * cosf(f));
     D3DXVECTOR3 vec2(0, 0, 0);
     D3DXVECTOR3 vec3(0, 1, 0);
     D3DXMatrixLookAtLH(&View, &vec1, &vec2, &vec3);
@@ -321,6 +333,9 @@ void Render()
     hResult = g_pEffect->BeginPass(0);
     assert(hResult == S_OK);
 
+    hResult = g_pEffect->SetBool("g_bUseTexture", TRUE);
+    assert(hResult == S_OK);
+
     for (DWORD i = 0; i < g_dwNumMaterials; i++)
     {
         hResult = g_pEffect->SetTexture("texture1", g_pTextures[i]);
@@ -330,6 +345,17 @@ void Render()
         assert(hResult == S_OK);
 
         hResult = g_pMesh->DrawSubset(i);
+        assert(hResult == S_OK);
+    }
+
+    {
+        hResult = g_pEffect->SetBool("g_bUseTexture", FALSE);
+        assert(hResult == S_OK);
+
+        hResult = g_pEffect->CommitChanges();
+        assert(hResult == S_OK);
+
+        hResult = g_pMeshSphere->DrawSubset(0);
         assert(hResult == S_OK);
     }
 
