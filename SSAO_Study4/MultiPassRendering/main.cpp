@@ -36,6 +36,9 @@ LPDIRECT3DTEXTURE9            g_pRenderTarget3 = NULL; // RT2: world-pos viz
 LPDIRECT3DVERTEXDECLARATION9  g_pQuadDecl = NULL;
 LPD3DXSPRITE                  g_pSprite = NULL;
 
+D3DXMATRIX g_lastView, g_lastProj;
+float g_lastNear = 1.0f, g_lastFar = 10000.0f;
+
 bool g_bClose = false;
 
 struct QuadVertex {
@@ -290,55 +293,95 @@ void RenderPass1()
     SAFE_RELEASE(pRT1);
     SAFE_RELEASE(pRT2);
     SAFE_RELEASE(pOldRT0);
+
+    // RenderPass1 内で V, P, zNear, zFar を作ったあと
+    g_lastView = V;
+    g_lastProj = P;
+    g_lastNear = zNear;
+    g_lastFar = zFar;
 }
 
 void RenderPass2()
 {
-    g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
-                        D3DCOLOR_XRGB(0, 0, 0), 1.0f, 0);
+    HRESULT hr = E_FAIL;
 
-    g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
-    g_pd3dDevice->BeginScene();
+    // クリア＆2D用にZ無効
+    hr = g_pd3dDevice->Clear(0, NULL,
+                             D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
+                             D3DCOLOR_XRGB(0, 0, 0),
+                             1.0f, 0);                             assert(SUCCEEDED(hr));
+    hr = g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, FALSE);        assert(SUCCEEDED(hr));
 
-    // まず RT0 を全画面表示
-    g_pEffect2->SetTechnique("Technique1");
+    hr = g_pd3dDevice->BeginScene();                                 assert(SUCCEEDED(hr));
+
+    // === フルスクリーン AO 合成 ===
+    hr = g_pEffect2->SetTechnique("TechniqueAO");                    assert(SUCCEEDED(hr));
+
+    // AO 用パラメータ（パス1で保存した行列/near/far）
+    hr = g_pEffect2->SetMatrix("g_matView", &g_lastView);            assert(SUCCEEDED(hr));
+    hr = g_pEffect2->SetMatrix("g_matProj", &g_lastProj);            assert(SUCCEEDED(hr));
+    hr = g_pEffect2->SetFloat("g_fNear", g_lastNear);             assert(SUCCEEDED(hr));
+    hr = g_pEffect2->SetFloat("g_fFar", g_lastFar);             assert(SUCCEEDED(hr));
+
+    // テクスチャ（RT0=color, RT1=Z画像(α=線形Z), RT2=POS画像）
+    hr = g_pEffect2->SetTexture("texColor", g_pRenderTarget);        assert(SUCCEEDED(hr));
+    hr = g_pEffect2->SetTexture("texZ", g_pRenderTarget2);       assert(SUCCEEDED(hr));
+    hr = g_pEffect2->SetTexture("texPos", g_pRenderTarget3);       assert(SUCCEEDED(hr));
+
+    // AO チューニング（必要に応じて調整）
+    hr = g_pEffect2->SetFloat("g_aoStepWorld", 1.0f);                assert(SUCCEEDED(hr));
+    hr = g_pEffect2->SetFloat("g_aoStrength", 0.7f);                assert(SUCCEEDED(hr));
+    hr = g_pEffect2->SetFloat("g_aoBias", 0.002f);              assert(SUCCEEDED(hr));
+
     UINT nPass = 0;
-    g_pEffect2->Begin(&nPass, 0);
-    g_pEffect2->BeginPass(0);
-    g_pEffect2->SetTexture("texture1", g_pRenderTarget);
-    g_pEffect2->CommitChanges();
-    DrawFullscreenQuad();
-    g_pEffect2->EndPass();
-    g_pEffect2->End();
+    hr = g_pEffect2->Begin(&nPass, 0);                               assert(SUCCEEDED(hr));
+    hr = g_pEffect2->BeginPass(0);                                   assert(SUCCEEDED(hr));
 
-    // 左上に RT1（Z）を 1/2 表示
-    if (g_pSprite) {
-        g_pSprite->Begin(D3DXSPRITE_ALPHABLEND);
+    hr = g_pEffect2->CommitChanges();                                 assert(SUCCEEDED(hr));
+    DrawFullscreenQuad();
+
+    hr = g_pEffect2->EndPass();                                       assert(SUCCEEDED(hr));
+    hr = g_pEffect2->End();                                           assert(SUCCEEDED(hr));
+
+    // === オーバーレイ可視化: 左上=Z画像, 左下=POS画像（どちらも 1/2 サイズ） ===
+    if (g_pSprite)
+    {
+        hr = g_pSprite->Begin(D3DXSPRITE_ALPHABLEND);                 assert(SUCCEEDED(hr));
+
+        // 左上: Z画像 (RT1)
         {
             D3DXMATRIX mat;
             D3DXVECTOR2 scale(0.5f, 0.5f);
-            D3DXVECTOR2 trans(0.0f, 0.0f); // 左上
+            D3DXVECTOR2 trans(0.0f, 0.0f);
             D3DXMatrixTransformation2D(&mat, NULL, 0.0f, &scale, NULL, 0.0f, &trans);
             g_pSprite->SetTransform(&mat);
-            g_pSprite->Draw(g_pRenderTarget2, NULL, NULL, NULL, 0xFFFFFFFF);
+
+            hr = g_pSprite->Draw(g_pRenderTarget2, NULL, NULL, NULL, 0xFFFFFFFF);
+            assert(SUCCEEDED(hr));
         }
-        // 左下に RT2（WorldPos）を 1/2 表示
+
+        // 左下: POS画像 (RT2)
         {
             D3DXMATRIX mat;
             D3DXVECTOR2 scale(0.5f, 0.5f);
-            D3DXVECTOR2 trans(0.0f, 480.0f * 0.5f); // 左下（高さの半分だけ下へ）
+            D3DXVECTOR2 trans(0.0f, 480.0f * 0.5f); // 画面高さが 480 の想定
             D3DXMatrixTransformation2D(&mat, NULL, 0.0f, &scale, NULL, 0.0f, &trans);
             g_pSprite->SetTransform(&mat);
-            g_pSprite->Draw(g_pRenderTarget3, NULL, NULL, NULL, 0xFFFFFFFF);
+
+            hr = g_pSprite->Draw(g_pRenderTarget3, NULL, NULL, NULL, 0xFFFFFFFF);
+            assert(SUCCEEDED(hr));
         }
-        g_pSprite->End();
+
+        hr = g_pSprite->End();                                        assert(SUCCEEDED(hr));
     }
 
-    g_pd3dDevice->EndScene();
-    g_pd3dDevice->Present(NULL, NULL, NULL, NULL);
+    hr = g_pd3dDevice->EndScene();                                    assert(SUCCEEDED(hr));
+    hr = g_pd3dDevice->Present(NULL, NULL, NULL, NULL);               assert(SUCCEEDED(hr));
 
-    g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, TRUE);
+    // 後処理: Z を元に戻す
+    hr = g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, TRUE);           assert(SUCCEEDED(hr));
 }
+
 
 void DrawFullscreenQuad()
 {

@@ -94,6 +94,12 @@ void PixelShaderMRT3(
     viz = pow(viz, g_vizGamma);
     outColor1 = float4(viz, viz, viz, 1);
 
+    // 線形Z（near..far を 0..1）
+    float linearZ = saturate((inViewZ - g_fNear) / (g_fFar - g_fNear));
+
+    // 表示用（RGB）はそのまま、αに本当の線形Zを格納
+    outColor1 = float4(viz, viz, viz, linearZ);
+
     // RT2: ワールド座標の可視化（[-range..+range] -> 0..1 へマップ）
     float3 nrm = (inWorldPos - g_posCenter) / g_posRange; // -1..1
     float3 enc = saturate(nrm * 0.5 + 0.5); //  0..1
