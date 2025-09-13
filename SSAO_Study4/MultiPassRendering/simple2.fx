@@ -83,6 +83,75 @@ float3 DecodeWorldPos(float3 enc)
     return nrm * g_posRange + g_posCenter.xyz;
 }
 
+/*
+// PS_AO — ビュー空間(カメラ基準)の上下(±Yv)だけをサンプリングする版
+// ※ g_aoStepWorld は“ビュー空間での距離”として使われます
+float4 PS_AO(VS_OUT i) : COLOR0
+{
+    float4 color = tex2D(sampColor, i.uv);
+
+    // 中心点：POS画像→ワールド→ビュー空間へ
+    float3 worldPos = DecodeWorldPos(tex2D(sampPos, i.uv).rgb);
+    float3 vCenter = mul(float4(worldPos, 1.0f), g_matView).xyz;
+
+    // ビュー空間の上下方向のみ（6回分の重複サンプル）
+    const float3 dirsV[6] =
+    {
+        float3(1, 0, 0), float3(-1, 0, 0),
+        float3(0, 1, 0), float3(0, -1, 0),
+        float3(0, 0, 1), float3(0, 0, -1),
+//        float3(0, 0.5, 0), float3(0, -0.5, 0),
+//        float3(0, 0.5, 0), float3(0, -0.5, 0),
+//        float3(0, 0.5, 0), float3(0, -0.5, 0),
+//        float3(0, 1, 0), float3(0, -1.0, 0),
+//        float3(0, 1, 0), float3(0, -1.0, 0),
+//        float3(0, 1, 0), float3(0, -1.0, 0),
+    };
+
+    int occ = 0;
+    [unroll]
+    for (int k = 0; k < 6; ++k)
+    {
+        // ビュー空間でオフセット（カメラ基準の上下）
+        float3 vSample = vCenter + dirsV[k] * g_aoStepWorld;
+
+        // View→Proj（ビュー空間なので射影だけでOK）
+        float4 cpos = mul(float4(vSample, 1.0f), g_matProj);
+        if (cpos.w <= 0.0f)
+            continue; // 後ろ側は無視
+
+        // スクリーンUVへ変換
+        float2 suv = NdcToUv(cpos);
+        if (suv.x < 0.0f || suv.x > 1.0f || suv.y < 0.0f || suv.y > 1.0f)
+        {
+            continue;
+        }
+
+        // サンプル点の線形Z（near..far → 0..1）
+        float zNeighbor = saturate((vSample.z - g_fNear) / (g_fFar - g_fNear));
+
+        // Z画像（αに格納された線形Z）
+        float zImage = tex2D(sampZ, suv).a;
+
+        // 画像の方が手前にあれば遮蔽
+        if (zImage + g_aoBias < zNeighbor)
+        {
+            // あまりに離れているなら無効
+            if (zNeighbor - zImage > 0.001f)
+            {
+                continue;
+            }
+            occ++;
+        }
+    }
+
+    float ao = 1.0f - g_aoStrength * (occ / 6.0f);
+    ao = saturate(ao);
+
+    return float4(color.rgb * ao, color.a);
+}
+*/
+
 // PS_AO — ランダム32サンプル版（ビュー空間）
 // ・サンプル点は vCenter 周囲の球内をランダムに分布（近いほど多い：半径 r = (rand^2) * g_aoStepWorld）
 // ・遮蔽判定は「Z画像(α) < サンプル点Z」でカウント
@@ -152,7 +221,6 @@ float4 PS_AO(VS_OUT i) : COLOR0
 
     return float4(color.rgb * ao, color.a);
 }
-
 
 technique TechniqueAO
 {
