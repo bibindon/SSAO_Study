@@ -1,4 +1,11 @@
-﻿// main.cpp  — MRT3: RT0=color, RT1=Z可視化(左上1/2), RT2=WorldPos可視化(左下1/2)
+﻿// main.cpp
+// - Pass1: MRT3
+//     RT0 = Color
+//     RT1 = Z画像（RGB=可視化用, A=線形Z 0..1）  [A16B16G16R16F]
+//     RT2 = POS画像（ワールド座標を0..1にエンコード） [A16B16G16R16F]
+// - Pass2: AO 合成（simple2.fx: TechniqueAO）
+//     texColor=RT0, texZ=RT1, texPos=RT2 を参照し 6方向の簡易SSAOを適用
+// - オーバーレイ: 左上=Z画像(1/2), 左下=POS画像(1/2)
 
 #pragma comment(lib, "d3d9.lib")
 #if defined(DEBUG) || defined(_DEBUG)
@@ -15,7 +22,10 @@
 #include <vector>
 #include <crtdbg.h>
 
-#define SAFE_RELEASE(p) do { if (p) { (p)->Release(); (p) = NULL; } } while(0)
+#define SAFE_RELEASE(p) do { if (p) { (p)->Release(); (p)=NULL; } } while(0)
+
+static const int kBackW = 640;
+static const int kBackH = 480;
 
 LPDIRECT3D9                   g_pD3D = NULL;
 LPDIRECT3DDEVICE9             g_pd3dDevice = NULL;
@@ -25,22 +35,25 @@ LPD3DXMESH                    g_pMeshSphere = NULL;
 std::vector<D3DMATERIAL9>     g_pMaterials;
 std::vector<LPDIRECT3DTEXTURE9> g_pTextures;
 DWORD                         g_dwNumMaterials = 0;
-LPD3DXEFFECT                  g_pEffect1 = NULL;  // simple.fx
-LPD3DXEFFECT                  g_pEffect2 = NULL;  // simple2.fx
 
-// MRT: 3枚のレンダーターゲット
-LPDIRECT3DTEXTURE9            g_pRenderTarget = NULL; // RT0: color
-LPDIRECT3DTEXTURE9            g_pRenderTarget2 = NULL; // RT1: depth viz
-LPDIRECT3DTEXTURE9            g_pRenderTarget3 = NULL; // RT2: world-pos viz
+LPD3DXEFFECT                  g_pEffect1 = NULL; // simple.fx
+LPD3DXEFFECT                  g_pEffect2 = NULL; // simple2.fx
+
+// MRT: 3枚
+LPDIRECT3DTEXTURE9            g_pRenderTarget = NULL; // RT0: color (A8R8G8B8)
+LPDIRECT3DTEXTURE9            g_pRenderTarget2 = NULL; // RT1: Z画像 (A16B16G16R16F)
+LPDIRECT3DTEXTURE9            g_pRenderTarget3 = NULL; // RT2: POS画像 (A16B16G16R16F)
 
 LPDIRECT3DVERTEXDECLARATION9  g_pQuadDecl = NULL;
 LPD3DXSPRITE                  g_pSprite = NULL;
 
+bool                          g_bClose = false;
+
+// Pass2 用に保持
 D3DXMATRIX g_lastView, g_lastProj;
-float g_lastNear = 1.0f, g_lastFar = 10000.0f;
+float      g_lastNear = 1.0f, g_lastFar = 10000.0f;
 
-bool g_bClose = false;
-
+// 画面全面クアッド
 struct QuadVertex {
     float x, y, z, w;
     float u, v;
@@ -52,8 +65,7 @@ static void RenderPass1();
 static void RenderPass2();
 static void DrawFullscreenQuad();
 static void TextDraw(LPD3DXFONT pFont, const TCHAR* text, int X, int Y);
-
-LRESULT WINAPI MsgProc(HWND, UINT, WPARAM, LPARAM);
+LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int)
 {
@@ -66,20 +78,21 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int)
     wc.lpszClassName = _T("Window1");
     RegisterClassEx(&wc);
 
-    RECT rc = { 0,0,640,480 };
+    RECT rc = { 0,0,kBackW,kBackH };
     AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
     int w = rc.right - rc.left, h = rc.bottom - rc.top;
 
     HWND hWnd = CreateWindow(_T("Window1"), _T("Hello DirectX9 World !!"),
-                             WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, w, h,
-                             NULL, NULL, hInstance, NULL);
+                             WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
+                             w, h, NULL, NULL, hInstance, NULL);
 
     InitD3D(hWnd);
     ShowWindow(hWnd, SW_SHOWDEFAULT);
     UpdateWindow(hWnd);
 
     MSG msg;
-    while (true) {
+    while (true)
+    {
         if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
             DispatchMessage(&msg);
         }
@@ -98,6 +111,8 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int)
 
 void InitD3D(HWND hWnd)
 {
+    HRESULT hr;
+
     g_pD3D = Direct3DCreate9(D3D_SDK_VERSION);
     assert(g_pD3D);
 
@@ -111,19 +126,15 @@ void InitD3D(HWND hWnd)
     pp.hDeviceWindow = hWnd;
     pp.PresentationInterval = D3DPRESENT_INTERVAL_DEFAULT;
 
-    HRESULT hr = g_pD3D->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hWnd,
-                                      D3DCREATE_HARDWARE_VERTEXPROCESSING, &pp, &g_pd3dDevice);
+    hr = g_pD3D->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hWnd,
+                              D3DCREATE_HARDWARE_VERTEXPROCESSING, &pp, &g_pd3dDevice);
     if (FAILED(hr)) {
         hr = g_pD3D->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hWnd,
                                   D3DCREATE_SOFTWARE_VERTEXPROCESSING, &pp, &g_pd3dDevice);
         assert(SUCCEEDED(hr));
     }
 
-    // MRT 3枚に対応しているか軽く確認（無ければ2までは動く）
-    D3DCAPS9 caps = {};
-    g_pD3D->GetDeviceCaps(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, &caps);
-    // caps.NumSimultaneousRTs >= 3 が望ましい
-
+    // フォント
     hr = D3DXCreateFont(g_pd3dDevice, 20, 0, FW_HEAVY, 1, FALSE, SHIFTJIS_CHARSET,
                         OUT_TT_ONLY_PRECIS, CLEARTYPE_NATURAL_QUALITY, FF_DONTCARE,
                         _T("ＭＳ ゴシック"), &g_pFont);
@@ -168,16 +179,19 @@ void InitD3D(HWND hWnd)
     hr = D3DXCreateSphere(g_pd3dDevice, 20.0f, 32, 32, &g_pMeshSphere, NULL);
     assert(SUCCEEDED(hr));
 
-    // RT0/RT1/RT2 作成（A8R8G8B8）
-    hr = D3DXCreateTexture(g_pd3dDevice, 640, 480, 1,
-                           D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8,
-                           D3DPOOL_DEFAULT, &g_pRenderTarget);  assert(SUCCEEDED(hr));
-    hr = D3DXCreateTexture(g_pd3dDevice, 640, 480, 1,
-                           D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8,
-                           D3DPOOL_DEFAULT, &g_pRenderTarget2); assert(SUCCEEDED(hr));
-    hr = D3DXCreateTexture(g_pd3dDevice, 640, 480, 1,
-                           D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8,
-                           D3DPOOL_DEFAULT, &g_pRenderTarget3); assert(SUCCEEDED(hr));
+    // MRT (RT0=color 8bit, RT1/RT2=FP16)
+    D3DFORMAT fmtColor = D3DFMT_A8R8G8B8;
+    D3DFORMAT fmtData = D3DFMT_A16B16G16R16F;
+
+    hr = D3DXCreateTexture(g_pd3dDevice, kBackW, kBackH, 1,
+                           D3DUSAGE_RENDERTARGET, fmtColor, D3DPOOL_DEFAULT, &g_pRenderTarget);
+    assert(SUCCEEDED(hr));
+    hr = D3DXCreateTexture(g_pd3dDevice, kBackW, kBackH, 1,
+                           D3DUSAGE_RENDERTARGET, fmtData, D3DPOOL_DEFAULT, &g_pRenderTarget2);
+    assert(SUCCEEDED(hr));
+    hr = D3DXCreateTexture(g_pd3dDevice, kBackW, kBackH, 1,
+                           D3DUSAGE_RENDERTARGET, fmtData, D3DPOOL_DEFAULT, &g_pRenderTarget3);
+    assert(SUCCEEDED(hr));
 
     // フルスクリーン・クアッド宣言
     D3DVERTEXELEMENT9 elems[] = {
@@ -235,7 +249,7 @@ void RenderPass1()
     D3DXVECTOR3 eye(10.0f * sinf(t), 5.0f, -10.0f * cosf(t));
     D3DXVECTOR3 at(0, 0, 0), up(0, 1, 0);
     D3DXMatrixLookAtLH(&V, &eye, &at, &up);
-    D3DXMatrixPerspectiveFovLH(&P, D3DXToRadian(45.0f), 640.0f / 480.0f, zNear, zFar);
+    D3DXMatrixPerspectiveFovLH(&P, D3DXToRadian(45.0f), (float)kBackW / (float)kBackH, zNear, zFar);
     WVP = W * V * P;
 
     g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
@@ -252,15 +266,15 @@ void RenderPass1()
     g_pEffect1->SetFloat("g_fNear", zNear);
     g_pEffect1->SetFloat("g_fFar", zFar);
 
-    // （必要に応じて可視化パラメータを調整）
+    // 可視化＆POSエンコード用パラメータ
     g_pEffect1->SetFloat("g_vizMax", 100.0f);
     g_pEffect1->SetFloat("g_vizGamma", 0.25f);
     D3DXVECTOR4 posCenter(0, 0, 0, 0);
     g_pEffect1->SetVector("g_posCenter", &posCenter);
-    g_pEffect1->SetFloat("g_posRange", 1.0f);
+    g_pEffect1->SetFloat("g_posRange", 50.0f);
 
+    // MRT3 で描画
     g_pEffect1->SetTechnique("TechniqueMRT");
-
     UINT nPass = 0;
     g_pEffect1->Begin(&nPass, 0);
     g_pEffect1->BeginPass(0);
@@ -294,7 +308,7 @@ void RenderPass1()
     SAFE_RELEASE(pRT2);
     SAFE_RELEASE(pOldRT0);
 
-    // RenderPass1 内で V, P, zNear, zFar を作ったあと
+    // Pass2 用に保存
     g_lastView = V;
     g_lastProj = P;
     g_lastNear = zNear;
@@ -303,50 +317,53 @@ void RenderPass1()
 
 void RenderPass2()
 {
-    HRESULT hr = E_FAIL;
+    HRESULT hr;
 
     // クリア＆2D用にZ無効
-    hr = g_pd3dDevice->Clear(0, NULL,
-                             D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
-                             D3DCOLOR_XRGB(0, 0, 0),
-                             1.0f, 0);                             assert(SUCCEEDED(hr));
-    hr = g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, FALSE);        assert(SUCCEEDED(hr));
+    hr = g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
+                             D3DCOLOR_XRGB(0, 0, 0), 1.0f, 0);           assert(SUCCEEDED(hr));
+    hr = g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, FALSE);           assert(SUCCEEDED(hr));
 
-    hr = g_pd3dDevice->BeginScene();                                 assert(SUCCEEDED(hr));
+    hr = g_pd3dDevice->BeginScene();                                   assert(SUCCEEDED(hr));
 
     // === フルスクリーン AO 合成 ===
-    hr = g_pEffect2->SetTechnique("TechniqueAO");                    assert(SUCCEEDED(hr));
+    hr = g_pEffect2->SetTechnique("TechniqueAO");                      assert(SUCCEEDED(hr));
 
-    // AO 用パラメータ（パス1で保存した行列/near/far）
-    hr = g_pEffect2->SetMatrix("g_matView", &g_lastView);            assert(SUCCEEDED(hr));
-    hr = g_pEffect2->SetMatrix("g_matProj", &g_lastProj);            assert(SUCCEEDED(hr));
-    hr = g_pEffect2->SetFloat("g_fNear", g_lastNear);             assert(SUCCEEDED(hr));
-    hr = g_pEffect2->SetFloat("g_fFar", g_lastFar);             assert(SUCCEEDED(hr));
+    // AO 用パラメータ
+    g_pEffect2->SetMatrix("g_matView", &g_lastView);
+    g_pEffect2->SetMatrix("g_matProj", &g_lastProj);
+    g_pEffect2->SetFloat("g_fNear", g_lastNear);
+    g_pEffect2->SetFloat("g_fFar", g_lastFar);
 
-    // テクスチャ（RT0=color, RT1=Z画像(α=線形Z), RT2=POS画像）
-    hr = g_pEffect2->SetTexture("texColor", g_pRenderTarget);        assert(SUCCEEDED(hr));
-    hr = g_pEffect2->SetTexture("texZ", g_pRenderTarget2);       assert(SUCCEEDED(hr));
-    hr = g_pEffect2->SetTexture("texPos", g_pRenderTarget3);       assert(SUCCEEDED(hr));
+    // POS デコード用（Pass1 と合わせる）
+    D3DXVECTOR4 posCenter(0, 0, 0, 0);
+    g_pEffect2->SetVector("g_posCenter", &posCenter);
+    g_pEffect2->SetFloat("g_posRange", 50.0f);
 
-    // AO チューニング（必要に応じて調整）
-    hr = g_pEffect2->SetFloat("g_aoStepWorld", 1.0f);                assert(SUCCEEDED(hr));
-    hr = g_pEffect2->SetFloat("g_aoStrength", 0.7f);                assert(SUCCEEDED(hr));
-    hr = g_pEffect2->SetFloat("g_aoBias", 0.002f);              assert(SUCCEEDED(hr));
+    // テクスチャ
+    g_pEffect2->SetTexture("texColor", g_pRenderTarget);  // RT0
+    g_pEffect2->SetTexture("texZ", g_pRenderTarget2); // RT1 (A=linearZ)
+    g_pEffect2->SetTexture("texPos", g_pRenderTarget3); // RT2
+
+    // AO チューニング
+    g_pEffect2->SetFloat("g_aoStepWorld", 1.0f);
+    g_pEffect2->SetFloat("g_aoStrength", 0.7f);
+    g_pEffect2->SetFloat("g_aoBias", 0.0002f); // FP16なので極小でOK
 
     UINT nPass = 0;
-    hr = g_pEffect2->Begin(&nPass, 0);                               assert(SUCCEEDED(hr));
-    hr = g_pEffect2->BeginPass(0);                                   assert(SUCCEEDED(hr));
+    hr = g_pEffect2->Begin(&nPass, 0);                                   assert(SUCCEEDED(hr));
+    hr = g_pEffect2->BeginPass(0);                                       assert(SUCCEEDED(hr));
+    g_pEffect2->CommitChanges();
 
-    hr = g_pEffect2->CommitChanges();                                 assert(SUCCEEDED(hr));
     DrawFullscreenQuad();
 
-    hr = g_pEffect2->EndPass();                                       assert(SUCCEEDED(hr));
-    hr = g_pEffect2->End();                                           assert(SUCCEEDED(hr));
+    hr = g_pEffect2->EndPass();                                           assert(SUCCEEDED(hr));
+    hr = g_pEffect2->End();                                               assert(SUCCEEDED(hr));
 
-    // === オーバーレイ可視化: 左上=Z画像, 左下=POS画像（どちらも 1/2 サイズ） ===
+    // === オーバーレイ可視化 ===
     if (g_pSprite)
     {
-        hr = g_pSprite->Begin(D3DXSPRITE_ALPHABLEND);                 assert(SUCCEEDED(hr));
+        g_pSprite->Begin(D3DXSPRITE_ALPHABLEND);
 
         // 左上: Z画像 (RT1)
         {
@@ -355,40 +372,35 @@ void RenderPass2()
             D3DXVECTOR2 trans(0.0f, 0.0f);
             D3DXMatrixTransformation2D(&mat, NULL, 0.0f, &scale, NULL, 0.0f, &trans);
             g_pSprite->SetTransform(&mat);
-
-            hr = g_pSprite->Draw(g_pRenderTarget2, NULL, NULL, NULL, 0xFFFFFFFF);
-            assert(SUCCEEDED(hr));
+            g_pSprite->Draw(g_pRenderTarget2, NULL, NULL, NULL, 0xFFFFFFFF);
         }
 
         // 左下: POS画像 (RT2)
         {
             D3DXMATRIX mat;
             D3DXVECTOR2 scale(0.5f, 0.5f);
-            D3DXVECTOR2 trans(0.0f, 480.0f * 0.5f); // 画面高さが 480 の想定
+            D3DXVECTOR2 trans(0.0f, kBackH * 0.5f);
             D3DXMatrixTransformation2D(&mat, NULL, 0.0f, &scale, NULL, 0.0f, &trans);
             g_pSprite->SetTransform(&mat);
-
-            hr = g_pSprite->Draw(g_pRenderTarget3, NULL, NULL, NULL, 0xFFFFFFFF);
-            assert(SUCCEEDED(hr));
+            g_pSprite->Draw(g_pRenderTarget3, NULL, NULL, NULL, 0xFFFFFFFF);
         }
 
-        hr = g_pSprite->End();                                        assert(SUCCEEDED(hr));
+        g_pSprite->End();
     }
 
-    hr = g_pd3dDevice->EndScene();                                    assert(SUCCEEDED(hr));
-    hr = g_pd3dDevice->Present(NULL, NULL, NULL, NULL);               assert(SUCCEEDED(hr));
+    g_pd3dDevice->EndScene();
+    g_pd3dDevice->Present(NULL, NULL, NULL, NULL);
 
-    // 後処理: Z を元に戻す
-    hr = g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, TRUE);           assert(SUCCEEDED(hr));
+    // 後処理
+    g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, TRUE);
 }
-
 
 void DrawFullscreenQuad()
 {
     QuadVertex v[4];
 
-    const float du = 0.5f / 640.0f;
-    const float dv = 0.5f / 480.0f;
+    const float du = 0.5f / (float)kBackW;
+    const float dv = 0.5f / (float)kBackH;
 
     v[0] = { -1, -1, 0, 1, 0 + du, 1 - dv };
     v[1] = { -1,  1, 0, 1, 0 + du, 0 + dv };
@@ -402,7 +414,7 @@ void DrawFullscreenQuad()
 void TextDraw(LPD3DXFONT pFont, const TCHAR* text, int X, int Y)
 {
     RECT r = { X, Y, 0, 0 };
-    pFont->DrawText(NULL, text, -1, &r, DT_LEFT | DT_NOCLIP, D3DCOLOR_ARGB(255, 0, 0, 0));
+    pFont->DrawText(NULL, text, -1, &r, DT_LEFT | DT_NOCLIP, D3DCOLOR_XRGB(0, 0, 0));
 }
 
 LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)

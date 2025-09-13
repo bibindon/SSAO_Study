@@ -1,8 +1,7 @@
-// simple2.fx  — SSAO(6方向) 合成用（UTF-8 / BOMなし）
-// 入力: 
-//   texColor = RT0(カラー), texZ = RT1(Z画像: RGB=可視化/ A=線形Z), texPos = RT2(POS画像: 0..1にマップ済み)
-// 必要パラメータ: g_matView, g_matProj, g_fNear, g_fFar
-// AO設定: g_aoStepWorld(=1.0), g_aoStrength(0..1), g_aoBias(深度比較バイアス)
+// simple2.fx  — UTF-8 (BOMなし)
+// 入力: texColor=RT0, texZ=RT1(RGB=可視化, A=linearZ), texPos=RT2
+// 出力: AO を乗算したカラー
+// 方法: POS→6方向に 1.0 離した点を View/Proj で投影し、Z画像(α)と centerZ を比較
 
 texture texColor;
 sampler sampColor = sampler_state
@@ -21,7 +20,7 @@ sampler sampZ = sampler_state
     Texture = (texZ);
     MipFilter = POINT;
     MinFilter = POINT;
-    MagFilter = POINT; // 深度比較なのでPOINTが無難
+    MagFilter = POINT; // 深度比較向け
     AddressU = CLAMP;
     AddressV = CLAMP;
 };
@@ -37,16 +36,19 @@ sampler sampPos = sampler_state
     AddressV = CLAMP;
 };
 
-// 行列・カメラ
 float4x4 g_matView;
 float4x4 g_matProj;
 float g_fNear = 1.0f;
 float g_fFar = 10000.0f;
 
-// AO設定
-float g_aoStepWorld = 1.0f; // 6方向へ動かす距離（ワールド単位）
-float g_aoStrength = 0.7f; // 影の強さ（0..1）
-float g_aoBias = 0.002f; // 比較用バイアス（自己遮蔽防止）
+// POSデコード（Pass1 と一致させる）
+float4 g_posCenter = float4(0, 0, 0, 0);
+float g_posRange = 50.0f;
+
+// AO 設定
+float g_aoStepWorld = 1.0f;
+float g_aoStrength = 0.7f;
+float g_aoBias = 0.0002f; // FP16なら極小でOK
 
 struct VS_IN
 {
@@ -67,44 +69,28 @@ VS_OUT VS_Fullscreen(VS_IN i)
     return o;
 }
 
-// NDC(xy/w) → テクスチャUV(0..1) へ変換（D3D9はY軸反転に注意）
+// clip→UV
 float2 NdcToUv(float4 clip)
 {
     float2 ndc = clip.xy / clip.w; // [-1,1]
-    float2 uv;
-    uv.x = 0.5f * ndc.x + 0.5f;
-    uv.y = -0.5f * ndc.y + 0.5f; // ← Y 反転
-    return uv;
+    return float2(0.5f * ndc.x + 0.5f, -0.5f * ndc.y + 0.5f);
 }
 
-// POS画像(0..1)→ワールド座標(-range..+range) への復元
-// ※ パス1(simple.fx)で可視化のために 0..1 へエンコードしている前提。
-//   もしエンコード式を変えている場合は、ここを一致させてください。
-float3 DecodeWorldPos(float3 enc, float3 center, float range)
+// POS画像(0..1)→ワールド座標
+float3 DecodeWorldPos(float3 enc)
 {
-    // enc = (pos - center)/range * 0.5 + 0.5
     float3 nrm = (enc - 0.5f) * 2.0f; // -1..1
-    return nrm * range + center;
-}
-
-// 正規化線形Z（near..far を 0..1）
-float LinearizeZ(float viewZ)
-{
-    return saturate((viewZ - g_fNear) / (g_fFar - g_fNear));
+    return nrm * g_posRange + g_posCenter.xyz;
 }
 
 float4 PS_AO(VS_OUT i) : COLOR0
 {
     float4 color = tex2D(sampColor, i.uv);
+    float centerZ = tex2D(sampZ, i.uv).a; // 0..1（線形Z）
 
-    // 中心ピクセルの線形Z（これを基準に判定）
-    const float centerZ = tex2D(sampZ, i.uv).a;
+    float3 worldPos = DecodeWorldPos(tex2D(sampPos, i.uv).rgb);
 
-    // 現在のワールド座標（POS画像→復元）
-    const float3 posCenter = float3(0, 0, 0);
-    const float posRange = 50.0f;
-    float3 worldPos = DecodeWorldPos(tex2D(sampPos, i.uv).rgb, posCenter, posRange);
-
+    // 6方向
     float3 dirs[6] =
     {
         float3(1, 0, 0), float3(-1, 0, 0),
@@ -112,7 +98,7 @@ float4 PS_AO(VS_OUT i) : COLOR0
         float3(0, 0, 1), float3(0, 0, -1)
     };
 
-    int occluded = 0;
+    int occ = 0;
     [unroll]
     for (int k = 0; k < 6; ++k)
     {
@@ -127,18 +113,16 @@ float4 PS_AO(VS_OUT i) : COLOR0
         if (suv.x < 0 || suv.x > 1 || suv.y < 0 || suv.y > 1)
             continue;
 
-        // ここを「サンプル点のZ」ではなく「中心Z」と比較に変更
-        float zImage = tex2D(sampZ, suv).a;
-        if (zImage + g_aoBias < centerZ)   // ← これで前景の筒にも効く
-            occluded++;
+        float zImage = tex2D(sampZ, suv).a; // 0..1
+        if (zImage + g_aoBias < centerZ)
+            occ++;
     }
 
-    float ao = 1.0f - g_aoStrength * (occluded / 6.0f);
+    float ao = 1.0f - g_aoStrength * (occ / 6.0f);
     ao = saturate(ao);
 
     return float4(color.rgb * ao, color.a);
 }
-
 
 technique TechniqueAO
 {
