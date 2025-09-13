@@ -91,16 +91,19 @@ float4 PS_AO(VS_OUT i) : COLOR0
     float3 worldPos = DecodeWorldPos(tex2D(sampPos, i.uv).rgb);
 
     // 6方向
-    float3 dirs[6] =
+    float3 dirs[12] =
     {
         float3(1, 0, 0), float3(-1, 0, 0),
         float3(0, 1, 0), float3(0, -1, 0),
-        float3(0, 0, 1), float3(0, 0, -1)
+        float3(0, 0, 1), float3(0, 0, -1),
+        float3(2, 0, 0), float3(-2, 0, 0),
+        float3(0, 2, 0), float3(0, -2, 0),
+        float3(0, 0, 2), float3(0, 0, -2)
     };
 
     int occ = 0;
     [unroll]
-    for (int k = 0; k < 6; ++k)
+    for (int k = 0; k < 12; ++k)
     {
         float3 wp = worldPos + dirs[k] * g_aoStepWorld;
 
@@ -117,9 +120,15 @@ float4 PS_AO(VS_OUT i) : COLOR0
         if (zImage + g_aoBias < centerZ)
             occ++;
     }
+    
+    float ao = 1.0f;
 
-    float ao = 1.0f - g_aoStrength * (occ / 6.0f);
-    ao = saturate(ao);
+    if (occ > 4)
+    {
+        ao = 1.0f - g_aoStrength * (occ / 12.0f);
+        ao = saturate(ao);
+    }
+
 
     return float4(color.rgb * ao, color.a);
 }

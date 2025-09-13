@@ -365,25 +365,25 @@ void RenderPass2()
     {
         g_pSprite->Begin(D3DXSPRITE_ALPHABLEND);
 
-        // 左上: Z画像 (RT1)
-        {
-            D3DXMATRIX mat;
-            D3DXVECTOR2 scale(0.5f, 0.5f);
-            D3DXVECTOR2 trans(0.0f, 0.0f);
-            D3DXMatrixTransformation2D(&mat, NULL, 0.0f, &scale, NULL, 0.0f, &trans);
-            g_pSprite->SetTransform(&mat);
-            g_pSprite->Draw(g_pRenderTarget2, NULL, NULL, NULL, 0xFFFFFFFF);
-        }
-
-        // 左下: POS画像 (RT2)
-        {
-            D3DXMATRIX mat;
-            D3DXVECTOR2 scale(0.5f, 0.5f);
-            D3DXVECTOR2 trans(0.0f, kBackH * 0.5f);
-            D3DXMatrixTransformation2D(&mat, NULL, 0.0f, &scale, NULL, 0.0f, &trans);
-            g_pSprite->SetTransform(&mat);
-            g_pSprite->Draw(g_pRenderTarget3, NULL, NULL, NULL, 0xFFFFFFFF);
-        }
+//        // 左上: Z画像 (RT1)
+//        {
+//            D3DXMATRIX mat;
+//            D3DXVECTOR2 scale(0.5f, 0.5f);
+//            D3DXVECTOR2 trans(0.0f, 0.0f);
+//            D3DXMatrixTransformation2D(&mat, NULL, 0.0f, &scale, NULL, 0.0f, &trans);
+//            g_pSprite->SetTransform(&mat);
+//            g_pSprite->Draw(g_pRenderTarget2, NULL, NULL, NULL, 0xFFFFFFFF);
+//        }
+//
+//        // 左下: POS画像 (RT2)
+//        {
+//            D3DXMATRIX mat;
+//            D3DXVECTOR2 scale(0.5f, 0.5f);
+//            D3DXVECTOR2 trans(0.0f, kBackH * 0.5f);
+//            D3DXMatrixTransformation2D(&mat, NULL, 0.0f, &scale, NULL, 0.0f, &trans);
+//            g_pSprite->SetTransform(&mat);
+//            g_pSprite->Draw(g_pRenderTarget3, NULL, NULL, NULL, 0xFFFFFFFF);
+//        }
 
         g_pSprite->End();
     }
