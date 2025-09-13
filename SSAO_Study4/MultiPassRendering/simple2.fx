@@ -95,16 +95,16 @@ float LinearizeZ(float viewZ)
 
 float4 PS_AO(VS_OUT i) : COLOR0
 {
-    // 元カラー
     float4 color = tex2D(sampColor, i.uv);
 
-    // 現ピクセルのワールド座標（POS画像 → 復元）
-    // center/range はパス1と合わせること。デフォルトは center=0, range=50 にしていた例に合わせる。
+    // 中心ピクセルの線形Z（これを基準に判定）
+    const float centerZ = tex2D(sampZ, i.uv).a;
+
+    // 現在のワールド座標（POS画像→復元）
     const float3 posCenter = float3(0, 0, 0);
     const float posRange = 50.0f;
     float3 worldPos = DecodeWorldPos(tex2D(sampPos, i.uv).rgb, posCenter, posRange);
 
-    // 6方向の単位ベクトル
     float3 dirs[6] =
     {
         float3(1, 0, 0), float3(-1, 0, 0),
@@ -112,53 +112,33 @@ float4 PS_AO(VS_OUT i) : COLOR0
         float3(0, 0, 1), float3(0, 0, -1)
     };
 
-    // View, Proj を使って隣接点をスクリーンへ投影して深度比較
     int occluded = 0;
     [unroll]
     for (int k = 0; k < 6; ++k)
     {
         float3 wp = worldPos + dirs[k] * g_aoStepWorld;
 
-        // View 空間へ
         float4 vpos = mul(float4(wp, 1), g_matView);
-        // クリップ空間へ
         float4 cpos = mul(vpos, g_matProj);
-
-        // 後ろ側に行った場合などはスキップ
         if (cpos.w <= 0)
             continue;
 
-        // スクリーンUV
         float2 suv = NdcToUv(cpos);
-
-        // 画面外はスキップ（CLAMPでもよい）
         if (suv.x < 0 || suv.x > 1 || suv.y < 0 || suv.y > 1)
             continue;
 
-        // 隣接点の線形Z（near..far→0..1）
-        float zNeighbor = LinearizeZ(vpos.z);
-
-        // Z画像（αに本物の線形Zが入っている前提）
+        // ここを「サンプル点のZ」ではなく「中心Z」と比較に変更
         float zImage = tex2D(sampZ, suv).a;
-
-        // 画像の方が小さい = そこに「より手前のジオメトリ」がある → 遮蔽とみなす
-        if (zImage + g_aoBias < zNeighbor)
-        {
+        if (zImage + g_aoBias < centerZ)   // ← これで前景の筒にも効く
             occluded++;
-        }
     }
 
-    // AO係数（単純に個数ベース）
     float ao = 1.0f - g_aoStrength * (occluded / 6.0f);
     ao = saturate(ao);
 
-//    return float4(color.rgb * ao, color.a);
-
-    float4 temp = color;
-    temp.gb *= ao;
-
-    return float4(temp.rgb, color.a);
+    return float4(color.rgb * ao, color.a);
 }
+
 
 technique TechniqueAO
 {
