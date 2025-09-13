@@ -32,6 +32,7 @@ LPDIRECT3DDEVICE9             g_pd3dDevice = NULL;
 LPD3DXFONT                    g_pFont = NULL;
 LPD3DXMESH                    g_pMesh = NULL;
 LPD3DXMESH                    g_pMeshSphere = NULL;
+LPD3DXMESH                    g_pMeshSphere2 = NULL;
 std::vector<D3DMATERIAL9>     g_pMaterials;
 std::vector<LPDIRECT3DTEXTURE9> g_pTextures;
 DWORD                         g_dwNumMaterials = 0;
@@ -179,6 +180,9 @@ void InitD3D(HWND hWnd)
     hr = D3DXCreateSphere(g_pd3dDevice, 20.0f, 32, 32, &g_pMeshSphere, NULL);
     assert(SUCCEEDED(hr));
 
+    hr = D3DXCreateSphere(g_pd3dDevice, 2.0f, 32, 32, &g_pMeshSphere2, NULL);
+    assert(SUCCEEDED(hr));
+
     // MRT (RT0=color 8bit, RT1/RT2=FP16)
     D3DFORMAT fmtColor = D3DFMT_A8R8G8B8;
     D3DFORMAT fmtData = D3DFMT_A16B16G16R16F;
@@ -212,6 +216,7 @@ void Cleanup()
     for (size_t i = 0; i < g_pTextures.size(); ++i) SAFE_RELEASE(g_pTextures[i]);
     SAFE_RELEASE(g_pMesh);
     SAFE_RELEASE(g_pMeshSphere);
+    SAFE_RELEASE(g_pMeshSphere2);
     SAFE_RELEASE(g_pEffect1);
     SAFE_RELEASE(g_pEffect2);
     SAFE_RELEASE(g_pFont);
@@ -293,6 +298,13 @@ void RenderPass1()
     g_pEffect1->CommitChanges();
     g_pMeshSphere->DrawSubset(0);
 
+    {
+        D3DXMatrixTranslation(&W, 0.0f, 4.2f, 0.0f);
+        g_pEffect1->SetMatrix("g_matWorld", &W);
+        g_pEffect1->CommitChanges();
+        g_pMeshSphere2->DrawSubset(0);
+    }
+
     g_pEffect1->EndPass();
     g_pEffect1->End();
 
@@ -347,7 +359,7 @@ void RenderPass2()
 
     // AO チューニング
     g_pEffect2->SetFloat("g_aoStepWorld", 1.0f);
-    g_pEffect2->SetFloat("g_aoStrength", 0.7f);
+    g_pEffect2->SetFloat("g_aoStrength", 1.7f);
     g_pEffect2->SetFloat("g_aoBias", 0.0002f); // FP16なので極小でOK
 
     UINT nPass = 0;

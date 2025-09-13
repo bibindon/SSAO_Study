@@ -17,7 +17,7 @@ float g_vizGamma = 0.25f;
 float4 g_posCenter = float4(0, 0, 0, 0);
 float g_posRange = 50.0f;
 
-float4 g_lightNormal = float4(0.3f, 1.0f, 0.5f, 0.0f);
+float4 g_lightNormal = float4(-0.3f, 1.0f, -0.5f, 0.0f);
 float3 g_ambient = float3(0.3f, 0.3f, 0.3f);
 
 bool g_bUseTexture = true;
