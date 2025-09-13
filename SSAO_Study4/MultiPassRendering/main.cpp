@@ -33,7 +33,6 @@ LPD3DXFONT                    g_pFont = NULL;
 LPD3DXMESH                    g_pMesh = NULL;
 LPD3DXMESH                    g_pMeshSphere = NULL;
 LPD3DXMESH                    g_pMeshSphere2 = NULL;
-LPD3DXMESH                    g_pMeshSphere3 = NULL;
 std::vector<D3DMATERIAL9>     g_pMaterials;
 std::vector<LPDIRECT3DTEXTURE9> g_pTextures;
 DWORD                         g_dwNumMaterials = 0;
@@ -184,9 +183,6 @@ void InitD3D(HWND hWnd)
     hr = D3DXCreateSphere(g_pd3dDevice, 2.0f, 32, 32, &g_pMeshSphere2, NULL);
     assert(SUCCEEDED(hr));
 
-    hr = D3DXCreateSphere(g_pd3dDevice, 1.0f, 32, 32, &g_pMeshSphere3, NULL);
-    assert(SUCCEEDED(hr));
-
     // MRT (RT0=color 8bit, RT1/RT2=FP16)
     D3DFORMAT fmtColor = D3DFMT_A8R8G8B8;
     D3DFORMAT fmtData = D3DFMT_A16B16G16R16F;
@@ -221,7 +217,6 @@ void Cleanup()
     SAFE_RELEASE(g_pMesh);
     SAFE_RELEASE(g_pMeshSphere);
     SAFE_RELEASE(g_pMeshSphere2);
-    SAFE_RELEASE(g_pMeshSphere3);
     SAFE_RELEASE(g_pEffect1);
     SAFE_RELEASE(g_pEffect2);
     SAFE_RELEASE(g_pFont);
@@ -250,7 +245,8 @@ void RenderPass1()
     g_pd3dDevice->SetRenderTarget(1, pRT1);
     g_pd3dDevice->SetRenderTarget(2, pRT2);
 
-    static float t = 0.0f; t += 0.025f;
+    static float t = 0.0f;
+    t += 0.025f;
 
     const float zNear = 1.0f, zFar = 10000.0f;
     D3DXMATRIX W, V, P, WVP;
@@ -310,13 +306,6 @@ void RenderPass1()
         g_pMeshSphere2->DrawSubset(0);
     }
 
-    {
-        D3DXMatrixTranslation(&W, 3.0f, 0.0f, -1.0f);
-        g_pEffect1->SetMatrix("g_matWorld", &W);
-        g_pEffect1->CommitChanges();
-        g_pMeshSphere3->DrawSubset(0);
-    }
-
     g_pEffect1->EndPass();
     g_pEffect1->End();
 
@@ -371,8 +360,8 @@ void RenderPass2()
 
     // AO チューニング
     g_pEffect2->SetFloat("g_aoStepWorld", 1.0f);
-    g_pEffect2->SetFloat("g_aoStrength", 1.7f);
-    g_pEffect2->SetFloat("g_aoBias", 0.0001f); // FP16なので極小でOK
+    g_pEffect2->SetFloat("g_aoStrength", 1.5f);
+    g_pEffect2->SetFloat("g_aoBias", 0.00015f); // FP16なので極小でOK
 
     UINT nPass = 0;
     hr = g_pEffect2->Begin(&nPass, 0);                                   assert(SUCCEEDED(hr));

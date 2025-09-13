@@ -83,7 +83,6 @@ float3 DecodeWorldPos(float3 enc)
     return nrm * g_posRange + g_posCenter.xyz;
 }
 
-/*
 // PS_AO — ビュー空間(カメラ基準)の上下(±Yv)だけをサンプリングする版
 // ※ g_aoStepWorld は“ビュー空間での距離”として使われます
 float4 PS_AO(VS_OUT i) : COLOR0
@@ -150,8 +149,8 @@ float4 PS_AO(VS_OUT i) : COLOR0
 
     return float4(color.rgb * ao, color.a);
 }
-*/
 
+/*
 // PS_AO — ランダム32サンプル版（ビュー空間）
 // ・サンプル点は vCenter 周囲の球内をランダムに分布（近いほど多い：半径 r = (rand^2) * g_aoStepWorld）
 // ・遮蔽判定は「Z画像(α) < サンプル点Z」でカウント
@@ -221,6 +220,86 @@ float4 PS_AO(VS_OUT i) : COLOR0
 
     return float4(color.rgb * ao, color.a);
 }
+*/
+
+// ---- 便利関数：インデックスだけから一定の半球方向を生成（ピクセル非依存）----
+float3 HemiDirFromIndex(int k)
+{
+    // 疑似乱数（k のみ依存）→ 角度に変換
+    float a = frac(sin((k + 1) * 12.9898f) * 43758.5453f); // [0,1)
+    float b = frac(sin((k + 1) * 78.2330f) * 19341.2710f); // [0,1)
+    float phi = a * 6.2831853f; // [0, 2π)
+    float cosTheta = b; // [0,1]  （半球）
+    float sinTheta = sqrt(saturate(1.0f - cosTheta * cosTheta));
+    return float3(cos(phi) * sinTheta, // x
+                  sin(phi) * sinTheta, // y
+                  cosTheta); // z >= 0
+}
+
+/*
+// ---- 固定カーネル32本・二乗分布で「近くほど多い」 ----
+// g_aoStepWorld は「最大半径」として使います。
+float4 PS_AO(VS_OUT i) : COLOR0
+{
+    float4 color = tex2D(sampColor, i.uv);
+
+    // 中心点：POS→World→View
+    float3 worldPos = DecodeWorldPos(tex2D(sampPos, i.uv).rgb);
+    float3 vCenter = mul(float4(worldPos, 1.0f), g_matView).xyz;
+
+    // 法線ベースの半球へ向けたい場合はコメント解除（推奨）
+    float3 Nw = normalize(cross(ddx(worldPos), ddy(worldPos)));
+    float3 Nv = normalize(mul(float4(Nw, 0), g_matView).xyz); // View空間法線
+    float3 up = (abs(Nv.z) < 0.999f) ? float3(0, 0, 1) : float3(0, 1, 0);
+    float3 T = normalize(cross(up, Nv));
+    float3 B = cross(Nv, T);
+
+    const int kSamples = 32;
+    int occ = 0;
+
+    [unroll]
+    for (int k = 0; k < kSamples; ++k)
+    {
+        // 固定カーネル方向（+Z半球）を法線半球へ回す
+        float3 h = HemiDirFromIndex(k); // ローカル(+Z)半球
+        float3 dirV = normalize(T * h.x + B * h.y + Nv * h.z); // View空間へ
+
+        // 近いほど密：半径 scale = ( (k+0.5)/N )^2
+        float s = ((float) k + 0.5f) / (float) kSamples;
+        float radius = g_aoStepWorld * (s * s); // [0..g_aoStepWorld]
+
+        float3 vSample = vCenter + dirV * radius;
+
+        // View→Clip（View空間なので射影だけ）
+        float4 cpos = mul(float4(vSample, 1.0f), g_matProj);
+        if (cpos.w <= 0.0f)
+            continue;
+
+        // UVに変換（D3D9はY反転）
+        float2 suv = NdcToUv(cpos);
+        if (suv.x < 0.0f || suv.x > 1.0f || suv.y < 0.0f || suv.y > 1.0f)
+            continue;
+
+        // サンプル点の線形Z、Z画像の線形Z（α）
+        float zNeighbor = saturate((vSample.z - g_fNear) / (g_fFar - g_fNear));
+        float zImage = tex2D(sampZ, suv).a;
+
+        // 手前に形があれば遮蔽
+        if (zImage + g_aoBias < zNeighbor)
+        {
+            if (zNeighbor - zImage > 0.001f)
+            {
+                occ++;
+            }
+        }
+    }
+
+    float ao = 1.0f - g_aoStrength * (occ / (float) kSamples);
+    ao = saturate(ao);
+
+    return float4(color.rgb * ao, color.a);
+}
+*/
 
 technique TechniqueAO
 {
