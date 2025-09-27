@@ -216,7 +216,9 @@ void RenderPass1()
     }
 
     // 球体描画（上に配置）
-    D3DXMatrixTranslation(&W, 0.0f, 3.2f, 0.0f);
+    static float t2 = 0.0f;
+    t2 += 0.05f;
+    D3DXMatrixTranslation(&W, 0.0f, 2.0f + sinf(t2) * 1, 0.0f);
     g_pEffect1->SetMatrix("g_matWorld", &W);
     g_pEffect1->CommitChanges();
     g_pMeshSphere->DrawSubset(0);
