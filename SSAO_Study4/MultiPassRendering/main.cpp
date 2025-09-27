@@ -300,7 +300,7 @@ void RenderPass1()
     g_pMeshSphere->DrawSubset(0);
 
     {
-        D3DXMatrixTranslation(&W, 0.0f, 4.0f, 0.0f);
+        D3DXMatrixTranslation(&W, 0.0f, 4.3f, 0.0f);
         g_pEffect1->SetMatrix("g_matWorld", &W);
         g_pEffect1->CommitChanges();
         g_pMeshSphere2->DrawSubset(0);
