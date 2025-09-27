@@ -361,7 +361,7 @@ void RenderPass2()
     // AO チューニング
     g_pEffect2->SetFloat("g_aoStepWorld", 1.0f);
     g_pEffect2->SetFloat("g_aoStrength", 1.5f);
-    g_pEffect2->SetFloat("g_aoBias", 0.000015f); // FP16なので極小でOK
+    g_pEffect2->SetFloat("g_aoBias", 0.00003f); // FP16なので極小でOK
 
     UINT nPass = 0;
     hr = g_pEffect2->Begin(&nPass, 0);                                   assert(SUCCEEDED(hr));
