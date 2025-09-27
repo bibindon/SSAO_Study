@@ -300,7 +300,7 @@ void RenderPass1()
     g_pMeshSphere->DrawSubset(0);
 
     {
-        D3DXMatrixTranslation(&W, 0.0f, 4.3f, 0.0f);
+        D3DXMatrixTranslation(&W, 0.0f, 4.2f, 0.0f);
         g_pEffect1->SetMatrix("g_matWorld", &W);
         g_pEffect1->CommitChanges();
         g_pMeshSphere2->DrawSubset(0);
@@ -361,7 +361,7 @@ void RenderPass2()
     // AO チューニング
     g_pEffect2->SetFloat("g_aoStepWorld", 1.0f);
     g_pEffect2->SetFloat("g_aoStrength", 1.5f);
-    g_pEffect2->SetFloat("g_aoBias", 0.00015f); // FP16なので極小でOK
+    g_pEffect2->SetFloat("g_aoBias", 0.000015f); // FP16なので極小でOK
 
     UINT nPass = 0;
     hr = g_pEffect2->Begin(&nPass, 0);                                   assert(SUCCEEDED(hr));
