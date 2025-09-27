@@ -19,6 +19,7 @@ LPDIRECT3D9                   g_pD3D = NULL;
 LPDIRECT3DDEVICE9             g_pd3dDevice = NULL;
 LPD3DXMESH                    g_pMeshCube = NULL;
 LPD3DXMESH                    g_pMeshSphere = NULL;
+LPD3DXMESH                    g_pMeshSky = NULL;
 std::vector<LPDIRECT3DTEXTURE9> g_pTextures;
 DWORD                         g_dwNumMaterials = 0;
 
@@ -114,6 +115,9 @@ void InitD3D(HWND hWnd)
     D3DXLoadMeshFromX(_T("sphere.x"), D3DXMESH_SYSTEMMEM, g_pd3dDevice,
                       NULL, NULL, NULL, NULL, &g_pMeshSphere);
 
+    D3DXLoadMeshFromX(_T("sky.blend.x"), D3DXMESH_SYSTEMMEM, g_pd3dDevice,
+                      NULL, NULL, NULL, NULL, &g_pMeshSky);
+
     // エフェクト
     D3DXCreateEffectFromFile(g_pd3dDevice, _T("simple.fx"),
                              NULL, NULL, 0, NULL, &g_pEffect1, NULL);
@@ -145,6 +149,7 @@ void Cleanup()
     for (size_t i = 0; i < g_pTextures.size(); ++i) SAFE_RELEASE(g_pTextures[i]);
     SAFE_RELEASE(g_pMeshCube);
     SAFE_RELEASE(g_pMeshSphere);
+    SAFE_RELEASE(g_pMeshSky);
     SAFE_RELEASE(g_pEffect1);
     SAFE_RELEASE(g_pEffect2);
     SAFE_RELEASE(g_pRenderTarget);
@@ -222,6 +227,7 @@ void RenderPass1()
     g_pEffect1->SetMatrix("g_matWorld", &W);
     g_pEffect1->CommitChanges();
     g_pMeshSphere->DrawSubset(0);
+    g_pMeshSky->DrawSubset(0);
 
     g_pEffect1->EndPass();
     g_pEffect1->End();

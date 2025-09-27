@@ -102,7 +102,7 @@ float4 PS_AO(VS_OUT i) : COLOR0
     float3 B = cross(Nv, T);
 
     int occ = 0;
-    const int kSamples = 16; // サンプル数を削減
+    const int kSamples = 32; // サンプル数を削減
 
     [unroll]
     for (int k = 0; k < kSamples; ++k)
@@ -127,7 +127,7 @@ float4 PS_AO(VS_OUT i) : COLOR0
 
         if (zImage + g_aoBias < zNeighbor)
         {
-            if (zNeighbor - zImage > 0.1f)
+            if (zNeighbor - zImage > 0.01f)
                 continue;
             occ++;
         }
