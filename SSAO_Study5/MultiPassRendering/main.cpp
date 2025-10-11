@@ -305,20 +305,38 @@ void RenderPass2()
     g_pd3dDevice->EndScene();
     SAFE_RELEASE(pTemp);
 
-    // --- Pass C: 縦ブラー → BackBuffer（表示はぼかしたAOだけ） ---
+    // --- Pass C: 縦ブラー → g_pAoTex（←出力先をBackBufferから変更） ---
+    LPDIRECT3DSURFACE9 pAo2 = NULL;
+    g_pAoTex->GetSurfaceLevel(0, &pAo2);
+    g_pd3dDevice->SetRenderTarget(0, pAo2);
+    g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
+    g_pd3dDevice->BeginScene();
+
+    g_pEffect2->SetTechnique("TechniqueAO_BlurV");
+    g_pEffect2->SetTexture("texAO", g_pAoTemp);          // ソース：横ブラー結果
+    g_pEffect2->SetTexture("texZ", g_pRenderTarget2);   // 深度（ガイド）
+    g_pEffect2->SetFloatArray("g_invSize", (FLOAT*)&invSize, 2);
+    g_pEffect2->SetFloat("g_sigmaPx", 8.0f);
+    g_pEffect2->SetFloat("g_depthReject", 0.0001f);
+
+    g_pEffect2->Begin(&n, 0);
+    g_pEffect2->BeginPass(0);
+    DrawFullscreenQuad();
+    g_pEffect2->EndPass();
+    g_pEffect2->End();
+    g_pd3dDevice->EndScene();
+    SAFE_RELEASE(pAo2);
+
+    // --- Pass D: 合成（Color × AO） → BackBuffer ---
     LPDIRECT3DSURFACE9 pBack = NULL;
     g_pd3dDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &pBack);
     g_pd3dDevice->SetRenderTarget(0, pBack);
     g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
     g_pd3dDevice->BeginScene();
 
-    g_pEffect2->SetTechnique("TechniqueAO_BlurV");
-    g_pEffect2->SetTexture("texAO", g_pAoTemp);
-    g_pEffect2->SetTexture("texZ", g_pRenderTarget2);     // ★ 同上
-    g_pEffect2->SetFloatArray("g_invSize", (FLOAT*)&invSize, 2);
-    g_pEffect2->SetFloat("g_sigmaPx", 8.0f);
-    g_pEffect2->SetFloat("g_depthReject", 0.0001f);
-
+    g_pEffect2->SetTechnique("TechniqueAO_Composite");
+    g_pEffect2->SetTexture("texColor", g_pRenderTarget); // RenderPass1: RT0（色）
+    g_pEffect2->SetTexture("texAO", g_pAoTex);        // 縦ブラー後のAO
     g_pEffect2->Begin(&n, 0);
     g_pEffect2->BeginPass(0);
     DrawFullscreenQuad();

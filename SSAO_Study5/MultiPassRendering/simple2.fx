@@ -288,3 +288,21 @@ technique TechniqueAO_BlurV
         PixelShader = compile ps_3_0 PS_BlurV();
     }
 }
+
+// 色 × AO を乗算して出力
+float4 PS_Composite(VS_OUT i) : COLOR0
+{
+    float3 col = tex2D(sampColor, i.uv).rgb; // RenderPass1 の RT0
+    float ao = tex2D(sampAO, i.uv).r; // ぼかした AO（白=影なし）
+    return float4(col * ao, 1.0f);
+}
+
+technique TechniqueAO_Composite
+{
+    pass P0
+    {
+        CullMode = NONE;
+        VertexShader = compile vs_3_0 VS_Fullscreen();
+        PixelShader = compile ps_3_0 PS_Composite();
+    }
+}
