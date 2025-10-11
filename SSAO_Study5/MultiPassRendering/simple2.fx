@@ -102,7 +102,7 @@ float4 PS_AO(VS_OUT i) : COLOR0
     float3 B = cross(Nv, T);
 
     int occ = 0;
-    const int kSamples = 64;
+    const int kSamples = 128;
 
     [unroll]
     for (int k = 0; k < kSamples; ++k)
@@ -178,7 +178,7 @@ float g_depthReject = 0.01f; // 0.005～0.02 で調整
 // 51tap ガウス（横）— 手前ならサンプルしない
 float4 PS_BlurH(VS_OUT i) : COLOR0
 {
-    const int R = 13;
+    const int R = 25;
     float2 du = float2(g_invSize.x, 0.0);
 
     float zC = tex2D(sampZ, i.uv).a; // 中心の深度（線形0..1）
@@ -220,7 +220,7 @@ float4 PS_BlurH(VS_OUT i) : COLOR0
 // 51tap ガウス（縦）— 手前ならサンプルしない
 float4 PS_BlurV(VS_OUT i) : COLOR0
 {
-    const int R = 13;
+    const int R = 25;
     float2 dv = float2(0.0, g_invSize.y);
 
     float zC = tex2D(sampZ, i.uv).a;
