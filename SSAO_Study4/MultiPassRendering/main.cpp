@@ -202,7 +202,7 @@ void RenderPass1()
     g_pEffect1->SetFloat("g_fFar", 1000.0f);
     g_pEffect1->SetFloat("g_vizMax", 100.0f);
     g_pEffect1->SetFloat("g_vizGamma", 0.25f);
-    g_pEffect1->SetFloat("g_posRange", 50.0f);
+    g_pEffect1->SetFloat("g_posRange", 25.0f);
 
     // 描画
     g_pEffect1->SetTechnique("TechniqueMRT");
@@ -254,11 +254,11 @@ void RenderPass2()
     g_pEffect2->SetMatrix("g_matProj", &g_lastProj);
     g_pEffect2->SetFloat("g_fNear", 1.0f);
     g_pEffect2->SetFloat("g_fFar", 1000.0f);
-    g_pEffect2->SetFloat("g_posRange", 50.0f);
+    g_pEffect2->SetFloat("g_posRange", 25.0f);
     g_pEffect2->SetTexture("texColor", g_pRenderTarget);
     g_pEffect2->SetTexture("texZ", g_pRenderTarget2);
     g_pEffect2->SetTexture("texPos", g_pRenderTarget3);
-    g_pEffect2->SetFloat("g_aoStepWorld", 1.0f);
+    g_pEffect2->SetFloat("g_aoStepWorld", 5.0f);
     g_pEffect2->SetFloat("g_aoStrength", 1.5f);
     g_pEffect2->SetFloat("g_aoBias", 0.001f);
 
