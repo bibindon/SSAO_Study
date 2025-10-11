@@ -42,6 +42,17 @@ void VertexShader1(
     outWorldPos = worldPos.xyz;
 }
 
+texture g_tex0;
+sampler sampTex0 = sampler_state
+{
+    Texture = (g_tex0);
+    MinFilter = LINEAR;
+    MagFilter = LINEAR;
+    MipFilter = LINEAR;
+    AddressU = WRAP;
+    AddressV = WRAP;
+};
+
 void PixelShaderMRT3(
     in float4 inScreenColor : COLOR0,
     in float2 inTexCood : TEXCOORD0,
@@ -52,8 +63,16 @@ void PixelShaderMRT3(
     out float4 outColor2 : COLOR2 // POS画像
 )
 {
-    // RT0: 色
-    outColor0 = inScreenColor;
+    // 1) 色（テクスチャがあれば乗算、なければ頂点ライトだけ）
+    float3 lit = inScreenColor.rgb; // VSの簡易ライト
+    float3 base = lit;
+    if (g_bUseTexture)                              // ← エフェクトから切り替え
+    {
+        float3 tex = tex2D(sampTex0, inTexCood).rgb;
+        base = tex * lit; // テクスチャ × ライト
+    }
+    outColor0 = float4(base, 1.0f);
+
 
     // RT1: Z画像（RGB=可視化, A=線形Z）
     float linearZ = saturate((inViewZ - g_fNear) / (g_fFar - g_fNear));

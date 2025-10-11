@@ -21,6 +21,8 @@ LPD3DXMESH                    g_pMeshCube = NULL;
 LPD3DXMESH                    g_pMeshSphere = NULL;
 LPD3DXMESH                    g_pMeshSky = NULL;
 std::vector<LPDIRECT3DTEXTURE9> g_pTextures;
+std::vector<LPDIRECT3DTEXTURE9> g_pTextures2;
+std::vector<LPDIRECT3DTEXTURE9> g_pTextures3;
 DWORD                         g_dwNumMaterials = 0;
 
 LPD3DXEFFECT                  g_pEffect1 = NULL; // simple.fx
@@ -105,25 +107,76 @@ void InitD3D(HWND hWnd)
                          D3DCREATE_HARDWARE_VERTEXPROCESSING, &pp, &g_pd3dDevice);
 
     // cube.xロード
-    LPD3DXBUFFER pMtrlBuf = NULL;
-    D3DXLoadMeshFromX(_T("cube.x"), D3DXMESH_SYSTEMMEM, g_pd3dDevice,
-                      NULL, &pMtrlBuf, NULL, &g_dwNumMaterials, &g_pMeshCube);
+    {
+        LPD3DXBUFFER pMtrlBuf = NULL;
+        D3DXLoadMeshFromX(_T("cube.x"), D3DXMESH_SYSTEMMEM, g_pd3dDevice,
+                          NULL, &pMtrlBuf, NULL, &g_dwNumMaterials,
+                          &g_pMeshCube);
 
-    D3DXMATERIAL* mtrls = (D3DXMATERIAL*)pMtrlBuf->GetBufferPointer();
-    g_pTextures.resize(g_dwNumMaterials, NULL);
-    pMtrlBuf->Release();
+        D3DXMATERIAL* mtrls = (D3DXMATERIAL*)pMtrlBuf->GetBufferPointer();
+        g_pTextures.resize(g_dwNumMaterials, NULL);
+
+        // ★ 追加：マテリアルに紐づくテクスチャを読み込む
+        for (DWORD i = 0; i < g_dwNumMaterials; ++i) {
+            if (mtrls[i].pTextureFilename && mtrls[i].pTextureFilename[0] != '\0') {
+                LPDIRECT3DTEXTURE9 tex = NULL;
+                // ANSI で十分なら A サフィックスでOK
+                D3DXCreateTextureFromFileA(g_pd3dDevice, mtrls[i].pTextureFilename, &tex);
+                g_pTextures[i] = tex;
+            }
+        }
+        pMtrlBuf->Release();
+    }
 
     // sphere.xロード
-    D3DXLoadMeshFromX(_T("sphere.x"), D3DXMESH_SYSTEMMEM, g_pd3dDevice,
-                      NULL, NULL, NULL, NULL, &g_pMeshSphere);
+    {
+        LPD3DXBUFFER pMtrlBuf = NULL;
+        D3DXLoadMeshFromX(_T("sphere.x"), D3DXMESH_SYSTEMMEM, g_pd3dDevice,
+                          NULL, &pMtrlBuf, NULL, &g_dwNumMaterials,
+                          &g_pMeshSphere);
 
-    D3DXLoadMeshFromX(_T("sky.blend.x"), D3DXMESH_SYSTEMMEM, g_pd3dDevice,
-                      NULL, NULL, NULL, NULL, &g_pMeshSky);
+        D3DXMATERIAL* mtrls = (D3DXMATERIAL*)pMtrlBuf->GetBufferPointer();
+        g_pTextures2.resize(g_dwNumMaterials, NULL);
+
+        // ★ 追加：マテリアルに紐づくテクスチャを読み込む
+        for (DWORD i = 0; i < g_dwNumMaterials; ++i) {
+            if (mtrls[i].pTextureFilename && mtrls[i].pTextureFilename[0] != '\0') {
+                LPDIRECT3DTEXTURE9 tex = NULL;
+                // ANSI で十分なら A サフィックスでOK
+                D3DXCreateTextureFromFileA(g_pd3dDevice, mtrls[i].pTextureFilename, &tex);
+                g_pTextures2[i] = tex;
+            }
+        }
+        pMtrlBuf->Release();
+    }
+
+    // sphere.xロード
+    {
+        LPD3DXBUFFER pMtrlBuf = NULL;
+        D3DXLoadMeshFromX(_T("sky.blend.x"), D3DXMESH_SYSTEMMEM, g_pd3dDevice,
+                          NULL, &pMtrlBuf, NULL, &g_dwNumMaterials,
+                          &g_pMeshSky);
+
+        D3DXMATERIAL* mtrls = (D3DXMATERIAL*)pMtrlBuf->GetBufferPointer();
+        g_pTextures3.resize(g_dwNumMaterials, NULL);
+
+        // ★ 追加：マテリアルに紐づくテクスチャを読み込む
+        for (DWORD i = 0; i < g_dwNumMaterials; ++i) {
+            if (mtrls[i].pTextureFilename && mtrls[i].pTextureFilename[0] != '\0') {
+                LPDIRECT3DTEXTURE9 tex = NULL;
+                // ANSI で十分なら A サフィックスでOK
+                D3DXCreateTextureFromFileA(g_pd3dDevice, mtrls[i].pTextureFilename, &tex);
+                g_pTextures3[i] = tex;
+            }
+        }
+        pMtrlBuf->Release();
+    }
+
 
     // エフェクト
-    D3DXCreateEffectFromFile(g_pd3dDevice, _T("simple.fx"),
+    D3DXCreateEffectFromFile(g_pd3dDevice, _T("../x64/Debug/simple.cso"),
                              NULL, NULL, 0, NULL, &g_pEffect1, NULL);
-    D3DXCreateEffectFromFile(g_pd3dDevice, _T("simple2.fx"),
+    D3DXCreateEffectFromFile(g_pd3dDevice, _T("../x64/Debug/simple2.cso"),
                              NULL, NULL, 0, NULL, &g_pEffect2, NULL);
 
     // MRT
@@ -218,10 +271,18 @@ void RenderPass1()
     g_pEffect1->Begin(&nPass, 0);
     g_pEffect1->BeginPass(0);
 
-    g_pEffect1->SetBool("g_bUseTexture", FALSE);
+    g_pEffect1->SetBool("g_bUseTexture", TRUE);
 
     // キューブ描画
     for (DWORD i = 0; i < g_dwNumMaterials; ++i) {
+        if (g_pTextures[i]) {
+            g_pEffect1->SetBool("g_bUseTexture", TRUE);
+            g_pEffect1->SetTexture("g_tex0", g_pTextures[i]);   // ★ simple.fx の g_tex0 にセット
+        }
+        else {
+            g_pEffect1->SetBool("g_bUseTexture", FALSE);
+            g_pEffect1->SetTexture("g_tex0", NULL);
+        }
         g_pEffect1->CommitChanges();
         g_pMeshCube->DrawSubset(i);
     }
@@ -231,9 +292,31 @@ void RenderPass1()
     t2 += 0.05f;
     D3DXMatrixTranslation(&W, 0.0f, 2.0f + sinf(t2) * 1, 0.0f);
     g_pEffect1->SetMatrix("g_matWorld", &W);
-    g_pEffect1->CommitChanges();
-    g_pMeshSphere->DrawSubset(0);
-    g_pMeshSky->DrawSubset(0);
+    for (DWORD i = 0; i < g_dwNumMaterials; ++i) {
+        if (g_pTextures2[i]) {
+            g_pEffect1->SetBool("g_bUseTexture", TRUE);
+            g_pEffect1->SetTexture("g_tex0", g_pTextures2[i]);   // ★ simple.fx の g_tex0 にセット
+        }
+        else {
+            g_pEffect1->SetBool("g_bUseTexture", FALSE);
+            g_pEffect1->SetTexture("g_tex0", NULL);
+        }
+        g_pEffect1->CommitChanges();
+        g_pMeshSphere->DrawSubset(0);
+    }
+
+    for (DWORD i = 0; i < g_dwNumMaterials; ++i) {
+        if (g_pTextures3[i]) {
+            g_pEffect1->SetBool("g_bUseTexture", TRUE);
+            g_pEffect1->SetTexture("g_tex0", g_pTextures3[i]);   // ★ simple.fx の g_tex0 にセット
+        }
+        else {
+            g_pEffect1->SetBool("g_bUseTexture", FALSE);
+            g_pEffect1->SetTexture("g_tex0", NULL);
+        }
+        g_pEffect1->CommitChanges();
+        g_pMeshSky->DrawSubset(0);
+    }
 
     g_pEffect1->EndPass();
     g_pEffect1->End();
