@@ -11,7 +11,6 @@ float g_fFar = 1000.0f;
 float g_vizMax = 100.0f;
 float g_vizGamma = 0.25f;
 
-float4 g_posCenter = float4(0, 0, 0, 0);
 float g_posRange = 50.0f;
 
 bool g_bUseTexture = false;
@@ -63,7 +62,7 @@ void PixelShaderMRT3(
     outColor1 = float4(viz, viz, viz, linearZ);
 
     // RT2: World座標を0..1にエンコード
-    float3 nrm = (inWorldPos - g_posCenter.xyz) / g_posRange;
+    float3 nrm = inWorldPos / g_posRange;
     float3 enc = saturate(nrm * 0.5 + 0.5);
     outColor2 = float4(enc, 1.0f);
 }
