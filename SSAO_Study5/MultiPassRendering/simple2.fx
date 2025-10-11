@@ -306,3 +306,51 @@ technique TechniqueAO_Composite
         PixelShader = compile ps_3_0 PS_Composite();
     }
 }
+
+
+// ★追加：合成用に POINT サンプラ（隣接を混ぜない）
+sampler sampAO_point = sampler_state
+{
+    Texture = (texAO);
+    MinFilter = POINT;
+    MagFilter = POINT;
+    MipFilter = NONE;
+    AddressU = CLAMP;
+    AddressV = CLAMP;
+};
+
+// 3×3 の最小値（1px 膨張相当）
+float AO_Min3x3(float2 uv)
+{
+    float2 dx = float2(g_invSize.x * 2, 0.0);
+    float2 dy = float2(0.0, g_invSize.y * 2);
+
+    float m = tex2D(sampAO_point, uv).r;
+    m = min(m, tex2D(sampAO_point, uv + dx).r);
+    m = min(m, tex2D(sampAO_point, uv - dx).r);
+    m = min(m, tex2D(sampAO_point, uv + dy).r);
+    m = min(m, tex2D(sampAO_point, uv - dy).r);
+    m = min(m, tex2D(sampAO_point, uv + dx + dy).r);
+    m = min(m, tex2D(sampAO_point, uv + dx - dy).r);
+    m = min(m, tex2D(sampAO_point, uv - dx + dy).r);
+    m = min(m, tex2D(sampAO_point, uv - dx - dy).r);
+    return m;
+}
+
+// 合成：色 × (minフィルタ済み AO)
+float4 PS_CompositeMin(VS_OUT i) : COLOR0
+{
+    float3 col = tex2D(sampColor, i.uv).rgb;
+    float ao = AO_Min3x3(i.uv); // ← ここで1px膨張
+    return float4(col * ao, 1.0f);
+}
+
+technique TechniqueAO_CompositeMin
+{
+    pass P0
+    {
+        CullMode = NONE;
+        VertexShader = compile vs_3_0 VS_Fullscreen();
+        PixelShader = compile ps_3_0 PS_CompositeMin();
+    }
+}

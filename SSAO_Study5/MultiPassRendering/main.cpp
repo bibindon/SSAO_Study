@@ -422,9 +422,16 @@ void RenderPass2()
     g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
     g_pd3dDevice->BeginScene();
 
-    g_pEffect2->SetTechnique("TechniqueAO_Composite");
-    g_pEffect2->SetTexture("texColor", g_pRenderTarget); // RenderPass1: RT0（色）
-    g_pEffect2->SetTexture("texAO", g_pAoTex);        // 縦ブラー後のAO
+//    g_pEffect2->SetTechnique("TechniqueAO_Composite");
+//    g_pEffect2->SetTexture("texColor", g_pRenderTarget); // RenderPass1: RT0（色）
+//    g_pEffect2->SetTexture("texAO", g_pAoTex);        // 縦ブラー後のAO
+
+    g_pEffect2->SetTechnique("TechniqueAO_CompositeMin");
+    g_pEffect2->SetTexture("texColor", g_pRenderTarget);
+    g_pEffect2->SetTexture("texAO", g_pAoTex);
+
+    g_pEffect2->SetFloatArray("g_invSize", (FLOAT*)&invSize, 2);
+
     g_pEffect2->Begin(&n, 0);
     g_pEffect2->BeginPass(0);
     DrawFullscreenQuad();
