@@ -30,6 +30,8 @@ LPD3DXEFFECT                  g_pEffect2 = NULL; // simple2.fx
 LPDIRECT3DTEXTURE9            g_pRenderTarget = NULL;  // RT0: color
 LPDIRECT3DTEXTURE9            g_pRenderTarget2 = NULL; // RT1: Z画像
 LPDIRECT3DTEXTURE9            g_pRenderTarget3 = NULL; // RT2: POS画像
+LPDIRECT3DTEXTURE9 g_pAoTex = NULL; // AO(生)
+LPDIRECT3DTEXTURE9 g_pAoTemp = NULL; // 横ブラー出力
 
 LPDIRECT3DVERTEXDECLARATION9  g_pQuadDecl = NULL;
 bool                          g_bClose = false;
@@ -134,6 +136,10 @@ void InitD3D(HWND hWnd)
     D3DXCreateTexture(g_pd3dDevice, kBackW, kBackH, 1,
                       D3DUSAGE_RENDERTARGET, D3DFMT_A16B16G16R16F,
                       D3DPOOL_DEFAULT, &g_pRenderTarget3);
+    D3DXCreateTexture(g_pd3dDevice, kBackW, kBackH, 1,
+                      D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_pAoTex);
+    D3DXCreateTexture(g_pd3dDevice, kBackW, kBackH, 1,
+                      D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_pAoTemp);
 
     // クアッド宣言
     D3DVERTEXELEMENT9 elems[] = {
@@ -155,6 +161,8 @@ void Cleanup()
     SAFE_RELEASE(g_pRenderTarget);
     SAFE_RELEASE(g_pRenderTarget2);
     SAFE_RELEASE(g_pRenderTarget3);
+    SAFE_RELEASE(g_pAoTex);
+    SAFE_RELEASE(g_pAoTemp);
     SAFE_RELEASE(g_pQuadDecl);
     SAFE_RELEASE(g_pd3dDevice);
     SAFE_RELEASE(g_pD3D);
@@ -243,36 +251,78 @@ void RenderPass1()
 
 void RenderPass2()
 {
-    g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
-                        D3DCOLOR_XRGB(0, 0, 0), 1.0f, 0);
+    // 共通
     g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
+    D3DXVECTOR2 invSize(1.0f / kBackW, 1.0f / kBackH);
+
+    // --- Pass A: AO作成 → g_pAoTex ---
+    LPDIRECT3DSURFACE9 pAo = NULL;
+    g_pAoTex->GetSurfaceLevel(0, &pAo);
+    g_pd3dDevice->SetRenderTarget(0, pAo);
+    g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
     g_pd3dDevice->BeginScene();
 
-    // SSAO適用
-    g_pEffect2->SetTechnique("TechniqueAO");
+    g_pEffect2->SetTechnique("TechniqueAO_Create");
     g_pEffect2->SetMatrix("g_matView", &g_lastView);
     g_pEffect2->SetMatrix("g_matProj", &g_lastProj);
     g_pEffect2->SetFloat("g_fNear", 1.0f);
     g_pEffect2->SetFloat("g_fFar", 1000.0f);
-    g_pEffect2->SetFloat("g_posRange", 25.0f);
-    g_pEffect2->SetTexture("texColor", g_pRenderTarget);
+    g_pEffect2->SetFloat("g_posRange", 25.0f);     // Pass1と合わせる :contentReference[oaicite:2]{index=2}
     g_pEffect2->SetTexture("texZ", g_pRenderTarget2);
     g_pEffect2->SetTexture("texPos", g_pRenderTarget3);
     g_pEffect2->SetFloat("g_aoStepWorld", 5.0f);
     g_pEffect2->SetFloat("g_aoStrength", 1.5f);
     g_pEffect2->SetFloat("g_aoBias", 0.001f);
 
-    UINT nPass;
-    g_pEffect2->Begin(&nPass, 0);
+    UINT n;
+    g_pEffect2->Begin(&n, 0);
     g_pEffect2->BeginPass(0);
-    g_pEffect2->CommitChanges();
-
     DrawFullscreenQuad();
-
     g_pEffect2->EndPass();
     g_pEffect2->End();
     g_pd3dDevice->EndScene();
+    SAFE_RELEASE(pAo);
+
+    // --- Pass B: 横ブラー → g_pAoTemp ---
+    LPDIRECT3DSURFACE9 pTemp = NULL;
+    g_pAoTemp->GetSurfaceLevel(0, &pTemp);
+    g_pd3dDevice->SetRenderTarget(0, pTemp);
+    g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
+    g_pd3dDevice->BeginScene();
+
+    g_pEffect2->SetTechnique("TechniqueAO_BlurH");
+    g_pEffect2->SetTexture("texAO", g_pAoTex);
+    g_pEffect2->SetFloatArray("g_invSize", (FLOAT*)&invSize, 2);
+
+    g_pEffect2->Begin(&n, 0);
+    g_pEffect2->BeginPass(0);
+    DrawFullscreenQuad();
+    g_pEffect2->EndPass();
+    g_pEffect2->End();
+    g_pd3dDevice->EndScene();
+    SAFE_RELEASE(pTemp);
+
+    // --- Pass C: 縦ブラー → BackBuffer（表示はぼかしたAOだけ） ---
+    LPDIRECT3DSURFACE9 pBack = NULL;
+    g_pd3dDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &pBack);
+    g_pd3dDevice->SetRenderTarget(0, pBack);
+    g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
+    g_pd3dDevice->BeginScene();
+
+    g_pEffect2->SetTechnique("TechniqueAO_BlurV");
+    g_pEffect2->SetTexture("texAO", g_pAoTemp);
+    g_pEffect2->SetFloatArray("g_invSize", (FLOAT*)&invSize, 2);
+
+    g_pEffect2->Begin(&n, 0);
+    g_pEffect2->BeginPass(0);
+    DrawFullscreenQuad();
+    g_pEffect2->EndPass();
+    g_pEffect2->End();
+
+    g_pd3dDevice->EndScene();
     g_pd3dDevice->Present(NULL, NULL, NULL, NULL);
+    SAFE_RELEASE(pBack);
+
     g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, TRUE);
 }
 

@@ -86,13 +86,11 @@ float3 HemiDirFromIndex(int k)
 
 float4 PS_AO(VS_OUT i) : COLOR0
 {
-    float4 color = tex2D(sampColor, i.uv);
-
-    // 中心点
+    // 中心点（色は参照しません）
     float3 worldPos = DecodeWorldPos(tex2D(sampPos, i.uv).rgb);
     float3 vCenter = mul(float4(worldPos, 1.0f), g_matView).xyz;
 
-    // 法線計算
+    // 法線（既存ロジックのまま）
     float3 worldPosX = DecodeWorldPos(tex2D(sampPos, i.uv + float2(1.0f / 800.0f, 0)).rgb);
     float3 worldPosY = DecodeWorldPos(tex2D(sampPos, i.uv + float2(0, 1.0f / 600.0f)).rgb);
     float3 Nw = normalize(cross(worldPosX - worldPos, worldPosY - worldPos));
@@ -118,11 +116,15 @@ float4 PS_AO(VS_OUT i) : COLOR0
 
         float4 cpos = mul(float4(vSample, 1.0f), g_matProj);
         if (cpos.w <= 0.0f)
+        {
             continue;
+        }
 
         float2 suv = NdcToUv(cpos);
         if (suv.x < 0.0f || suv.x > 1.0f || suv.y < 0.0f || suv.y > 1.0f)
+        {
             continue;
+        }
 
         float zNeighbor = saturate((vSample.z - g_fNear) / (g_fFar - g_fNear));
         float zImage = tex2D(sampZ, suv).a;
@@ -137,8 +139,10 @@ float4 PS_AO(VS_OUT i) : COLOR0
         }
     }
 
+    // AO 係数（白=影なし、黒=影）
     float ao = 1.0f - g_aoStrength * (occ / (float) kSamples);
-    return float4(color.rgb * saturate(ao), color.a);
+    ao = saturate(ao);
+    return float4(ao, ao, ao, 1.0f);
 }
 
 technique TechniqueAO
@@ -148,5 +152,106 @@ technique TechniqueAO
         CullMode = NONE;
         VertexShader = compile vs_3_0 VS_Fullscreen();
         PixelShader = compile ps_3_0 PS_AO();
+    }
+}
+
+// 追加：AO入力
+texture texAO;
+sampler sampAO = sampler_state
+{
+    Texture = (texAO);
+    MinFilter = LINEAR;
+    MagFilter = LINEAR;
+    MipFilter = NONE;
+    AddressU = CLAMP;
+    AddressV = CLAMP;
+};
+// 追加：ガウスのσ（ピクセル単位）。お好みで 6～12 あたりから調整。
+float g_sigmaPx = 8.0f;
+
+// 既存：1/RTサイズ（1/width, 1/height）
+float2 g_invSize;
+
+// 51tap ガウス（横）
+float4 PS_BlurH(VS_OUT i) : COLOR0
+{
+    const int R = 25; // 半径
+    float2 du = float2(g_invSize.x, 0.0);
+
+    float center = tex2D(sampAO, i.uv).r;
+    float asum = center;
+    float wsum = 1.0;
+
+    // σ^2 を先に計算
+    float sigma2 = g_sigmaPx * g_sigmaPx;
+
+    [unroll]
+    for (int o = 1; o <= R; ++o)
+    {
+        float w = exp(-(o * o) / (2.0f * sigma2)); // ガウス重み
+        float s1 = tex2D(sampAO, i.uv + du * o).r;
+        float s2 = tex2D(sampAO, i.uv + du * -o).r;
+        asum += (s1 + s2) * w;
+        wsum += 2.0f * w;
+    }
+
+    float a = asum / wsum;
+    return float4(a, a, a, 1.0f);
+}
+
+// 51tap ガウス（縦）
+float4 PS_BlurV(VS_OUT i) : COLOR0
+{
+    const int R = 25;
+    float2 dv = float2(0.0, g_invSize.y);
+
+    float center = tex2D(sampAO, i.uv).r;
+    float asum = center;
+    float wsum = 1.0;
+
+    float sigma2 = g_sigmaPx * g_sigmaPx;
+
+    [unroll]
+    for (int o = 1; o <= R; ++o)
+    {
+        float w = exp(-(o * o) / (2.0f * sigma2));
+        float s1 = tex2D(sampAO, i.uv + dv * o).r;
+        float s2 = tex2D(sampAO, i.uv + dv * -o).r;
+        asum += (s1 + s2) * w;
+        wsum += 2.0f * w;
+    }
+
+    float a = asum / wsum;
+    return float4(a, a, a, 1.0f);
+}
+
+// 既存: AOを作る（PS_AO）
+technique TechniqueAO_Create
+{
+    pass P0
+    {
+        CullMode = NONE;
+        VertexShader = compile vs_3_0 VS_Fullscreen();
+        PixelShader = compile ps_3_0 PS_AO();
+    }
+}
+
+// 追加：横/縦ブラー
+technique TechniqueAO_BlurH
+{
+    pass P0
+    {
+        CullMode = NONE;
+        VertexShader = compile vs_3_0 VS_Fullscreen();
+        PixelShader = compile ps_3_0 PS_BlurH();
+    }
+}
+technique TechniqueAO_BlurV
+{
+    pass P0
+    {
+        CullMode = NONE;
+        VertexShader = compile vs_3_0 VS_Fullscreen();
+        PixelShader = compile ps_3_0 PS_BlurV();
     }
 }
