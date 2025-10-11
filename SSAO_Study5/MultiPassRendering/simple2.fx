@@ -171,42 +171,20 @@ float g_sigmaPx = 8.0f;
 
 // 既存：1/RTサイズ（1/width, 1/height）
 float2 g_invSize;
+// 追加：手前リジェクトのしきい値（線形Zで）
+// サンプルの深度 zN が中心 zC より "g_depthReject" だけ手前なら除外
+float g_depthReject = 0.01f; // 0.005～0.02 で調整
 
-// 51tap ガウス（横）
+// 51tap ガウス（横）— 手前ならサンプルしない
 float4 PS_BlurH(VS_OUT i) : COLOR0
 {
-    const int R = 25; // 半径
+    const int R = 25;
     float2 du = float2(g_invSize.x, 0.0);
 
-    float center = tex2D(sampAO, i.uv).r;
-    float asum = center;
-    float wsum = 1.0;
+    float zC = tex2D(sampZ, i.uv).a; // 中心の深度（線形0..1）
+    float c = tex2D(sampAO, i.uv).r;
 
-    // σ^2 を先に計算
-    float sigma2 = g_sigmaPx * g_sigmaPx;
-
-    [unroll]
-    for (int o = 1; o <= R; ++o)
-    {
-        float w = exp(-(o * o) / (2.0f * sigma2)); // ガウス重み
-        float s1 = tex2D(sampAO, i.uv + du * o).r;
-        float s2 = tex2D(sampAO, i.uv + du * -o).r;
-        asum += (s1 + s2) * w;
-        wsum += 2.0f * w;
-    }
-
-    float a = asum / wsum;
-    return float4(a, a, a, 1.0f);
-}
-
-// 51tap ガウス（縦）
-float4 PS_BlurV(VS_OUT i) : COLOR0
-{
-    const int R = 25;
-    float2 dv = float2(0.0, g_invSize.y);
-
-    float center = tex2D(sampAO, i.uv).r;
-    float asum = center;
+    float asum = c;
     float wsum = 1.0;
 
     float sigma2 = g_sigmaPx * g_sigmaPx;
@@ -215,10 +193,65 @@ float4 PS_BlurV(VS_OUT i) : COLOR0
     for (int o = 1; o <= R; ++o)
     {
         float w = exp(-(o * o) / (2.0f * sigma2));
-        float s1 = tex2D(sampAO, i.uv + dv * o).r;
-        float s2 = tex2D(sampAO, i.uv + dv * -o).r;
-        asum += (s1 + s2) * w;
-        wsum += 2.0f * w;
+
+        float2 uvR = i.uv + du * o;
+        float2 uvL = i.uv + du * -o;
+
+        float zR = tex2D(sampZ, uvR).a;
+        float zL = tex2D(sampZ, uvL).a;
+
+        // 手前は除外（z が小さいほど手前）
+        if (zR >= zC - g_depthReject)
+        {
+            asum += tex2D(sampAO, uvR).r * w;
+            wsum += w;
+        }
+        if (zL >= zC - g_depthReject)
+        {
+            asum += tex2D(sampAO, uvL).r * w;
+            wsum += w;
+        }
+    }
+
+    float a = asum / wsum;
+    return float4(a, a, a, 1.0f);
+}
+
+// 51tap ガウス（縦）— 手前ならサンプルしない
+float4 PS_BlurV(VS_OUT i) : COLOR0
+{
+    const int R = 25;
+    float2 dv = float2(0.0, g_invSize.y);
+
+    float zC = tex2D(sampZ, i.uv).a;
+    float c = tex2D(sampAO, i.uv).r;
+
+    float asum = c;
+    float wsum = 1.0;
+
+    float sigma2 = g_sigmaPx * g_sigmaPx;
+
+    [unroll]
+    for (int o = 1; o <= R; ++o)
+    {
+        float w = exp(-(o * o) / (2.0f * sigma2));
+
+        float2 uvU = i.uv + dv * o;
+        float2 uvD = i.uv + dv * -o;
+
+        float zU = tex2D(sampZ, uvU).a;
+        float zD = tex2D(sampZ, uvD).a;
+
+        if (zU >= zC - g_depthReject)
+        {
+            asum += tex2D(sampAO, uvU).r * w;
+            wsum += w;
+        }
+        if (zD >= zC - g_depthReject)
+        {
+            asum += tex2D(sampAO, uvD).r * w;
+            wsum += w;
+        }
     }
 
     float a = asum / wsum;

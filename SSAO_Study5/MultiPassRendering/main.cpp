@@ -292,7 +292,10 @@ void RenderPass2()
 
     g_pEffect2->SetTechnique("TechniqueAO_BlurH");
     g_pEffect2->SetTexture("texAO", g_pAoTex);
+    g_pEffect2->SetTexture("texZ", g_pRenderTarget2);     // ★ 追加：Z を渡す
     g_pEffect2->SetFloatArray("g_invSize", (FLOAT*)&invSize, 2);
+    g_pEffect2->SetFloat("g_sigmaPx", 8.0f);               // お好みで
+    g_pEffect2->SetFloat("g_depthReject", 0.0001f);          // 近いほど遮断厳しめ
 
     g_pEffect2->Begin(&n, 0);
     g_pEffect2->BeginPass(0);
@@ -311,7 +314,10 @@ void RenderPass2()
 
     g_pEffect2->SetTechnique("TechniqueAO_BlurV");
     g_pEffect2->SetTexture("texAO", g_pAoTemp);
+    g_pEffect2->SetTexture("texZ", g_pRenderTarget2);     // ★ 同上
     g_pEffect2->SetFloatArray("g_invSize", (FLOAT*)&invSize, 2);
+    g_pEffect2->SetFloat("g_sigmaPx", 8.0f);
+    g_pEffect2->SetFloat("g_depthReject", 0.0001f);
 
     g_pEffect2->Begin(&n, 0);
     g_pEffect2->BeginPass(0);
