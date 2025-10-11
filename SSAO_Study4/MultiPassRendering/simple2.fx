@@ -39,7 +39,6 @@ float4x4 g_matProj;
 float g_fNear = 1.0f;
 float g_fFar = 1000.0f;
 
-float4 g_posCenter = float4(0, 0, 0, 0);
 float g_posRange = 50.0f;
 
 float g_aoStepWorld = 1.0f;
@@ -63,13 +62,16 @@ VS_OUT VS_Fullscreen(float4 pos : POSITION, float2 uv : TEXCOORD0)
 float2 NdcToUv(float4 clip)
 {
     float2 ndc = clip.xy / clip.w;
-    return float2(0.5f * ndc.x + 0.5f, -0.5f * ndc.y + 0.5f);
+    float2 result = float2(0.f, 0.f);
+    result.x = 0.5f * ndc.x + 0.5f;
+    result.y = -0.5f * ndc.y + 0.5f;
+    return result;
 }
 
 float3 DecodeWorldPos(float3 enc)
 {
     float3 nrm = (enc - 0.5f) * 2.0f;
-    return nrm * g_posRange + g_posCenter.xyz;
+    return nrm * g_posRange;
 }
 
 float3 HemiDirFromIndex(int k)
@@ -128,7 +130,9 @@ float4 PS_AO(VS_OUT i) : COLOR0
         if (zImage + g_aoBias < zNeighbor)
         {
             if (zNeighbor - zImage > 0.01f)
-                continue;
+            {
+            //    continue;
+            }
             occ++;
         }
     }

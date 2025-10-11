@@ -202,8 +202,6 @@ void RenderPass1()
     g_pEffect1->SetFloat("g_fFar", 1000.0f);
     g_pEffect1->SetFloat("g_vizMax", 100.0f);
     g_pEffect1->SetFloat("g_vizGamma", 0.25f);
-    D3DXVECTOR4 posCenter(0, 0, 0, 0);
-    g_pEffect1->SetVector("g_posCenter", &posCenter);
     g_pEffect1->SetFloat("g_posRange", 50.0f);
 
     // 描画
@@ -256,8 +254,6 @@ void RenderPass2()
     g_pEffect2->SetMatrix("g_matProj", &g_lastProj);
     g_pEffect2->SetFloat("g_fNear", 1.0f);
     g_pEffect2->SetFloat("g_fFar", 1000.0f);
-    D3DXVECTOR4 posCenter(0, 0, 0, 0);
-    g_pEffect2->SetVector("g_posCenter", &posCenter);
     g_pEffect2->SetFloat("g_posRange", 50.0f);
     g_pEffect2->SetTexture("texColor", g_pRenderTarget);
     g_pEffect2->SetTexture("texZ", g_pRenderTarget2);
