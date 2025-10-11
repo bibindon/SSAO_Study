@@ -38,6 +38,8 @@ LPDIRECT3DTEXTURE9 g_pAoTemp = NULL; // 横ブラー出力
 LPDIRECT3DVERTEXDECLARATION9  g_pQuadDecl = NULL;
 bool                          g_bClose = false;
 
+float g_posRange = 20.f;
+
 D3DXMATRIX g_lastView, g_lastProj;
 
 struct QuadVertex {
@@ -263,7 +265,7 @@ void RenderPass1()
     g_pEffect1->SetFloat("g_fFar", 1000.0f);
     g_pEffect1->SetFloat("g_vizMax", 100.0f);
     g_pEffect1->SetFloat("g_vizGamma", 0.25f);
-    g_pEffect1->SetFloat("g_posRange", 25.0f);
+    g_pEffect1->SetFloat("g_posRange", g_posRange);
 
     // 描画
     g_pEffect1->SetTechnique("TechniqueMRT");
@@ -350,7 +352,7 @@ void RenderPass2()
     g_pEffect2->SetMatrix("g_matProj", &g_lastProj);
     g_pEffect2->SetFloat("g_fNear", 1.0f);
     g_pEffect2->SetFloat("g_fFar", 1000.0f);
-    g_pEffect2->SetFloat("g_posRange", 25.0f);     // Pass1と合わせる :contentReference[oaicite:2]{index=2}
+    g_pEffect2->SetFloat("g_posRange", g_posRange);     // Pass1と合わせる :contentReference[oaicite:2]{index=2}
     g_pEffect2->SetTexture("texZ", g_pRenderTarget2);
     g_pEffect2->SetTexture("texPos", g_pRenderTarget3);
     g_pEffect2->SetFloat("g_aoStepWorld", 5.0f);
@@ -366,49 +368,52 @@ void RenderPass2()
     g_pd3dDevice->EndScene();
     SAFE_RELEASE(pAo);
 
-    // --- Pass B: 横ブラー → g_pAoTemp ---
-    LPDIRECT3DSURFACE9 pTemp = NULL;
-    g_pAoTemp->GetSurfaceLevel(0, &pTemp);
-    g_pd3dDevice->SetRenderTarget(0, pTemp);
-    g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
-    g_pd3dDevice->BeginScene();
+    if (true)
+    {
+        // --- Pass B: 横ブラー → g_pAoTemp ---
+        LPDIRECT3DSURFACE9 pTemp = NULL;
+        g_pAoTemp->GetSurfaceLevel(0, &pTemp);
+        g_pd3dDevice->SetRenderTarget(0, pTemp);
+        g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
+        g_pd3dDevice->BeginScene();
 
-    g_pEffect2->SetTechnique("TechniqueAO_BlurH");
-    g_pEffect2->SetTexture("texAO", g_pAoTex);
-    g_pEffect2->SetTexture("texZ", g_pRenderTarget2);     // ★ 追加：Z を渡す
-    g_pEffect2->SetFloatArray("g_invSize", (FLOAT*)&invSize, 2);
-    g_pEffect2->SetFloat("g_sigmaPx", 8.0f);               // お好みで
-    g_pEffect2->SetFloat("g_depthReject", 0.0001f);          // 近いほど遮断厳しめ
+        g_pEffect2->SetTechnique("TechniqueAO_BlurH");
+        g_pEffect2->SetTexture("texAO", g_pAoTex);
+        g_pEffect2->SetTexture("texZ", g_pRenderTarget2);     // ★ 追加：Z を渡す
+        g_pEffect2->SetFloatArray("g_invSize", (FLOAT*)&invSize, 2);
+        g_pEffect2->SetFloat("g_sigmaPx", 8.0f);               // お好みで
+        g_pEffect2->SetFloat("g_depthReject", 0.0001f);          // 近いほど遮断厳しめ
 
-    g_pEffect2->Begin(&n, 0);
-    g_pEffect2->BeginPass(0);
-    DrawFullscreenQuad();
-    g_pEffect2->EndPass();
-    g_pEffect2->End();
-    g_pd3dDevice->EndScene();
-    SAFE_RELEASE(pTemp);
+        g_pEffect2->Begin(&n, 0);
+        g_pEffect2->BeginPass(0);
+        DrawFullscreenQuad();
+        g_pEffect2->EndPass();
+        g_pEffect2->End();
+        g_pd3dDevice->EndScene();
+        SAFE_RELEASE(pTemp);
 
-    // --- Pass C: 縦ブラー → g_pAoTex（←出力先をBackBufferから変更） ---
-    LPDIRECT3DSURFACE9 pAo2 = NULL;
-    g_pAoTex->GetSurfaceLevel(0, &pAo2);
-    g_pd3dDevice->SetRenderTarget(0, pAo2);
-    g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
-    g_pd3dDevice->BeginScene();
+        // --- Pass C: 縦ブラー → g_pAoTex（←出力先をBackBufferから変更） ---
+        LPDIRECT3DSURFACE9 pAo2 = NULL;
+        g_pAoTex->GetSurfaceLevel(0, &pAo2);
+        g_pd3dDevice->SetRenderTarget(0, pAo2);
+        g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
+        g_pd3dDevice->BeginScene();
 
-    g_pEffect2->SetTechnique("TechniqueAO_BlurV");
-    g_pEffect2->SetTexture("texAO", g_pAoTemp);          // ソース：横ブラー結果
-    g_pEffect2->SetTexture("texZ", g_pRenderTarget2);   // 深度（ガイド）
-    g_pEffect2->SetFloatArray("g_invSize", (FLOAT*)&invSize, 2);
-    g_pEffect2->SetFloat("g_sigmaPx", 8.0f);
-    g_pEffect2->SetFloat("g_depthReject", 0.0001f);
+        g_pEffect2->SetTechnique("TechniqueAO_BlurV");
+        g_pEffect2->SetTexture("texAO", g_pAoTemp);          // ソース：横ブラー結果
+        g_pEffect2->SetTexture("texZ", g_pRenderTarget2);   // 深度（ガイド）
+        g_pEffect2->SetFloatArray("g_invSize", (FLOAT*)&invSize, 2);
+        g_pEffect2->SetFloat("g_sigmaPx", 8.0f);
+        g_pEffect2->SetFloat("g_depthReject", 0.0001f);
 
-    g_pEffect2->Begin(&n, 0);
-    g_pEffect2->BeginPass(0);
-    DrawFullscreenQuad();
-    g_pEffect2->EndPass();
-    g_pEffect2->End();
-    g_pd3dDevice->EndScene();
-    SAFE_RELEASE(pAo2);
+        g_pEffect2->Begin(&n, 0);
+        g_pEffect2->BeginPass(0);
+        DrawFullscreenQuad();
+        g_pEffect2->EndPass();
+        g_pEffect2->End();
+        g_pd3dDevice->EndScene();
+        SAFE_RELEASE(pAo2);
+    }
 
     // --- Pass D: 合成（Color × AO） → BackBuffer ---
     LPDIRECT3DSURFACE9 pBack = NULL;
