@@ -7,7 +7,7 @@ sampler sampColor = sampler_state
     Texture = (texColor);
     MinFilter = LINEAR;
     MagFilter = LINEAR;
-    MipFilter = LINEAR;
+    MipFilter = NONE;
     AddressU = CLAMP;
     AddressV = CLAMP;
 };
@@ -18,7 +18,7 @@ sampler sampZ = sampler_state
     Texture = (texZ);
     MinFilter = POINT;
     MagFilter = POINT;
-    MipFilter = POINT;
+    MipFilter = NONE;
     AddressU = CLAMP;
     AddressV = CLAMP;
 };
@@ -29,7 +29,7 @@ sampler sampPos = sampler_state
     Texture = (texPos);
     MinFilter = LINEAR;
     MagFilter = LINEAR;
-    MipFilter = LINEAR;
+    MipFilter = NONE;
     AddressU = CLAMP;
     AddressV = CLAMP;
 };
@@ -160,8 +160,8 @@ texture texAO;
 sampler sampAO = sampler_state
 {
     Texture = (texAO);
-    MinFilter = LINEAR;
-    MagFilter = LINEAR;
+    MinFilter = POINT;
+    MagFilter = POINT;
     MipFilter = NONE;
     AddressU = CLAMP;
     AddressV = CLAMP;
@@ -322,8 +322,8 @@ sampler sampAO_point = sampler_state
 // 3×3 の最小値（1px 膨張相当）
 float AO_Min3x3(float2 uv)
 {
-    float2 dx = float2(g_invSize.x * 2, 0.0);
-    float2 dy = float2(0.0, g_invSize.y * 2);
+    float2 dx = float2(g_invSize.x, 0.0);
+    float2 dy = float2(0.0, g_invSize.y);
 
     float m = tex2D(sampAO_point, uv).r;
     m = min(m, tex2D(sampAO_point, uv + dx).r);

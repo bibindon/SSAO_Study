@@ -239,7 +239,7 @@ void RenderPass1()
     g_pd3dDevice->SetRenderTarget(2, pRT2);
 
     static float t = 0.0f;
-    t += 0.025f;
+    t += 0.005f;
 
     // カメラ設定
     D3DXMATRIX W, V, P, WVP;
@@ -291,7 +291,7 @@ void RenderPass1()
 
     // 球体描画（上に配置）
     static float t2 = 0.0f;
-    t2 += 0.05f;
+    t2 += 0.01f;
     D3DXMatrixTranslation(&W, 0.0f, 2.0f + sinf(t2) * 1, 0.0f);
     g_pEffect1->SetMatrix("g_matWorld", &W);
     for (DWORD i = 0; i < g_dwNumMaterials; ++i) {
@@ -368,7 +368,7 @@ void RenderPass2()
     g_pd3dDevice->EndScene();
     SAFE_RELEASE(pAo);
 
-    if (true)
+    if (false)
     {
         // --- Pass B: 横ブラー → g_pAoTemp ---
         LPDIRECT3DSURFACE9 pTemp = NULL;
@@ -422,11 +422,9 @@ void RenderPass2()
     g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
     g_pd3dDevice->BeginScene();
 
-//    g_pEffect2->SetTechnique("TechniqueAO_Composite");
-//    g_pEffect2->SetTexture("texColor", g_pRenderTarget); // RenderPass1: RT0（色）
-//    g_pEffect2->SetTexture("texAO", g_pAoTex);        // 縦ブラー後のAO
+    g_pEffect2->SetTechnique("TechniqueAO_Composite");
+//    g_pEffect2->SetTechnique("TechniqueAO_CompositeMin");
 
-    g_pEffect2->SetTechnique("TechniqueAO_CompositeMin");
     g_pEffect2->SetTexture("texColor", g_pRenderTarget);
     g_pEffect2->SetTexture("texAO", g_pAoTex);
 
