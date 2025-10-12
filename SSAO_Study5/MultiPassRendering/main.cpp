@@ -359,9 +359,13 @@ void RenderPass2()
     g_pEffect2->SetFloat("g_posRange", g_posRange);
     g_pEffect2->SetTexture("texZ", g_pRenderTarget2);
     g_pEffect2->SetTexture("texPos", g_pRenderTarget3);
-    g_pEffect2->SetFloat("g_aoStepWorld", 5.0f);
-    g_pEffect2->SetFloat("g_aoStrength", 1.5f);
-    g_pEffect2->SetFloat("g_aoBias", 0.0001f);
+
+    g_pEffect2->SetFloat("g_aoStepWorld", 4.0f);   // 5 → 4（半径を少し縮める）
+    g_pEffect2->SetFloat("g_originPush", 0.05f);  // 0.15 → 0.05（押し出し弱め）
+    g_pEffect2->SetFloat("g_planeThickness", 0.006f); // 0.02 → 0.006（同一面厚みを薄く）
+    g_pEffect2->SetFloat("g_edgeZ", 0.006f); // 0.01 → 0.006（縁の深度許容を広げる）
+    g_pEffect2->SetFloat("g_aoStrength", 1.2f);   // 1.5 → 1.2（強すぎ抑制）
+    g_pEffect2->SetFloat("g_aoBias", 0.0002f);// 0.0001 → 0.0002（微バイアス）
 
     UINT n;
     g_pEffect2->Begin(&n, 0);

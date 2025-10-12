@@ -1,10 +1,58 @@
-// simple2.fx - 簡素化版
-// SSAO処理
+// simple2.fx — SSAO (edge-safe: use FAR side at silhouettes)
+// Shader Model 3.0
 
-// 既存：1/RTサイズ（1/width, 1/height）
-float2 g_invSize;
+// ========= Globals =========
+float4x4 g_matView;
+float4x4 g_matProj;
 
-texture texColor;
+float g_fNear = 1.0f;
+float g_fFar = 1000.0f;
+
+float2 g_invSize; // 1 / RT size (pixels)
+float g_posRange = 50.0f; // WorldPos encode range (simple.fx)
+
+// AO controls
+float g_aoStrength = 1.0f; // 0..2
+float g_aoStepWorld = 0.75f; // base radius in world units
+float g_aoBias = 0.0002f; // small bias in linear-Z
+
+// Edge handling
+float g_edgeZ = 0.006f; // linear-Z guard near edges
+float g_originPush = 0.05f; // small lift along +Nv (× g_aoStepWorld)
+
+// ========= Textures / Samplers =========
+texture texZ; // RT1: A = linear Z
+texture texPos; // RT2: WorldPos encoded 0..1 with g_posRange
+texture texAO; // AO buffer (for composite)
+texture texColor; // Color buffer (for composite)
+
+sampler sampZ = sampler_state
+{
+    Texture = (texZ);
+    MinFilter = POINT;
+    MagFilter = POINT;
+    MipFilter = NONE;
+    AddressU = CLAMP;
+    AddressV = CLAMP;
+};
+sampler sampPos = sampler_state
+{
+    Texture = (texPos);
+    MinFilter = POINT;
+    MagFilter = POINT;
+    MipFilter = NONE;
+    AddressU = CLAMP;
+    AddressV = CLAMP;
+};
+sampler sampAO = sampler_state
+{
+    Texture = (texAO);
+    MinFilter = LINEAR;
+    MagFilter = LINEAR;
+    MipFilter = NONE;
+    AddressU = CLAMP;
+    AddressV = CLAMP;
+};
 sampler sampColor = sampler_state
 {
     Texture = (texColor);
@@ -15,86 +63,65 @@ sampler sampColor = sampler_state
     AddressV = CLAMP;
 };
 
-texture texZ;
-sampler sampZ = sampler_state
+// ========= Helpers =========
+float3 DecodeWorldPos(float3 enc)
 {
-    Texture = (texZ);
-    MinFilter = POINT;
-    MagFilter = POINT;
-    MipFilter = NONE;
-    AddressU = CLAMP;
-    AddressV = CLAMP;
-};
+    return (enc * 2.0f - 1.0f) * g_posRange;
+}
 
-texture texPos;
-sampler sampPos = sampler_state
+// D3D9 half-texel aware
+float2 NdcToUv(float4 clip)
 {
-    Texture = (texPos);
-    MinFilter = LINEAR;
-    MagFilter = LINEAR;
-    MipFilter = NONE;
-    AddressU = CLAMP;
-    AddressV = CLAMP;
-};
+    float2 ndc = clip.xy / clip.w;
+    float2 uv;
+    uv.x = ndc.x * 0.5f + 0.5f;
+    uv.y = -ndc.y * 0.5f + 0.5f;
+    return uv + 0.5f * g_invSize;
+}
 
-float4x4 g_matView;
-float4x4 g_matProj;
-float g_fNear = 1.0f;
-float g_fFar = 1000.0f;
-
-float g_posRange = 25.0f;
-
-float g_aoStepWorld = 1.0f;
-float g_aoStrength = 2.0f;
-float g_aoBias = 0.00003f;
+// Low-discrepancy hemisphere dir
+float3 HemiDirFromIndex(int i)
+{
+    float a = frac(0.754877666f * (i + 0.5f));
+    float b = frac(0.569840296f * (i + 0.5f));
+    float phi = a * 6.2831853f;
+    float c = b; // cos(theta) in [0,1]
+    float s = sqrt(saturate(1.0f - c * c));
+    return float3(cos(phi) * s, sin(phi) * s, c);
+}
 
 struct VS_OUT
 {
     float4 pos : POSITION;
     float2 uv : TEXCOORD0;
 };
-
-VS_OUT VS_Fullscreen(float4 pos : POSITION, float2 uv : TEXCOORD0)
+VS_OUT VS_Fullscreen(float4 p : POSITION, float2 uv : TEXCOORD0)
 {
     VS_OUT o;
-    o.pos = pos;
+    o.pos = p;
     o.uv = uv;
     return o;
 }
 
-float2 NdcToUv(float4 clip)
+// ========= Basis (normal + origin + reference Z) =========
+struct Basis
 {
-    float2 ndc = clip.xy / clip.w;
-    float2 result = float2(0.f, 0.f);
-    result.x = 0.5f * ndc.x + 0.5f;
-    result.y = -0.5f * ndc.y + 0.5f;
-    result = result + g_invSize * 0.5f;
-    return result;
-}
+    float3 Nv;
+    float3 vOrigin;
+    float zRef;
+};
+float g_farAdoptMinZ = 0.0001f; // これ以上なら輪郭とみなす（小さすぎは通常面）
+float g_farAdoptMaxZ = 0.01f; // これ以上は大きすぎ（別オブジェクト/空）→遠側採用しない
 
-float3 DecodeWorldPos(float3 enc)
+Basis BuildBasis(float2 uv)
 {
-    float3 nrm = (enc - 0.5f) * 2.0f;
-    return nrm * g_posRange;
-}
-
-float3 HemiDirFromIndex(int k)
-{
-    float a = frac(sin((k + 1) * 12.9898f) * 43758.5453f);
-    float b = frac(sin((k + 1) * 78.2330f) * 19341.2710f);
-    float phi = a * 6.2831853f;
-    float cosTheta = b;
-    float sinTheta = sqrt(saturate(1.0f - cosTheta * cosTheta));
-    return float3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
-}
-
-float3 ViewNormalRobust(float2 uv)
-{
-    float2 dx = float2(g_invSize.x, 0.0);
-    float2 dy = float2(0.0, g_invSize.y);
+    Basis o;
 
     float zC = tex2D(sampZ, uv).a;
     float3 pC = DecodeWorldPos(tex2D(sampPos, uv).rgb);
+
+    float2 dx = float2(g_invSize.x, 0.0f) * 2;
+    float2 dy = float2(0.0f, g_invSize.y) * 2;
 
     float3 pR = DecodeWorldPos(tex2D(sampPos, uv + dx).rgb);
     float3 pL = DecodeWorldPos(tex2D(sampPos, uv - dx).rgb);
@@ -106,44 +133,96 @@ float3 ViewNormalRobust(float2 uv)
     float zU = tex2D(sampZ, uv - dy).a;
     float zD = tex2D(sampZ, uv + dy).a;
 
-    // 近い方の差分を使う（中央との差が小さい方）
-    float3 vx = (abs(zR - zC) <= abs(zL - zC)) ? (pR - pC) : (pC - pL);
-    float3 vy = (abs(zD - zC) <= abs(zU - zC)) ? (pD - pC) : (pC - pU);
+    // --- “輪郭かつ遠側を採るか” をレンジで判定 ---
+    float dzX = abs(zR - zL);
+    float dzY = abs(zD - zU);
+    bool adoptFarX = (dzX >= g_farAdoptMinZ) && (dzX <= g_farAdoptMaxZ);
+    bool adoptFarY = (dzY >= g_farAdoptMinZ) && (dzY <= g_farAdoptMaxZ);
 
-    // 両方向とも大きく跳ぶ＝輪郭 → 画面正面へフォールバック
-    const float kEdge = 0.01f; // 調整幅 0.005～0.02
-    bool edgeX = min(abs(zR - zC), abs(zL - zC)) > kEdge;
-    bool edgeY = min(abs(zD - zC), abs(zU - zC)) > kEdge;
-    if (edgeX && edgeY)
-    {
-        return float3(0, 0, 1); // ビュー空間の前向き
-    }
+    // 法線用の差分：軸ごとにレンジ内なら FAR 側、そうでなければセンターに近い側
+    float3 vx = adoptFarX
+              ? ((zR > zL) ? (pR - pC) : (pC - pL))
+              : ((abs(zR - zC) <= abs(zL - zC)) ? (pR - pC) : (pC - pL));
+    float3 vy = adoptFarY
+              ? ((zD > zU) ? (pD - pC) : (pC - pU))
+              : ((abs(zD - zC) <= abs(zU - zC)) ? (pD - pC) : (pC - pU));
 
     float3 Nw = normalize(cross(vx, vy));
     float3 Nv = normalize(mul(float4(Nw, 0), g_matView).xyz);
-    if (Nv.z < 0)
+
+    // 原点（位置）：どちらかの軸で採用する場合は、その軸の “より遠い方” を使う
+    float zFarN = zC;
+    float3 pFarN = pC;
+    if (adoptFarX)
     {
-//        Nv = -Nv; // カメラ側を向ける
+        float zX = max(zR, zL);
+        float3 pX = (zR > zL) ? pR : pL;
+        if (zX > zFarN)
+        {
+            zFarN = zX;
+            pFarN = pX;
+        }
     }
-    return Nv;
+    if (adoptFarY)
+    {
+        float zY = max(zD, zU);
+        float3 pY = (zD > zU) ? pD : pU;
+        if (zY > zFarN)
+        {
+            zFarN = zY;
+            pFarN = pY;
+        }
+    }
+
+    // 参照Z（zRef）は従来どおり“遠い側”を使って明るいハロを防止（ここはレンジ外でもOK）
+    const float kEdge = 0.004f; // 以前の kEdge（シルエット検出） – 必要なら 0.003〜0.006
+    float zRef = zC;
+    float3 pRef = pC;
+    if (abs(zR - zL) > kEdge)
+    {
+        if (zR > zRef)
+        {
+            zRef = zR;
+            pRef = pR;
+        }
+        if (zL > zRef)
+        {
+            zRef = zL;
+            pRef = pL;
+        }
+    }
+    if (abs(zD - zU) > kEdge)
+    {
+        if (zD > zRef)
+        {
+            zRef = zD;
+            pRef = pD;
+        }
+        if (zU > zRef)
+        {
+            zRef = zU;
+            pRef = pU;
+        }
+    }
+
+    // 出力（原点はレンジガード付きの選択、それ以外は従来どおり）
+    o.Nv = Nv;
+    o.vOrigin = mul(float4(pFarN, 1.0f), g_matView).xyz; // 採用しない場合は pC になる
+    o.zRef = zRef;
+    return o;
 }
 
+
+// ========= AO =========
 float4 PS_AO(VS_OUT i) : COLOR0
 {
-    // 中心点（色は参照しません）
-    float3 worldPos = DecodeWorldPos(tex2D(sampPos, i.uv).rgb);
-    float3 vCenter = mul(float4(worldPos, 1.0f), g_matView).xyz;
+    Basis b = BuildBasis(i.uv);
 
-    // 法線（既存ロジックのまま）
-    float3 worldPosX = DecodeWorldPos(tex2D(sampPos, i.uv + float2(1.0f / 800.0f, 0)).rgb);
-    float3 worldPosY = DecodeWorldPos(tex2D(sampPos, i.uv + float2(0, 1.0f / 600.0f)).rgb);
-    float3 Nw = normalize(cross(worldPosX - worldPos, worldPosY - worldPos));
+    float3 Nv = b.Nv;
+    float3 vOrigin = b.vOrigin + Nv * (g_originPush * g_aoStepWorld); // small lift along +Nv
+    float zRef = b.zRef;
 
-    // 普通にとると輪郭線で法線がおかしくなる
-//    float3 Nv = normalize(mul(float4(Nw, 0), g_matView).xyz);
-    float3 Nv = ViewNormalRobust(i.uv);
-
-    // 接線空間
+    // TBN
     float3 up = (abs(Nv.z) < 0.999f) ? float3(0, 0, 1) : float3(0, 1, 0);
     float3 T = normalize(cross(up, Nv));
     float3 B = cross(Nv, T);
@@ -157,163 +236,50 @@ float4 PS_AO(VS_OUT i) : COLOR0
         float3 h = HemiDirFromIndex(k);
         float3 dirV = normalize(T * h.x + B * h.y + Nv * h.z);
 
-        float s = ((float) k + 0.5f) / (float) kSamples;
-        float radius = g_aoStepWorld * (s * s);
-        float3 vSample = vCenter + dirV * radius;
+        float u = ((float) k + 0.5f) / (float) kSamples;
+        float radius = g_aoStepWorld * (u * u);
 
-        float4 cpos = mul(float4(vSample, 1.0f), g_matProj);
-        if (cpos.w <= 0.0f)
-        {
+        float3 vSample = vOrigin + dirV * radius;
+
+        float4 clip = mul(float4(vSample, 1.0f), g_matProj);
+        if (clip.w <= 0.0f)
             continue;
-        }
 
-        float2 suv = NdcToUv(cpos);
+        float2 suv = NdcToUv(clip);
         if (suv.x < 0.0f || suv.x > 1.0f || suv.y < 0.0f || suv.y > 1.0f)
-        {
             continue;
-        }
 
-        float zNeighbor = saturate((vSample.z - g_fNear) / (g_fFar - g_fNear));
-        float zImage = tex2D(sampZ, suv).a;
+        // Edge guard: sample is valid if it's near the FAR side OR the center depth
+        float zImg = tex2D(sampZ, suv).a;
+        float zCtr = tex2D(sampZ, i.uv).a;
+        if (abs(zImg - zRef) > g_edgeZ && abs(zImg - zCtr) > g_edgeZ)
+            continue;
 
-        if (zImage + g_aoBias < zNeighbor)
+        // Depth test in linear-Z (no plane-based rejection here)
+        float zNei = saturate((vSample.z - g_fNear) / (g_fFar - g_fNear));
+        if (zImg + g_aoBias < zNei)
         {
-//            float zC = tex2D(sampZ, i.uv).a;
-//            const float kEdgeZ = 0.008f; // 0.005〜0.02
-//            if (abs(zImage - zC) > kEdgeZ)
-//            {
-//                continue;
-//            }
-            
-            if (zNeighbor - zImage < 0.01f)
-            {
-                occ++;
-            }
-            else
-            {
-                continue;
-            }
+            occ++;
         }
     }
 
-    // AO 係数（白=影なし、黒=影）
-    float ao = 1.0f - g_aoStrength * (occ / (float) kSamples);
-    ao = saturate(ao);
-    return float4(ao, ao, ao, 1.0f);
-}
-
-technique TechniqueAO
-{
-    pass P0
+    float occl = (float) occ / (float) kSamples;
+    float ao = 1.0f - g_aoStrength * occl;
+    if (ao < 0.2f)
     {
-        CullMode = NONE;
-        VertexShader = compile vs_3_0 VS_Fullscreen();
-        PixelShader = compile ps_3_0 PS_AO();
+        ao = 0.2f;
     }
+    return float4(saturate(ao).xxx, 1.0f);
 }
 
-// 追加：AO入力
-texture texAO;
-sampler sampAO = sampler_state
+// ========= Composite =========
+float4 PS_Composite(VS_OUT i) : COLOR0
 {
-    Texture = (texAO);
-    MinFilter = POINT;
-    MagFilter = POINT;
-    MipFilter = NONE;
-    AddressU = CLAMP;
-    AddressV = CLAMP;
-};
-// 追加：ガウスのσ（ピクセル単位）。お好みで 6～12 あたりから調整。
-float g_sigmaPx = 8.0f;
-
-// 追加：手前リジェクトのしきい値（線形Zで）
-// サンプルの深度 zN が中心 zC より "g_depthReject" だけ手前なら除外
-float g_depthReject = 0.01f; // 0.005～0.02 で調整
-
-// 51tap ガウス（横）— 手前ならサンプルしない
-float4 PS_BlurH(VS_OUT i) : COLOR0
-{
-    const int R = 25;
-    float2 du = float2(g_invSize.x, 0.0);
-
-    float zC = tex2D(sampZ, i.uv).a; // 中心の深度（線形0..1）
-    float c = tex2D(sampAO, i.uv).r;
-
-    float asum = c;
-    float wsum = 1.0;
-
-    float sigma2 = g_sigmaPx * g_sigmaPx;
-
-    [unroll]
-    for (int o = 1; o <= R; ++o)
-    {
-        float w = exp(-(o * o) / (2.0f * sigma2));
-
-        float2 uvR = i.uv + du * o;
-        float2 uvL = i.uv + du * -o;
-
-        float zR = tex2D(sampZ, uvR).a;
-        float zL = tex2D(sampZ, uvL).a;
-
-        // 手前は除外（z が小さいほど手前）
-        if (zR >= zC - g_depthReject)
-        {
-            asum += tex2D(sampAO, uvR).r * w;
-            wsum += w;
-        }
-        if (zL >= zC - g_depthReject)
-        {
-            asum += tex2D(sampAO, uvL).r * w;
-            wsum += w;
-        }
-    }
-
-    float a = asum / wsum;
-    return float4(a, a, a, 1.0f);
+    float3 col = tex2D(sampColor, i.uv).rgb;
+    float ao = tex2D(sampAO, i.uv).r;
+    return float4(col * ao, 1.0f);
 }
 
-// 51tap ガウス（縦）— 手前ならサンプルしない
-float4 PS_BlurV(VS_OUT i) : COLOR0
-{
-    const int R = 25;
-    float2 dv = float2(0.0, g_invSize.y);
-
-    float zC = tex2D(sampZ, i.uv).a;
-    float c = tex2D(sampAO, i.uv).r;
-
-    float asum = c;
-    float wsum = 1.0;
-
-    float sigma2 = g_sigmaPx * g_sigmaPx;
-
-    [unroll]
-    for (int o = 1; o <= R; ++o)
-    {
-        float w = exp(-(o * o) / (2.0f * sigma2));
-
-        float2 uvU = i.uv + dv * o;
-        float2 uvD = i.uv + dv * -o;
-
-        float zU = tex2D(sampZ, uvU).a;
-        float zD = tex2D(sampZ, uvD).a;
-
-        if (zU >= zC - g_depthReject)
-        {
-            asum += tex2D(sampAO, uvU).r * w;
-            wsum += w;
-        }
-        if (zD >= zC - g_depthReject)
-        {
-            asum += tex2D(sampAO, uvD).r * w;
-            wsum += w;
-        }
-    }
-
-    float a = asum / wsum;
-    return float4(a, a, a, 1.0f);
-}
-
-// 既存: AOを作る（PS_AO）
 technique TechniqueAO_Create
 {
     pass P0
@@ -324,34 +290,6 @@ technique TechniqueAO_Create
     }
 }
 
-// 追加：横/縦ブラー
-technique TechniqueAO_BlurH
-{
-    pass P0
-    {
-        CullMode = NONE;
-        VertexShader = compile vs_3_0 VS_Fullscreen();
-        PixelShader = compile ps_3_0 PS_BlurH();
-    }
-}
-technique TechniqueAO_BlurV
-{
-    pass P0
-    {
-        CullMode = NONE;
-        VertexShader = compile vs_3_0 VS_Fullscreen();
-        PixelShader = compile ps_3_0 PS_BlurV();
-    }
-}
-
-// 色 × AO を乗算して出力
-float4 PS_Composite(VS_OUT i) : COLOR0
-{
-    float3 col = tex2D(sampColor, i.uv).rgb; // RenderPass1 の RT0
-    float ao = tex2D(sampAO, i.uv).r; // ぼかした AO（白=影なし）
-    return float4(col * ao, 1.0f);
-}
-
 technique TechniqueAO_Composite
 {
     pass P0
@@ -359,53 +297,5 @@ technique TechniqueAO_Composite
         CullMode = NONE;
         VertexShader = compile vs_3_0 VS_Fullscreen();
         PixelShader = compile ps_3_0 PS_Composite();
-    }
-}
-
-
-// ★追加：合成用に POINT サンプラ（隣接を混ぜない）
-sampler sampAO_point = sampler_state
-{
-    Texture = (texAO);
-    MinFilter = POINT;
-    MagFilter = POINT;
-    MipFilter = NONE;
-    AddressU = CLAMP;
-    AddressV = CLAMP;
-};
-
-// 3×3 の最小値（1px 膨張相当）
-float AO_Min3x3(float2 uv)
-{
-    float2 dx = float2(g_invSize.x, 0.0);
-    float2 dy = float2(0.0, g_invSize.y);
-
-    float m = tex2D(sampAO_point, uv).r;
-    m = min(m, tex2D(sampAO_point, uv + dx).r);
-    m = min(m, tex2D(sampAO_point, uv - dx).r);
-    m = min(m, tex2D(sampAO_point, uv + dy).r);
-    m = min(m, tex2D(sampAO_point, uv - dy).r);
-    m = min(m, tex2D(sampAO_point, uv + dx + dy).r);
-    m = min(m, tex2D(sampAO_point, uv + dx - dy).r);
-    m = min(m, tex2D(sampAO_point, uv - dx + dy).r);
-    m = min(m, tex2D(sampAO_point, uv - dx - dy).r);
-    return m;
-}
-
-// 合成：色 × (minフィルタ済み AO)
-float4 PS_CompositeMin(VS_OUT i) : COLOR0
-{
-    float3 col = tex2D(sampColor, i.uv).rgb;
-    float ao = AO_Min3x3(i.uv); // ← ここで1px膨張
-    return float4(col * ao, 1.0f);
-}
-
-technique TechniqueAO_CompositeMin
-{
-    pass P0
-    {
-        CullMode = NONE;
-        VertexShader = compile vs_3_0 VS_Fullscreen();
-        PixelShader = compile ps_3_0 PS_CompositeMin();
     }
 }
