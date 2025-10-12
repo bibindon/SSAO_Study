@@ -38,7 +38,7 @@ LPDIRECT3DTEXTURE9 g_pAoTemp = NULL; // 横ブラー出力
 LPDIRECT3DVERTEXDECLARATION9  g_pQuadDecl = NULL;
 bool                          g_bClose = false;
 
-float g_posRange = 20.f;
+float g_posRange = 15.f;
 
 D3DXMATRIX g_lastView, g_lastProj;
 
@@ -83,6 +83,7 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int)
             Sleep(16);
             RenderPass1();
             RenderPass2();
+            g_pd3dDevice->Present(NULL, NULL, NULL, NULL);
         }
         if (g_bClose) break;
     }
@@ -104,6 +105,7 @@ void InitD3D(HWND hWnd)
     pp.EnableAutoDepthStencil = TRUE;
     pp.AutoDepthStencilFormat = D3DFMT_D16;
     pp.hDeviceWindow = hWnd;
+    pp.MultiSampleType = D3DMULTISAMPLE_NONE;
 
     g_pD3D->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hWnd,
                          D3DCREATE_HARDWARE_VERTEXPROCESSING, &pp, &g_pd3dDevice);
@@ -239,7 +241,7 @@ void RenderPass1()
     g_pd3dDevice->SetRenderTarget(2, pRT2);
 
     static float t = 0.0f;
-    t += 0.005f;
+    t += 0.01f;
 
     // カメラ設定
     D3DXMATRIX W, V, P, WVP;
@@ -291,7 +293,7 @@ void RenderPass1()
 
     // 球体描画（上に配置）
     static float t2 = 0.0f;
-    t2 += 0.01f;
+    t2 += 0.02f;
     D3DXMatrixTranslation(&W, 0.0f, 2.0f + sinf(t2) * 1, 0.0f);
     g_pEffect1->SetMatrix("g_matWorld", &W);
     for (DWORD i = 0; i < g_dwNumMaterials; ++i) {
@@ -347,17 +349,19 @@ void RenderPass2()
     g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
     g_pd3dDevice->BeginScene();
 
+    g_pEffect2->SetFloatArray("g_invSize", (FLOAT*)&invSize, 2);   // ★ 追加
+
     g_pEffect2->SetTechnique("TechniqueAO_Create");
     g_pEffect2->SetMatrix("g_matView", &g_lastView);
     g_pEffect2->SetMatrix("g_matProj", &g_lastProj);
     g_pEffect2->SetFloat("g_fNear", 1.0f);
     g_pEffect2->SetFloat("g_fFar", 1000.0f);
-    g_pEffect2->SetFloat("g_posRange", g_posRange);     // Pass1と合わせる :contentReference[oaicite:2]{index=2}
+    g_pEffect2->SetFloat("g_posRange", g_posRange);
     g_pEffect2->SetTexture("texZ", g_pRenderTarget2);
     g_pEffect2->SetTexture("texPos", g_pRenderTarget3);
     g_pEffect2->SetFloat("g_aoStepWorld", 5.0f);
     g_pEffect2->SetFloat("g_aoStrength", 1.5f);
-    g_pEffect2->SetFloat("g_aoBias", 0.001f);
+    g_pEffect2->SetFloat("g_aoBias", 0.0001f);
 
     UINT n;
     g_pEffect2->Begin(&n, 0);
@@ -437,7 +441,6 @@ void RenderPass2()
     g_pEffect2->End();
 
     g_pd3dDevice->EndScene();
-    g_pd3dDevice->Present(NULL, NULL, NULL, NULL);
     SAFE_RELEASE(pBack);
 
     g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, TRUE);
@@ -446,8 +449,11 @@ void RenderPass2()
 void DrawFullscreenQuad()
 {
     QuadVertex v[4];
-    const float du = 0.5f / (float)kBackW;
-    const float dv = 0.5f / (float)kBackH;
+//    const float du = 0.5f / (float)kBackW;
+//    const float dv = 0.5f / (float)kBackH;
+
+    const float du = 0.0f;
+    const float dv = 0.0f;
 
     v[0] = { -1, -1, 0, 1, 0 + du, 1 - dv };
     v[1] = { -1,  1, 0, 1, 0 + du, 0 + dv };

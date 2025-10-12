@@ -1,12 +1,15 @@
 // simple2.fx - 簡素化版
 // SSAO処理
 
+// 既存：1/RTサイズ（1/width, 1/height）
+float2 g_invSize;
+
 texture texColor;
 sampler sampColor = sampler_state
 {
     Texture = (texColor);
-    MinFilter = LINEAR;
-    MagFilter = LINEAR;
+    MinFilter = POINT;
+    MagFilter = POINT;
     MipFilter = NONE;
     AddressU = CLAMP;
     AddressV = CLAMP;
@@ -39,10 +42,10 @@ float4x4 g_matProj;
 float g_fNear = 1.0f;
 float g_fFar = 1000.0f;
 
-float g_posRange = 50.0f;
+float g_posRange = 25.0f;
 
 float g_aoStepWorld = 1.0f;
-float g_aoStrength = 1.0f;
+float g_aoStrength = 2.0f;
 float g_aoBias = 0.00003f;
 
 struct VS_OUT
@@ -65,6 +68,7 @@ float2 NdcToUv(float4 clip)
     float2 result = float2(0.f, 0.f);
     result.x = 0.5f * ndc.x + 0.5f;
     result.y = -0.5f * ndc.y + 0.5f;
+    result = result + g_invSize * 0.5f;
     return result;
 }
 
@@ -84,6 +88,46 @@ float3 HemiDirFromIndex(int k)
     return float3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
 }
 
+float3 ViewNormalRobust(float2 uv)
+{
+    float2 dx = float2(g_invSize.x, 0.0);
+    float2 dy = float2(0.0, g_invSize.y);
+
+    float zC = tex2D(sampZ, uv).a;
+    float3 pC = DecodeWorldPos(tex2D(sampPos, uv).rgb);
+
+    float3 pR = DecodeWorldPos(tex2D(sampPos, uv + dx).rgb);
+    float3 pL = DecodeWorldPos(tex2D(sampPos, uv - dx).rgb);
+    float3 pU = DecodeWorldPos(tex2D(sampPos, uv - dy).rgb);
+    float3 pD = DecodeWorldPos(tex2D(sampPos, uv + dy).rgb);
+
+    float zR = tex2D(sampZ, uv + dx).a;
+    float zL = tex2D(sampZ, uv - dx).a;
+    float zU = tex2D(sampZ, uv - dy).a;
+    float zD = tex2D(sampZ, uv + dy).a;
+
+    // 近い方の差分を使う（中央との差が小さい方）
+    float3 vx = (abs(zR - zC) <= abs(zL - zC)) ? (pR - pC) : (pC - pL);
+    float3 vy = (abs(zD - zC) <= abs(zU - zC)) ? (pD - pC) : (pC - pU);
+
+    // 両方向とも大きく跳ぶ＝輪郭 → 画面正面へフォールバック
+    const float kEdge = 0.01f; // 調整幅 0.005～0.02
+    bool edgeX = min(abs(zR - zC), abs(zL - zC)) > kEdge;
+    bool edgeY = min(abs(zD - zC), abs(zU - zC)) > kEdge;
+    if (edgeX && edgeY)
+    {
+        return float3(0, 0, 1); // ビュー空間の前向き
+    }
+
+    float3 Nw = normalize(cross(vx, vy));
+    float3 Nv = normalize(mul(float4(Nw, 0), g_matView).xyz);
+    if (Nv.z < 0)
+    {
+//        Nv = -Nv; // カメラ側を向ける
+    }
+    return Nv;
+}
+
 float4 PS_AO(VS_OUT i) : COLOR0
 {
     // 中心点（色は参照しません）
@@ -94,7 +138,10 @@ float4 PS_AO(VS_OUT i) : COLOR0
     float3 worldPosX = DecodeWorldPos(tex2D(sampPos, i.uv + float2(1.0f / 800.0f, 0)).rgb);
     float3 worldPosY = DecodeWorldPos(tex2D(sampPos, i.uv + float2(0, 1.0f / 600.0f)).rgb);
     float3 Nw = normalize(cross(worldPosX - worldPos, worldPosY - worldPos));
-    float3 Nv = normalize(mul(float4(Nw, 0), g_matView).xyz);
+
+    // 普通にとると輪郭線で法線がおかしくなる
+//    float3 Nv = normalize(mul(float4(Nw, 0), g_matView).xyz);
+    float3 Nv = ViewNormalRobust(i.uv);
 
     // 接線空間
     float3 up = (abs(Nv.z) < 0.999f) ? float3(0, 0, 1) : float3(0, 1, 0);
@@ -131,11 +178,21 @@ float4 PS_AO(VS_OUT i) : COLOR0
 
         if (zImage + g_aoBias < zNeighbor)
         {
-            if (zNeighbor - zImage > 0.01f)
+//            float zC = tex2D(sampZ, i.uv).a;
+//            const float kEdgeZ = 0.008f; // 0.005〜0.02
+//            if (abs(zImage - zC) > kEdgeZ)
+//            {
+//                continue;
+//            }
+            
+            if (zNeighbor - zImage < 0.01f)
+            {
+                occ++;
+            }
+            else
             {
                 continue;
             }
-            occ++;
         }
     }
 
@@ -169,8 +226,6 @@ sampler sampAO = sampler_state
 // 追加：ガウスのσ（ピクセル単位）。お好みで 6～12 あたりから調整。
 float g_sigmaPx = 8.0f;
 
-// 既存：1/RTサイズ（1/width, 1/height）
-float2 g_invSize;
 // 追加：手前リジェクトのしきい値（線形Zで）
 // サンプルの深度 zN が中心 zC より "g_depthReject" だけ手前なら除外
 float g_depthReject = 0.01f; // 0.005～0.02 で調整
