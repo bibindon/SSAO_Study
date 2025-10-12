@@ -280,7 +280,7 @@ void RenderPass1()
     // キューブ描画
     for (DWORD i = 0; i < g_dwNumMaterials; ++i) {
         if (g_pTextures[i]) {
-            g_pEffect1->SetBool("g_bUseTexture", FALSE);
+            g_pEffect1->SetBool("g_bUseTexture", TRUE);
             g_pEffect1->SetTexture("g_tex0", g_pTextures[i]);   // ★ simple.fx の g_tex0 にセット
         }
         else {
@@ -376,7 +376,7 @@ void RenderPass2()
     g_pd3dDevice->EndScene();
     SAFE_RELEASE(pAo);
 
-    if (false)
+    if (true)
     {
         // --- Pass B: 横ブラー → g_pAoTemp ---
         LPDIRECT3DSURFACE9 pTemp = NULL;

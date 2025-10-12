@@ -228,7 +228,7 @@ float4 PS_AO(VS_OUT i) : COLOR0
     float3 B = cross(Nv, T);
 
     int occ = 0;
-    const int kSamples = 32;
+    const int kSamples = 128;
 
     [unroll]
     for (int k = 0; k < kSamples; ++k)
@@ -297,5 +297,115 @@ technique TechniqueAO_Composite
         CullMode = NONE;
         VertexShader = compile vs_3_0 VS_Fullscreen();
         PixelShader = compile ps_3_0 PS_Composite();
+    }
+}
+
+// === Bilateral-like separable blur (depth-guided) ===
+float g_sigmaPx = 3.0f; // 推奨: 2.0〜3.5
+float g_depthReject = 0.0001f;
+
+float GaussianW(int k, float sigma)
+{
+    float fk = (float) k;
+    float denom = 2.0f * sigma * sigma;
+    return exp(-(fk * fk) / denom);
+}
+
+float4 PS_BlurH(VS_OUT i) : COLOR0
+{
+    const int R = 50; // 13 taps (±6 + center): SM3.0で安全
+    float centerZ = tex2D(sampZ, i.uv).a;
+    float centerAO = tex2D(sampAO, i.uv).r;
+
+    float2 stepUV = float2(g_invSize.x, 0.0f);
+
+    float sumAO = centerAO;
+    float sumW = 1.0f;
+
+    [unroll]
+    for (int k = 1; k <= R; ++k)
+    {
+        float w = GaussianW(k, g_sigmaPx);
+
+        float2 uvL = i.uv - stepUV * k;
+        float2 uvR = i.uv + stepUV * k;
+
+        float zL = tex2D(sampZ, uvL).a;
+        float zR = tex2D(sampZ, uvR).a;
+
+        if (abs(zL - centerZ) <= g_depthReject)
+        {
+            float aoL = tex2D(sampAO, uvL).r;
+            sumAO += aoL * w;
+            sumW += w;
+        }
+        if (abs(zR - centerZ) <= g_depthReject)
+        {
+            float aoR = tex2D(sampAO, uvR).r;
+            sumAO += aoR * w;
+            sumW += w;
+        }
+    }
+
+    float ao = sumAO / max(sumW, 1e-6);
+    return float4(ao, ao, ao, 1.0f);
+}
+
+float4 PS_BlurV(VS_OUT i) : COLOR0
+{
+    const int R = 50; // 13 taps
+    float centerZ = tex2D(sampZ, i.uv).a;
+    float centerAO = tex2D(sampAO, i.uv).r;
+
+    float2 stepUV = float2(0.0f, g_invSize.y);
+
+    float sumAO = centerAO;
+    float sumW = 1.0f;
+
+    [unroll]
+    for (int k = 1; k <= R; ++k)
+    {
+        float w = GaussianW(k, g_sigmaPx);
+
+        float2 uvD = i.uv + stepUV * k;
+        float2 uvU = i.uv - stepUV * k;
+
+        float zD = tex2D(sampZ, uvD).a;
+        float zU = tex2D(sampZ, uvU).a;
+
+        if (abs(zD - centerZ) <= g_depthReject)
+        {
+            float aoD = tex2D(sampAO, uvD).r;
+            sumAO += aoD * w;
+            sumW += w;
+        }
+        if (abs(zU - centerZ) <= g_depthReject)
+        {
+            float aoU = tex2D(sampAO, uvU).r;
+            sumAO += aoU * w;
+            sumW += w;
+        }
+    }
+
+    float ao = sumAO / max(sumW, 1e-6);
+    return float4(ao, ao, ao, 1.0f);
+}
+
+technique TechniqueAO_BlurH
+{
+    pass P0
+    {
+        CullMode = NONE;
+        VertexShader = compile vs_3_0 VS_Fullscreen();
+        PixelShader = compile ps_3_0 PS_BlurH();
+    }
+}
+technique TechniqueAO_BlurV
+{
+    pass P0
+    {
+        CullMode = NONE;
+        VertexShader = compile vs_3_0 VS_Fullscreen();
+        PixelShader = compile ps_3_0 PS_BlurV();
     }
 }
