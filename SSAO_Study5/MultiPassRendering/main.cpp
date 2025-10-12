@@ -113,7 +113,7 @@ void InitD3D(HWND hWnd)
     // cube.xロード
     {
         LPD3DXBUFFER pMtrlBuf = NULL;
-        D3DXLoadMeshFromX(_T("cube.x"), D3DXMESH_SYSTEMMEM, g_pd3dDevice,
+        D3DXLoadMeshFromX(_T("monkey.blend.x"), D3DXMESH_SYSTEMMEM, g_pd3dDevice,
                           NULL, &pMtrlBuf, NULL, &g_dwNumMaterials,
                           &g_pMeshCube);
 
