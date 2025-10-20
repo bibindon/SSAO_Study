@@ -282,8 +282,8 @@ float4 PS_Composite(VS_OUT in_) : COLOR0
     float3 col = tex2D(sampColor, in_.uv).rgb;
 
     // なぜか1ピクセルズレている
-//    in_.uv.x += g_invSize.x;
-//    in_.uv.y += g_invSize.y;
+    in_.uv.x += g_invSize.x;
+    in_.uv.y += g_invSize.y;
 
     float ao = tex2D(sampAO, in_.uv).r;
     return float4(col * ao, 1.0f);
@@ -324,11 +324,13 @@ float3 RandomHemiDir(int index)
 // -1 ~ +1を0 ~ 1にする
 float2 PolygonToUV(float4 clip)
 {
-    float2 ndc = clip.xy / clip.w;
+    float2 Polygon = clip.xy / clip.w;
     float2 uv;
-    uv.x = ndc.x * 0.5f + 0.5f;
-    uv.y = -ndc.y * 0.5f + 0.5f;
-    return uv + 0.5f * g_invSize;
+
+    uv.x = Polygon.x * 0.5f + 0.5f;
+    uv.y = -Polygon.y * 0.5f + 0.5f;
+
+    return uv;
 }
 
 Basis BuildBasis(float2 uv)
