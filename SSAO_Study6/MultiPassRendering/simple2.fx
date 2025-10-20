@@ -18,6 +18,9 @@ float g_originPush;
 float g_farAdoptMinZ;
 float g_farAdoptMaxZ;
 
+float g_sigmaPx;
+float g_depthReject;
+
 texture texZ;
 texture texPos;
 
@@ -64,6 +67,23 @@ sampler sampColor = sampler_state
     AddressV = CLAMP;
 };
 
+//-----------------------------------------------------------------
+// 頂点シェーダー
+//-----------------------------------------------------------------
+struct VS_OUT
+{
+    float4 pos : POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+VS_OUT VS_Fullscreen(float4 p : POSITION, float2 uv : TEXCOORD0)
+{
+    VS_OUT o;
+    o.pos = p;
+    o.uv = uv;
+    return o;
+}
+
 float3 DecodeWorldPos(float3 enc)
 {
     return (enc * 2.0f - 1.0f) * g_posRange;
@@ -90,20 +110,6 @@ float3 HemiDirFromIndex(int i)
     return float3(cos(phi) * s, sin(phi) * s, c);
 }
 
-struct VS_OUT
-{
-    float4 pos : POSITION;
-    float2 uv : TEXCOORD0;
-};
-
-VS_OUT VS_Fullscreen(float4 p : POSITION, float2 uv : TEXCOORD0)
-{
-    VS_OUT o;
-    o.pos = p;
-    o.uv = uv;
-    return o;
-}
-
 // ========= Basis (normal + origin + reference Z) =========
 struct Basis
 {
@@ -114,7 +120,7 @@ struct Basis
 
 Basis BuildBasis(float2 uv)
 {
-    Basis o;
+    Basis result;
 
     float zC = tex2D(sampZ, uv).a;
     float3 pC = DecodeWorldPos(tex2D(sampPos, uv).rgb);
@@ -135,8 +141,19 @@ Basis BuildBasis(float2 uv)
     // --- “輪郭かつ遠側を採るか” をレンジで判定 ---
     float dzX = abs(zR - zL);
     float dzY = abs(zD - zU);
-    bool adoptFarX = (dzX >= g_farAdoptMinZ) && (dzX <= g_farAdoptMaxZ);
-    bool adoptFarY = (dzY >= g_farAdoptMinZ) && (dzY <= g_farAdoptMaxZ);
+
+    bool adoptFarX = false;
+    bool adoptFarY = false;
+
+    if ((dzX >= g_farAdoptMinZ) && (dzX <= g_farAdoptMaxZ))
+    {
+        adoptFarX = true;
+    }
+
+    if ((dzY >= g_farAdoptMinZ) && (dzY <= g_farAdoptMaxZ))
+    {
+        adoptFarY = true;
+    }
 
     // 法線用の差分：軸ごとにレンジ内なら FAR 側、そうでなければセンターに近い側
     float3 vx;
@@ -203,6 +220,7 @@ Basis BuildBasis(float2 uv)
             pFarN = pX;
         }
     }
+
     if (adoptFarY)
     {
         float zY = max(zD, zU);
@@ -225,6 +243,7 @@ Basis BuildBasis(float2 uv)
             zRef = zR;
             pRef = pR;
         }
+
         if (zL > zRef)
         {
             zRef = zL;
@@ -239,6 +258,7 @@ Basis BuildBasis(float2 uv)
             zRef = zD;
             pRef = pD;
         }
+
         if (zU > zRef)
         {
             zRef = zU;
@@ -247,14 +267,15 @@ Basis BuildBasis(float2 uv)
     }
 
     // 出力（原点はレンジガード付きの選択、それ以外は従来どおり）
-    o.Nv = Nv;
-    o.vOrigin = mul(float4(pFarN, 1.0f), g_matView).xyz; // 採用しない場合は pC になる
-    o.zRef = zRef;
-    return o;
+    result.Nv = Nv;
+    result.vOrigin = mul(float4(pFarN, 1.0f), g_matView).xyz; // 採用しない場合は pC になる
+    result.zRef = zRef;
+    return result;
 }
 
-
-// ========= AO =========
+//-------------------------------------------------------------
+// Ambient Occlusion
+//-------------------------------------------------------------
 float4 PS_AO(VS_OUT i) : COLOR0
 {
     Basis b = BuildBasis(i.uv);
@@ -288,13 +309,17 @@ float4 PS_AO(VS_OUT i) : COLOR0
 
         float2 suv = NdcToUv(clip);
         if (suv.x < 0.0f || suv.x > 1.0f || suv.y < 0.0f || suv.y > 1.0f)
+        {
             continue;
+        }
 
         // Edge guard: sample is valid if it's near the FAR side OR the center depth
         float zImg = tex2D(sampZ, suv).a;
         float zCtr = tex2D(sampZ, i.uv).a;
         if (abs(zImg - zRef) > g_edgeZ && abs(zImg - zCtr) > g_edgeZ)
+        {
             continue;
+        }
 
         // Depth test in linear-Z (no plane-based rejection here)
         float zNei = saturate((vSample.z - g_fNear) / (g_fFar - g_fNear));
@@ -314,10 +339,6 @@ float4 PS_AO(VS_OUT i) : COLOR0
     return float4(saturate(ao).xxx, 1.0f);
 }
 
-// === Bilateral-like separable blur (depth-guided) ===
-float g_sigmaPx = 3.0f; // 推奨: 2.0〜3.5
-float g_depthReject = 0.0001f;
-
 float GaussianW(int k, float sigma)
 {
     float fk = (float) k;
@@ -330,7 +351,7 @@ float GaussianW(int k, float sigma)
 //--------------------------------------------------------------
 float4 PS_BlurH(VS_OUT i) : COLOR0
 {
-    const int R = 20; // 13 taps (±6 + center): SM3.0で安全
+    const int R = 20;
     float centerZ = tex2D(sampZ, i.uv).a;
     float centerAO = tex2D(sampAO, i.uv).r;
 
@@ -356,6 +377,7 @@ float4 PS_BlurH(VS_OUT i) : COLOR0
             sumAO += aoL * w;
             sumW += w;
         }
+
         if (abs(zR - centerZ) <= g_depthReject)
         {
             float aoR = tex2D(sampAO, uvR).r;
@@ -364,7 +386,7 @@ float4 PS_BlurH(VS_OUT i) : COLOR0
         }
     }
 
-    float ao = sumAO / max(sumW, 1e-6);
+    float ao = sumAO / max(sumW, 0.000001f);
     return float4(ao, ao, ao, 1.0f);
 }
 
@@ -373,7 +395,7 @@ float4 PS_BlurH(VS_OUT i) : COLOR0
 //--------------------------------------------------------------
 float4 PS_BlurV(VS_OUT i) : COLOR0
 {
-    const int R = 20; // 13 taps
+    const int R = 20;
     float centerZ = tex2D(sampZ, i.uv).a;
     float centerAO = tex2D(sampAO, i.uv).r;
 
@@ -399,6 +421,7 @@ float4 PS_BlurV(VS_OUT i) : COLOR0
             sumAO += aoD * w;
             sumW += w;
         }
+
         if (abs(zU - centerZ) <= g_depthReject)
         {
             float aoU = tex2D(sampAO, uvU).r;
@@ -407,7 +430,7 @@ float4 PS_BlurV(VS_OUT i) : COLOR0
         }
     }
 
-    float ao = sumAO / max(sumW, 1e-6);
+    float ao = sumAO / max(sumW, 0.000001f);
     return float4(ao, ao, ao, 1.0f);
 }
 
