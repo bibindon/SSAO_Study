@@ -317,13 +317,13 @@ void RenderPass1()
             if (g_bUseTexture)
             {
                 g_pEffect1->SetBool("g_bUseTexture", TRUE);
-                g_pEffect1->SetTexture("g_tex0", g_pTextures[i]);
+                g_pEffect1->SetTexture("g_texBase", g_pTextures[i]);
             }
         }
         else
         {
             g_pEffect1->SetBool("g_bUseTexture", FALSE);
-            g_pEffect1->SetTexture("g_tex0", NULL);
+            g_pEffect1->SetTexture("g_texBase", NULL);
         }
         g_pEffect1->CommitChanges();
         g_pMeshCube->DrawSubset(i);
@@ -341,13 +341,13 @@ void RenderPass1()
             if (g_bUseTexture)
             {
                 g_pEffect1->SetBool("g_bUseTexture", TRUE);
-                g_pEffect1->SetTexture("g_tex0", g_pTextures2[i]);
+                g_pEffect1->SetTexture("g_texBase", g_pTextures2[i]);
             }
         }
         else
         {
             g_pEffect1->SetBool("g_bUseTexture", FALSE);
-            g_pEffect1->SetTexture("g_tex0", NULL);
+            g_pEffect1->SetTexture("g_texBase", NULL);
         }
         g_pEffect1->CommitChanges();
         g_pMeshSphere->DrawSubset(0);
@@ -360,13 +360,13 @@ void RenderPass1()
             if (g_bUseTexture)
             {
                 g_pEffect1->SetBool("g_bUseTexture", TRUE);
-                g_pEffect1->SetTexture("g_tex0", g_pTextures3[i]);
+                g_pEffect1->SetTexture("g_texBase", g_pTextures3[i]);
             }
         }
         else
         {
             g_pEffect1->SetBool("g_bUseTexture", FALSE);
-            g_pEffect1->SetTexture("g_tex0", NULL);
+            g_pEffect1->SetTexture("g_texBase", NULL);
         }
         g_pEffect1->CommitChanges();
         g_pMeshSky->DrawSubset(0);

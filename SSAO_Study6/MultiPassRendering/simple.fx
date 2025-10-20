@@ -10,10 +10,10 @@ float g_posRange;
 
 bool g_bUseTexture = false;
 
-texture g_tex0;
-sampler sampTex0 = sampler_state
+texture g_texBase;
+sampler sampBase = sampler_state
 {
-    Texture = (g_tex0);
+    Texture = (g_texBase);
     MinFilter = POINT;
     MagFilter = POINT;
     MipFilter = POINT;
@@ -72,7 +72,7 @@ void PixelShaderMRT3(in float4 inScreenColor : COLOR0,
 
     if (g_bUseTexture)
     {
-        float3 tex = tex2D(sampTex0, inTexCood).rgb;
+        float3 tex = tex2D(sampBase, inTexCood).rgb;
         base = tex * lit;
     }
 
