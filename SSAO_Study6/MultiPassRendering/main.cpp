@@ -496,7 +496,7 @@ void RenderPass2()
         SAFE_RELEASE(pAo);
     }
 
-    if (true)
+    if (false)
     {
         g_pEffect2->SetFloat("g_depthReject", 0.0001f);
 

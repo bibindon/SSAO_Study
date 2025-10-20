@@ -180,7 +180,9 @@ float4 PS_AO(VS_OUT in_) : COLOR0
     float fOcclusionRate = (float) occlusionNum / (float) kSamples;
     float fBrightness = 1.0f - g_aoStrength * fOcclusionRate;
 
-    return float4(saturate(fBrightness).xxx, 1.0f);
+    float4 outColor = float4(saturate(fBrightness).xxx, 1.0f);
+
+    return outColor;
 }
 
 //--------------------------------------------------------------
@@ -280,8 +282,8 @@ float4 PS_Composite(VS_OUT in_) : COLOR0
     float3 col = tex2D(sampColor, in_.uv).rgb;
 
     // なぜか1ピクセルズレている
-    in_.uv.x += g_invSize.x;
-    in_.uv.y += g_invSize.y;
+//    in_.uv.x += g_invSize.x;
+//    in_.uv.y += g_invSize.y;
 
     float ao = tex2D(sampAO, in_.uv).r;
     return float4(col * ao, 1.0f);
