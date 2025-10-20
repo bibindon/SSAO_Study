@@ -338,72 +338,72 @@ Basis BuildBasis(float2 uv)
     //---------------------------------------------------
     // “輪郭かつ遠側を採るか” をレンジで判定
     //---------------------------------------------------
-    float fZXDelta = abs(fZRight - fZLeft);
-    float fZYDelta = abs(fZDown - fZUp);
+    float fZDeltaX = abs(fZRight - fZLeft);
+    float fZDeltaY = abs(fZDown - fZUp);
 
     bool bAdoptFarX = false;
     bool bAdoptFarY = false;
 
-    if ((fZXDelta >= g_farAdoptMinZ) && (fZXDelta <= g_farAdoptMaxZ))
+    if ((fZDeltaX >= g_farAdoptMinZ) && (fZDeltaX <= g_farAdoptMaxZ))
     {
         bAdoptFarX = true;
     }
 
-    if ((fZYDelta >= g_farAdoptMinZ) && (fZYDelta <= g_farAdoptMaxZ))
+    if ((fZDeltaY >= g_farAdoptMinZ) && (fZDeltaY <= g_farAdoptMaxZ))
     {
         bAdoptFarY = true;
     }
 
     // 法線用の差分：軸ごとにレンジ内なら FAR 側、そうでなければセンターに近い側
-    float3 vDiffX;
+    float3 vPosDeltaX;
     if (bAdoptFarX)
     {
         if (fZLeft < fZRight)
         {
-            vDiffX = vPosRight - vPosCenter;
+            vPosDeltaX = vPosRight - vPosCenter;
         }
         else
         {
-            vDiffX = vPosCenter - vPosLeft;
+            vPosDeltaX = vPosCenter - vPosLeft;
         }
     }
     else
     {
         if (abs(fZRight - fZCenter) <= abs(fZLeft - fZCenter))
         {
-            vDiffX = vPosRight - vPosCenter;
+            vPosDeltaX = vPosRight - vPosCenter;
         }
         else
         {
-            vDiffX = vPosCenter - vPosLeft;
+            vPosDeltaX = vPosCenter - vPosLeft;
         }
     }
 
-    float3 vDiffY;
+    float3 vPosDeltaY;
     if (bAdoptFarY)
     {
         if (fZUp < fZDown)
         {
-            vDiffY = vPosDown - vPosCenter;
+            vPosDeltaY = vPosDown - vPosCenter;
         }
         else
         {
-            vDiffY = vPosCenter - vPosUp;
+            vPosDeltaY = vPosCenter - vPosUp;
         }
     }
     else
     {
         if (abs(fZDown - fZCenter) <= abs(fZUp - fZCenter))
         {
-            vDiffY = vPosDown - vPosCenter;
+            vPosDeltaY = vPosDown - vPosCenter;
         }
         else
         {
-            vDiffY = vPosCenter - vPosUp;
+            vPosDeltaY = vPosCenter - vPosUp;
         }
     }
 
-    float3 vNormalizedWorld = normalize(cross(vDiffX, vDiffY));
+    float3 vNormalizedWorld = normalize(cross(vPosDeltaX, vPosDeltaY));
     float3 vNormalizedView = normalize(mul(float4(vNormalizedWorld, 0), g_matView).xyz);
 
     // 原点（位置）：どちらかの軸で採用する場合は、その軸の “より遠い方” を使う
