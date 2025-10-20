@@ -10,7 +10,6 @@ float g_posRange;
 
 float g_aoStrength;
 float g_aoStepWorld;
-float g_aoBias;
 
 float g_edgeZ;
 
@@ -162,16 +161,26 @@ float4 PS_AO(VS_OUT in_) : COLOR0
             continue;
         }
 
-        float Z_Image = tex2D(sampZ, sampleUV).a;
-        float Z_Center = tex2D(sampZ, in_.uv).a;
+        float Z_SampleInUV = tex2D(sampZ, sampleUV).a;
+        float Z_CenterInUV = tex2D(sampZ, in_.uv).a;
 
-        if (abs(Z_Image - fZRef) > g_edgeZ && abs(Z_Image - Z_Center) > g_edgeZ)
+        // ドーナツの穴から山を見たときに、
+        // 画面上は山がドーナツによって大部分が遮蔽されているが、
+        // この場合、山にドーナツによる影を表示するべきではない。
+        // そのため、深度がある程度以上離れていたら無視する
+        if (abs(Z_SampleInUV - Z_CenterInUV) > g_edgeZ)
         {
             continue;
         }
 
-        float zNei = saturate((vSamplePosVS.z - g_fNear) / (g_fFar - g_fNear));
-        if (Z_Image + g_aoBias < zNei)
+        // サンプル位置の深度
+        float Z_SampleInRay = saturate((vSamplePosVS.z - g_fNear) / (g_fFar - g_fNear));
+
+        // Z画像の深度と比較したときに、Z画像の深度のほうが小さいかチェック。
+        // 小さいということは、カメラからサンプル位置に行こうとすると
+        // 途中で何かにぶつかるということ。
+        // これは遮蔽、としてカウントする
+        if (Z_SampleInRay - Z_SampleInUV > 0.0001f)
         {
             occlusionNum++;
         }
@@ -282,8 +291,8 @@ float4 PS_Composite(VS_OUT in_) : COLOR0
     float3 col = tex2D(sampColor, in_.uv).rgb;
 
     // なぜか1ピクセルズレている
-    in_.uv.x += g_invSize.x;
-    in_.uv.y += g_invSize.y;
+    in_.uv.x += g_invSize.x * 0.5;
+    in_.uv.y += g_invSize.y * 0.5;
 
     float ao = tex2D(sampAO, in_.uv).r;
     return float4(col * ao, 1.0f);
