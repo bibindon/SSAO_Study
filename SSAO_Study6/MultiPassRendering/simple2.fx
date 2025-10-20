@@ -180,7 +180,8 @@ float4 PS_AO(VS_OUT in_) : COLOR0
         // 小さいということは、カメラからサンプル位置に行こうとすると
         // 途中で何かにぶつかるということ。
         // これは遮蔽、としてカウントする
-        if (Z_SampleInRay - Z_SampleInUV > 0.0001f)
+        float fOcclusionMin = 0.0001f * (g_posRange / 8);
+        if (Z_SampleInRay - Z_SampleInUV > fOcclusionMin)
         {
             occlusionNum++;
         }
@@ -290,7 +291,7 @@ float4 PS_Composite(VS_OUT in_) : COLOR0
 {
     float3 col = tex2D(sampColor, in_.uv).rgb;
 
-    // なぜか1ピクセルズレている
+    // なぜか0.5ピクセルズレている
     in_.uv.x += g_invSize.x * 0.5;
     in_.uv.y += g_invSize.y * 0.5;
 
@@ -349,8 +350,11 @@ Basis BuildBasis(float2 uv)
     float fZCenter = tex2D(sampZ, uv).a;
     float3 vPosCenter = DecodeWorldPos(tex2D(sampPos, uv).rgb);
 
-    float2 dx = float2(g_invSize.x,        0.0f) * 2;
-    float2 dy = float2(0.0f,        g_invSize.y) * 2;
+    float fDeltaSize = 0.f;
+    fDeltaSize = sqrt(g_posRange / 4);
+    
+    float2 dx = float2(g_invSize.x,        0.0f) * fDeltaSize;
+    float2 dy = float2(0.0f,        g_invSize.y) * fDeltaSize;
 
     float3 vPosUp    = DecodeWorldPos(tex2D(sampPos, uv - dy).rgb);
     float3 vPosDown  = DecodeWorldPos(tex2D(sampPos, uv + dy).rgb);

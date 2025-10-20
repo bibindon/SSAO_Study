@@ -38,7 +38,7 @@ LPDIRECT3DVERTEXDECLARATION9    g_pQuadDecl = NULL;
 bool                            g_bClose = false;
 
 float                           g_posRange = 8.f;
-bool                            g_bUseTexture = false;
+bool                            g_bUseTexture = true;
 
 D3DXMATRIX                      g_mView;
 D3DXMATRIX                      g_mProj;
@@ -495,7 +495,7 @@ void RenderPass2()
         SAFE_RELEASE(pAo);
     }
 
-    if (false)
+    if (true)
     {
         g_pEffect2->SetFloat("g_depthReject", 0.0001f);
 
