@@ -97,9 +97,9 @@ float3 RandomHemiDir(int i);
 // HLSLは複数の戻り値を戻したい場合、構造体しか方法がない。
 struct Basis
 {
-    float3 normalizedView;
+    float3 vNormalizedView;
     float3 vOrigin;
-    float zRef;
+    float fZRef;
 };
 
 Basis BuildBasis(float2 uv);
@@ -111,16 +111,16 @@ float4 PS_AO(VS_OUT i) : COLOR0
 {
     Basis basis = BuildBasis(i.uv);
 
-    float3 normalizedView = basis.normalizedView;
+    float3 vNormalizedView = basis.vNormalizedView;
 
-    // small lift along +normalizedView
-    float3 vOrigin = basis.vOrigin + normalizedView * (g_originPush * g_aoStepWorld);
-    float zRef = basis.zRef;
+    // small lift along +vNormalizedView
+    float3 vOrigin = basis.vOrigin + vNormalizedView * (g_originPush * g_aoStepWorld);
+    float fZRef = basis.fZRef;
 
     // TBN
-    float3 up = (abs(normalizedView.z) < 0.999f) ? float3(0, 0, 1) : float3(0, 1, 0);
-    float3 tangent = normalize(cross(up, normalizedView));
-    float3 binormal = cross(normalizedView, tangent);
+    float3 up = (abs(vNormalizedView.z) < 0.999f) ? float3(0, 0, 1) : float3(0, 1, 0);
+    float3 tangent = normalize(cross(up, vNormalizedView));
+    float3 binormal = cross(vNormalizedView, tangent);
 
     int occlusionNum = 0;
     const int kSamples = 64;
@@ -129,7 +129,7 @@ float4 PS_AO(VS_OUT i) : COLOR0
     for (int k = 0; k < kSamples; ++k)
     {
         float3 h = RandomHemiDir(k);
-        float3 dirV = normalize(tangent * h.x + binormal * h.y + normalizedView * h.z);
+        float3 dirV = normalize(tangent * h.x + binormal * h.y + vNormalizedView * h.z);
 
         float u = ((float) k + 0.5f) / (float) kSamples;
         float radius = g_aoStepWorld * (u * u);
@@ -151,7 +151,7 @@ float4 PS_AO(VS_OUT i) : COLOR0
         // Edge guard: sample is valid if it's near the FAR side OR the center depth
         float zImg = tex2D(sampZ, suv).a;
         float zCtr = tex2D(sampZ, i.uv).a;
-        if (abs(zImg - zRef) > g_edgeZ && abs(zImg - zCtr) > g_edgeZ)
+        if (abs(zImg - fZRef) > g_edgeZ && abs(zImg - zCtr) > g_edgeZ)
         {
             continue;
         }
@@ -192,18 +192,18 @@ float4 PS_BlurH(VS_OUT i) : COLOR0
         float2 uvL = i.uv - stepUV * k;
         float2 uvR = i.uv + stepUV * k;
 
-        float ZLeft = tex2D(sampZ, uvL).a;
-        float ZRight = tex2D(sampZ, uvR).a;
+        float fZLeft = tex2D(sampZ, uvL).a;
+        float fZRight = tex2D(sampZ, uvR).a;
 
         // Z値が大きく異なる場所の陰はブラーに使わない
-        if (abs(ZLeft - centerZ) <= g_depthReject)
+        if (abs(fZLeft - centerZ) <= g_depthReject)
         {
             float aoL = tex2D(sampAO, uvL).r;
             sumAO += aoL * WIDTH;
             sumW += WIDTH;
         }
 
-        if (abs(ZRight - centerZ) <= g_depthReject)
+        if (abs(fZRight - centerZ) <= g_depthReject)
         {
             float aoR = tex2D(sampAO, uvR).r;
             sumAO += aoR * WIDTH;
@@ -237,17 +237,17 @@ float4 PS_BlurV(VS_OUT i) : COLOR0
         float2 uvD = i.uv + stepUV * k;
         float2 uvU = i.uv - stepUV * k;
 
-        float ZDown = tex2D(sampZ, uvD).a;
-        float ZUp = tex2D(sampZ, uvU).a;
+        float fZDown = tex2D(sampZ, uvD).a;
+        float fZUp = tex2D(sampZ, uvU).a;
 
-        if (abs(ZDown - centerZ) <= g_depthReject)
+        if (abs(fZDown - centerZ) <= g_depthReject)
         {
             float aoD = tex2D(sampAO, uvD).r;
             sumAO += aoD * WIDTH;
             sumW += WIDTH;
         }
 
-        if (abs(ZUp - centerZ) <= g_depthReject)
+        if (abs(fZUp - centerZ) <= g_depthReject)
         {
             float aoU = tex2D(sampAO, uvU).r;
             sumAO += aoU * WIDTH;
@@ -315,177 +315,180 @@ Basis BuildBasis(float2 uv)
 {
     Basis result;
 
-    float ZCenter = tex2D(sampZ, uv).a;
-    float3 posCenter = DecodeWorldPos(tex2D(sampPos, uv).rgb);
+    float fZCenter = tex2D(sampZ, uv).a;
+    float3 vPosCenter = DecodeWorldPos(tex2D(sampPos, uv).rgb);
 
-    float2 dx = float2(g_invSize.x, 0.0f) * 2;
-    float2 dy = float2(0.0f, g_invSize.y) * 2;
+    float2 dx = float2(g_invSize.x,        0.0f) * 2;
+    float2 dy = float2(0.0f,        g_invSize.y) * 2;
 
-    float3 posRight = DecodeWorldPos(tex2D(sampPos, uv + dx).rgb);
-    float3 posLeft  = DecodeWorldPos(tex2D(sampPos, uv - dx).rgb);
-    float3 posUp    = DecodeWorldPos(tex2D(sampPos, uv - dy).rgb);
-    float3 posDown  = DecodeWorldPos(tex2D(sampPos, uv + dy).rgb);
+    float3 vPosUp    = DecodeWorldPos(tex2D(sampPos, uv - dy).rgb);
+    float3 vPosDown  = DecodeWorldPos(tex2D(sampPos, uv + dy).rgb);
+    float3 vPosLeft  = DecodeWorldPos(tex2D(sampPos, uv - dx).rgb);
+    float3 vPosRight = DecodeWorldPos(tex2D(sampPos, uv + dx).rgb);
 
-    float ZRight    = tex2D(sampZ, uv + dx).a;
-    float ZLeft     = tex2D(sampZ, uv - dx).a;
-    float ZUp       = tex2D(sampZ, uv - dy).a;
-    float ZDown     = tex2D(sampZ, uv + dy).a;
+    float fZUp       = tex2D(sampZ, uv - dy).a;
+    float fZDown     = tex2D(sampZ, uv + dy).a;
+    float fZLeft     = tex2D(sampZ, uv - dx).a;
+    float fZRight    = tex2D(sampZ, uv + dx).a;
 
-    // --- “輪郭かつ遠側を採るか” をレンジで判定 ---
-    float ZXDelta = abs(ZRight - ZLeft);
-    float ZYDelta = abs(ZDown - ZUp);
+    //---------------------------------------------------
+    // “輪郭かつ遠側を採るか” をレンジで判定
+    //---------------------------------------------------
+    float fZXDelta = abs(fZRight - fZLeft);
+    float fZYDelta = abs(fZDown - fZUp);
 
-    bool adoptFarX = false;
-    bool adoptFarY = false;
+    bool bAdoptFarX = false;
+    bool bAdoptFarY = false;
 
-    if ((ZXDelta >= g_farAdoptMinZ) && (ZXDelta <= g_farAdoptMaxZ))
+    if ((fZXDelta >= g_farAdoptMinZ) && (fZXDelta <= g_farAdoptMaxZ))
     {
-        adoptFarX = true;
+        bAdoptFarX = true;
     }
 
-    if ((ZYDelta >= g_farAdoptMinZ) && (ZYDelta <= g_farAdoptMaxZ))
+    if ((fZYDelta >= g_farAdoptMinZ) && (fZYDelta <= g_farAdoptMaxZ))
     {
-        adoptFarY = true;
+        bAdoptFarY = true;
     }
 
     // 法線用の差分：軸ごとにレンジ内なら FAR 側、そうでなければセンターに近い側
-    float3 diffX;
-    if (adoptFarX)
+    float3 vDiffX;
+    if (bAdoptFarX)
     {
-        if (ZRight > ZLeft)
+        if (fZLeft < fZRight)
         {
-            diffX = posRight - posCenter;
+            vDiffX = vPosRight - vPosCenter;
         }
         else
         {
-            diffX = posCenter - posLeft;
+            vDiffX = vPosCenter - vPosLeft;
         }
     }
     else
     {
-        if (abs(ZRight - ZCenter) <= abs(ZLeft - ZCenter))
+        if (abs(fZRight - fZCenter) <= abs(fZLeft - fZCenter))
         {
-            diffX = posRight - posCenter;
+            vDiffX = vPosRight - vPosCenter;
         }
         else
         {
-            diffX = posCenter - posLeft;
+            vDiffX = vPosCenter - vPosLeft;
         }
     }
 
-    float3 diffY;
-    if (adoptFarY)
+    float3 vDiffY;
+    if (bAdoptFarY)
     {
-        if (ZDown > ZUp)
+        if (fZUp < fZDown)
         {
-            diffY = posDown - posCenter;
+            vDiffY = vPosDown - vPosCenter;
         }
         else
         {
-            diffY = posCenter - posUp;
+            vDiffY = vPosCenter - vPosUp;
         }
     }
     else
     {
-        if (abs(ZDown - ZCenter) <= abs(ZUp - ZCenter))
+        if (abs(fZDown - fZCenter) <= abs(fZUp - fZCenter))
         {
-            diffY = posDown - posCenter;
+            vDiffY = vPosDown - vPosCenter;
         }
         else
         {
-            diffY = posCenter - posUp;
+            vDiffY = vPosCenter - vPosUp;
         }
     }
 
-    float3 normalizedWorld = normalize(cross(diffX, diffY));
-    float3 normalizedView = normalize(mul(float4(normalizedWorld, 0), g_matView).xyz);
+    float3 vNormalizedWorld = normalize(cross(vDiffX, vDiffY));
+    float3 vNormalizedView = normalize(mul(float4(vNormalizedWorld, 0), g_matView).xyz);
 
     // 原点（位置）：どちらかの軸で採用する場合は、その軸の “より遠い方” を使う
-    float zFarN = ZCenter;
-    float3 pFarN = posCenter;
-    if (adoptFarX)
+    float fZFarNeighbor = fZCenter;
+    float3 vPosFarNeighbor = vPosCenter;
+    if (bAdoptFarX)
     {
-        float zX = max(ZRight, ZLeft);
+        float zX = max(fZRight, fZLeft);
 
         float3 pX = float3(0, 0, 0);
         
-        if (ZRight > ZLeft)
+        if (fZLeft < fZRight)
         {
-            pX = posRight;
+            pX = vPosRight;
         }
         else
         {
-            pX = posLeft;
+            pX = vPosLeft;
         }
 
-        if (zX > zFarN)
+        if (zX > fZFarNeighbor)
         {
-            zFarN = zX;
-            pFarN = pX;
+            fZFarNeighbor = zX;
+            vPosFarNeighbor = pX;
         }
     }
 
-    if (adoptFarY)
+    if (bAdoptFarY)
     {
-        float zY = max(ZDown, ZUp);
+        float zY = max(fZDown, fZUp);
 
         float3 pY = float3(0, 0, 0);
-        if (ZDown > ZUp)
+        if (fZUp < fZDown)
         {
-            pY = posDown;
+            pY = vPosDown;
         }
         else
         {
-            pY = posUp;
+            pY = vPosUp;
         }
 
-        if (zY > zFarN)
+        if (zY > fZFarNeighbor)
         {
-            zFarN = zY;
-            pFarN = pY;
+            fZFarNeighbor = zY;
+            vPosFarNeighbor = pY;
         }
     }
 
-    // 参照Z（zRef）は従来どおり“遠い側”を使って明るいハロを防止（ここはレンジ外でもOK）
+    // 参照Z（fZRef）は従来どおり“遠い側”を使って明るいハロを防止（ここはレンジ外でもOK）
     const float kEdge = 0.004f; // 以前の kEdge（シルエット検出） – 必要なら 0.003〜0.006
-    float zRef = ZCenter;
-    float3 pRef = posCenter;
-    if (abs(ZRight - ZLeft) > kEdge)
+    float fZRef = fZCenter;
+    float3 vPosRef = vPosCenter;
+
+    if (abs(fZRight - fZLeft) > kEdge)
     {
-        if (ZRight > zRef)
+        if (fZRef < fZRight)
         {
-            zRef = ZRight;
-            pRef = posRight;
+            fZRef = fZRight;
+            vPosRef = vPosRight;
         }
 
-        if (ZLeft > zRef)
+        if (fZRef < fZLeft)
         {
-            zRef = ZLeft;
-            pRef = posLeft;
+            fZRef = fZLeft;
+            vPosRef = vPosLeft;
         }
     }
 
-    if (abs(ZDown - ZUp) > kEdge)
+    if (abs(fZDown - fZUp) > kEdge)
     {
-        if (ZDown > zRef)
+        if (fZRef < fZDown)
         {
-            zRef = ZDown;
-            pRef = posDown;
+            fZRef = fZDown;
+            vPosRef = vPosDown;
         }
 
-        if (ZUp > zRef)
+        if (fZRef < fZUp)
         {
-            zRef = ZUp;
-            pRef = posUp;
+            fZRef = fZUp;
+            vPosRef = vPosUp;
         }
     }
 
     // 出力（原点はレンジガード付きの選択、それ以外は従来どおり）
-    result.normalizedView = normalizedView;
+    result.vNormalizedView = vNormalizedView;
 
-    // 採用しない場合は posCenter になる
-    result.vOrigin = mul(float4(pFarN, 1.0f), g_matView).xyz;
-    result.zRef = zRef;
+    // 採用しない場合は vPosCenter になる
+    result.vOrigin = mul(float4(vPosFarNeighbor, 1.0f), g_matView).xyz;
+    result.fZRef = fZRef;
 
     return result;
 }
