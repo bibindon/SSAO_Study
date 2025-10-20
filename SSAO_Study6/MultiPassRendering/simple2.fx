@@ -107,13 +107,13 @@ Basis BuildBasis(float2 uv);
 //-------------------------------------------------------------
 float4 PS_AO(VS_OUT i) : COLOR0
 {
-    Basis b = BuildBasis(i.uv);
+    Basis basis = BuildBasis(i.uv);
 
-    float3 normalizedView = b.normalizedView;
+    float3 normalizedView = basis.normalizedView;
 
     // small lift along +normalizedView
-    float3 vOrigin = b.vOrigin + normalizedView * (g_originPush * g_aoStepWorld);
-    float zRef = b.zRef;
+    float3 vOrigin = basis.vOrigin + normalizedView * (g_originPush * g_aoStepWorld);
+    float zRef = basis.zRef;
 
     // TBN
     float3 up = (abs(normalizedView.z) < 0.999f) ? float3(0, 0, 1) : float3(0, 1, 0);
