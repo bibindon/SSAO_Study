@@ -391,7 +391,7 @@ void RenderPass1()
 
     static float t2 = 0.0f;
     t2 += 0.02f;
-    D3DXMatrixTranslation(&mWorld, 0.0f, sinf(t2) * 1 + 0.0f, 0.0f);
+    D3DXMatrixTranslation(&mWorld, cosf(t2) * 2, sinf(t2) * 2 - 2.0f, sinf(t2) * 2);
     g_pEffect1->SetMatrix("g_matWorld", &mWorld);
     for (DWORD i = 0; i < g_dwNumMaterials; ++i)
     {
