@@ -37,8 +37,9 @@ LPDIRECT3DTEXTURE9              g_pAoTempBlur = NULL;
 LPDIRECT3DVERTEXDECLARATION9    g_pQuadDecl = NULL;
 bool                            g_bClose = false;
 
-float                           g_posRange = 8.f;
+float                           g_posRange = 16.f;
 bool                            g_bUseTexture = true;
+bool                            g_bUseBlur = true;
 
 D3DXMATRIX                      g_mView;
 D3DXMATRIX                      g_mProj;
@@ -327,7 +328,7 @@ void RenderPass1()
     g_pd3dDevice->SetRenderTarget(2, pRT2);
 
     static float t = 0.0f;
-    t += 0.01f;
+    t += -0.01f;
 
     D3DXMATRIX mWorld;
     D3DXMATRIX mView;
@@ -469,8 +470,8 @@ void RenderPass2()
         g_pEffect2->SetTexture("texZ", g_pRenderTargetZ);
         g_pEffect2->SetTexture("texPos", g_pRenderTargetPos);
 
-        g_pEffect2->SetFloat("g_aoStrength",    1.2f);
-        g_pEffect2->SetFloat("g_aoStepWorld",   4.0f);
+        g_pEffect2->SetFloat("g_aoStrength",    1.6f);
+        g_pEffect2->SetFloat("g_aoStepWorld",   2.0f);
 
         g_pEffect2->SetFloat("g_edgeZ",         0.006f);
 
@@ -495,7 +496,7 @@ void RenderPass2()
         SAFE_RELEASE(pAo);
     }
 
-    if (true)
+    if (g_bUseBlur)
     {
         g_pEffect2->SetFloat("g_depthReject", 0.0001f);
 

@@ -112,6 +112,7 @@ float4 PS_AO(VS_OUT in_) : COLOR0
     float3 vHemisphereAxisVS = basis.vHemisphereAxisVS;
 
     float3 vOriginVS = basis.vOriginVS;
+
     float fZRef = basis.fZRef;
 
     // TBN
@@ -201,7 +202,7 @@ float4 PS_AO(VS_OUT in_) : COLOR0
 float4 PS_BlurH(VS_OUT in_) : COLOR0
 {
     // 奇数であること
-    const int WIDTH = 51;
+    const int WIDTH = 15;
 
     float centerZ = tex2D(sampZ, in_.uv).a;
     float centerAO = tex2D(sampAO, in_.uv).r;
@@ -246,7 +247,7 @@ float4 PS_BlurH(VS_OUT in_) : COLOR0
 float4 PS_BlurV(VS_OUT in_) : COLOR0
 {
     // 奇数であること
-    const int WIDTH = 51;
+    const int WIDTH = 15;
 
     float centerZ = tex2D(sampZ, in_.uv).a;
     float centerAO = tex2D(sampAO, in_.uv).r;

@@ -38,7 +38,7 @@ void VertexShader1(in float4 inPosition   : POSITION,
     float lightIntensity = 0.f;
 
     // 平行光源によるライティングありorなし
-    if (false)
+    if (true)
     {
         lightIntensity = dot(inNormal, normalize(float4(-0.3, 1.0, -0.5, 0)));
     }
