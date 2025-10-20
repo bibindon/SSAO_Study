@@ -117,8 +117,8 @@ float4 PS_AO(VS_OUT i) : COLOR0
 
     // TBN
     float3 up = (abs(normalizedView.z) < 0.999f) ? float3(0, 0, 1) : float3(0, 1, 0);
-    float3 T = normalize(cross(up, normalizedView));
-    float3 B = cross(normalizedView, T);
+    float3 tangent = normalize(cross(up, normalizedView));
+    float3 binormal = cross(normalizedView, tangent);
 
     int occ = 0;
     const int kSamples = 64;
@@ -127,7 +127,7 @@ float4 PS_AO(VS_OUT i) : COLOR0
     for (int k = 0; k < kSamples; ++k)
     {
         float3 h = HemiDirFromIndex(k);
-        float3 dirV = normalize(T * h.x + B * h.y + normalizedView * h.z);
+        float3 dirV = normalize(tangent * h.x + binormal * h.y + normalizedView * h.z);
 
         float u = ((float) k + 0.5f) / (float) kSamples;
         float radius = g_aoStepWorld * (u * u);
@@ -136,7 +136,9 @@ float4 PS_AO(VS_OUT i) : COLOR0
 
         float4 clip = mul(float4(vSample, 1.0f), g_matProj);
         if (clip.w <= 0.0f)
+        {
             continue;
+        }
 
         float2 suv = NdcToUv(clip);
         if (suv.x < 0.0f || suv.x > 1.0f || suv.y < 0.0f || suv.y > 1.0f)
