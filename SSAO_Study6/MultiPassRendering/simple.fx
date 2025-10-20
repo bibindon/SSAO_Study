@@ -7,7 +7,7 @@ float4x4 g_matView;
 float4x4 g_matProj;
 
 float g_fNear = 1.0f;
-float g_fFar = 1000.0f;
+float g_fFar = 30.0f;
 float g_vizMax = 100.0f;
 float g_vizGamma = 0.25f;
 

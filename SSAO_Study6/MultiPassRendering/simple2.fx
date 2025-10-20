@@ -6,7 +6,7 @@ float4x4 g_matView;
 float4x4 g_matProj;
 
 float g_fNear = 1.0f;
-float g_fFar = 1000.0f;
+float g_fFar = 30.0f;
 
 float2 g_invSize; // 1 / RT size (pixels)
 float g_posRange = 50.0f; // WorldPos encode range (simple.fx)
@@ -228,7 +228,7 @@ float4 PS_AO(VS_OUT i) : COLOR0
     float3 B = cross(Nv, T);
 
     int occ = 0;
-    const int kSamples = 128;
+    const int kSamples = 64;
 
     [unroll]
     for (int k = 0; k < kSamples; ++k)
@@ -313,7 +313,7 @@ float GaussianW(int k, float sigma)
 
 float4 PS_BlurH(VS_OUT i) : COLOR0
 {
-    const int R = 50; // 13 taps (±6 + center): SM3.0で安全
+    const int R = 20; // 13 taps (±6 + center): SM3.0で安全
     float centerZ = tex2D(sampZ, i.uv).a;
     float centerAO = tex2D(sampAO, i.uv).r;
 
@@ -353,7 +353,7 @@ float4 PS_BlurH(VS_OUT i) : COLOR0
 
 float4 PS_BlurV(VS_OUT i) : COLOR0
 {
-    const int R = 50; // 13 taps
+    const int R = 20; // 13 taps
     float centerZ = tex2D(sampZ, i.uv).a;
     float centerAO = tex2D(sampAO, i.uv).r;
 

@@ -264,7 +264,7 @@ void RenderPass1()
     g_pEffect1->SetMatrix("g_matProj", &P);
     g_pEffect1->SetMatrix("g_matWorldViewProj", &WVP);
     g_pEffect1->SetFloat("g_fNear", 1.0f);
-    g_pEffect1->SetFloat("g_fFar", 1000.0f);
+    g_pEffect1->SetFloat("g_fFar", 1030.0f);
     g_pEffect1->SetFloat("g_vizMax", 100.0f);
     g_pEffect1->SetFloat("g_vizGamma", 0.25f);
     g_pEffect1->SetFloat("g_posRange", g_posRange);
@@ -275,15 +275,21 @@ void RenderPass1()
     g_pEffect1->Begin(&nPass, 0);
     g_pEffect1->BeginPass(0);
 
-    g_pEffect1->SetBool("g_bUseTexture", TRUE);
+    bool bUseTexture = false;
 
     // キューブ描画
-    for (DWORD i = 0; i < g_dwNumMaterials; ++i) {
-        if (g_pTextures[i]) {
-            g_pEffect1->SetBool("g_bUseTexture", TRUE);
-            g_pEffect1->SetTexture("g_tex0", g_pTextures[i]);   // ★ simple.fx の g_tex0 にセット
+    for (DWORD i = 0; i < g_dwNumMaterials; ++i)
+    {
+        if (g_pTextures[i])
+        {
+            if (bUseTexture)
+            {
+                g_pEffect1->SetBool("g_bUseTexture", TRUE);
+                g_pEffect1->SetTexture("g_tex0", g_pTextures[i]);   // ★ simple.fx の g_tex0 にセット
+            }
         }
-        else {
+        else
+        {
             g_pEffect1->SetBool("g_bUseTexture", FALSE);
             g_pEffect1->SetTexture("g_tex0", NULL);
         }
@@ -296,12 +302,18 @@ void RenderPass1()
     t2 += 0.02f;
     D3DXMatrixTranslation(&W, 0.0f, 2.0f + sinf(t2) * 1, 0.0f);
     g_pEffect1->SetMatrix("g_matWorld", &W);
-    for (DWORD i = 0; i < g_dwNumMaterials; ++i) {
-        if (g_pTextures2[i]) {
-            g_pEffect1->SetBool("g_bUseTexture", TRUE);
-            g_pEffect1->SetTexture("g_tex0", g_pTextures2[i]);   // ★ simple.fx の g_tex0 にセット
+    for (DWORD i = 0; i < g_dwNumMaterials; ++i)
+    {
+        if (g_pTextures2[i])
+        {
+            if (bUseTexture)
+            {
+                g_pEffect1->SetBool("g_bUseTexture", TRUE);
+                g_pEffect1->SetTexture("g_tex0", g_pTextures2[i]);   // ★ simple.fx の g_tex0 にセット
+            }
         }
-        else {
+        else
+        {
             g_pEffect1->SetBool("g_bUseTexture", FALSE);
             g_pEffect1->SetTexture("g_tex0", NULL);
         }
@@ -309,12 +321,18 @@ void RenderPass1()
         g_pMeshSphere->DrawSubset(0);
     }
 
-    for (DWORD i = 0; i < g_dwNumMaterials; ++i) {
-        if (g_pTextures3[i]) {
-            g_pEffect1->SetBool("g_bUseTexture", TRUE);
-            g_pEffect1->SetTexture("g_tex0", g_pTextures3[i]);   // ★ simple.fx の g_tex0 にセット
+    for (DWORD i = 0; i < g_dwNumMaterials; ++i)
+    {
+        if (g_pTextures3[i])
+        {
+            if (bUseTexture)
+            {
+                g_pEffect1->SetBool("g_bUseTexture", TRUE);
+                g_pEffect1->SetTexture("g_tex0", g_pTextures3[i]);   // ★ simple.fx の g_tex0 にセット
+            }
         }
-        else {
+        else
+        {
             g_pEffect1->SetBool("g_bUseTexture", FALSE);
             g_pEffect1->SetTexture("g_tex0", NULL);
         }
@@ -355,7 +373,7 @@ void RenderPass2()
     g_pEffect2->SetMatrix("g_matView", &g_lastView);
     g_pEffect2->SetMatrix("g_matProj", &g_lastProj);
     g_pEffect2->SetFloat("g_fNear", 1.0f);
-    g_pEffect2->SetFloat("g_fFar", 1000.0f);
+    g_pEffect2->SetFloat("g_fFar", 1030.0f);
     g_pEffect2->SetFloat("g_posRange", g_posRange);
     g_pEffect2->SetTexture("texZ", g_pRenderTarget2);
     g_pEffect2->SetTexture("texPos", g_pRenderTarget3);
@@ -376,7 +394,7 @@ void RenderPass2()
     g_pd3dDevice->EndScene();
     SAFE_RELEASE(pAo);
 
-    if (true)
+    if (false)
     {
         // --- Pass B: 横ブラー → g_pAoTemp ---
         LPDIRECT3DSURFACE9 pTemp = NULL;
