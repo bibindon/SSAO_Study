@@ -499,7 +499,6 @@ void RenderPass2()
 
     if (true)
     {
-        g_pEffect2->SetFloat("g_sigmaPx", 8.0f);
         g_pEffect2->SetFloat("g_depthReject", 0.0001f);
 
         //---------------------------------------------------------------

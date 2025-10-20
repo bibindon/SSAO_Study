@@ -18,7 +18,6 @@ float g_originPush;
 float g_farAdoptMinZ;
 float g_farAdoptMaxZ;
 
-float g_sigmaPx;
 float g_depthReject;
 
 texture texZ;
@@ -331,10 +330,6 @@ float4 PS_AO(VS_OUT i) : COLOR0
 
     float occl = (float) occ / (float) kSamples;
     float ao = 1.0f - g_aoStrength * occl;
-    if (ao < 0.2f)
-    {
-        ao = 0.2f;
-    }
 
     return float4(saturate(ao).xxx, 1.0f);
 }
@@ -351,7 +346,9 @@ float GaussianW(int k, float sigma)
 //--------------------------------------------------------------
 float4 PS_BlurH(VS_OUT i) : COLOR0
 {
-    const int R = 20;
+    // 奇数であること
+    const int WIDTH = 51;
+
     float centerZ = tex2D(sampZ, i.uv).a;
     float centerAO = tex2D(sampAO, i.uv).r;
 
@@ -361,10 +358,8 @@ float4 PS_BlurH(VS_OUT i) : COLOR0
     float sumW = 1.0f;
 
     [unroll]
-    for (int k = 1; k <= R; ++k)
+    for (int k = 1; k <= (WIDTH / 2); ++k)
     {
-        float w = GaussianW(k, g_sigmaPx);
-
         float2 uvL = i.uv - stepUV * k;
         float2 uvR = i.uv + stepUV * k;
 
@@ -374,15 +369,15 @@ float4 PS_BlurH(VS_OUT i) : COLOR0
         if (abs(zL - centerZ) <= g_depthReject)
         {
             float aoL = tex2D(sampAO, uvL).r;
-            sumAO += aoL * w;
-            sumW += w;
+            sumAO += aoL * WIDTH;
+            sumW += WIDTH;
         }
 
         if (abs(zR - centerZ) <= g_depthReject)
         {
             float aoR = tex2D(sampAO, uvR).r;
-            sumAO += aoR * w;
-            sumW += w;
+            sumAO += aoR * WIDTH;
+            sumW += WIDTH;
         }
     }
 
@@ -395,7 +390,9 @@ float4 PS_BlurH(VS_OUT i) : COLOR0
 //--------------------------------------------------------------
 float4 PS_BlurV(VS_OUT i) : COLOR0
 {
-    const int R = 20;
+    // 奇数であること
+    const int WIDTH = 51;
+
     float centerZ = tex2D(sampZ, i.uv).a;
     float centerAO = tex2D(sampAO, i.uv).r;
 
@@ -405,10 +402,8 @@ float4 PS_BlurV(VS_OUT i) : COLOR0
     float sumW = 1.0f;
 
     [unroll]
-    for (int k = 1; k <= R; ++k)
+    for (int k = 1; k <= (WIDTH / 2); ++k)
     {
-        float w = GaussianW(k, g_sigmaPx);
-
         float2 uvD = i.uv + stepUV * k;
         float2 uvU = i.uv - stepUV * k;
 
@@ -418,15 +413,15 @@ float4 PS_BlurV(VS_OUT i) : COLOR0
         if (abs(zD - centerZ) <= g_depthReject)
         {
             float aoD = tex2D(sampAO, uvD).r;
-            sumAO += aoD * w;
-            sumW += w;
+            sumAO += aoD * WIDTH;
+            sumW += WIDTH;
         }
 
         if (abs(zU - centerZ) <= g_depthReject)
         {
             float aoU = tex2D(sampAO, uvU).r;
-            sumAO += aoU * w;
-            sumW += w;
+            sumAO += aoU * WIDTH;
+            sumW += WIDTH;
         }
     }
 
