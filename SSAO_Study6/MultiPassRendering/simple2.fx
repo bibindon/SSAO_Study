@@ -1,4 +1,4 @@
-
+﻿
 float4x4 g_matView;
 float4x4 g_matProj;
 
@@ -87,8 +87,7 @@ VS_OUT VS_Fullscreen(float4 p : POSITION, float2 uv : TEXCOORD0)
 
 float3 DecodeWorldPos(float3 enc);
 
-// D3D9 half-texel aware
-float2 NdcToUv(float4 clip);
+float2 PolygonToUV(float4 clip);
 
 // Low-discrepancy hemisphere dir
 float3 RandomHemiDir(int i);
@@ -142,7 +141,7 @@ float4 PS_AO(VS_OUT i) : COLOR0
             continue;
         }
 
-        float2 suv = NdcToUv(clip);
+        float2 suv = PolygonToUV(clip);
         if (suv.x < 0.0f || suv.x > 1.0f || suv.y < 0.0f || suv.y > 1.0f)
         {
             continue;
@@ -286,23 +285,28 @@ float3 DecodeWorldPos(float3 enc)
 float3 RandomHemiDir(int index)
 {
     // 準乱数（0..1）
+    // frac関数は小数部分を返す
     float randomU1 = frac(0.754877666f * (index + 0.5f));
     float randomU2 = frac(0.569840296f * (index + 0.5f));
 
-    // 方位角 φ と、cosθ を一様に取る（これで固有立体角で一様になる）
-    float anglePhi  = randomU1 * 6.2831853f;   // = 2π
-    float cosTheta  = randomU2;                // z 成分
+    float angle  = randomU1 * PI * 2;
+
+    // z 成分
+    // sin2乗 + cos2乗 = 1、というのがある。
+    // 変形すると以下のようになる
+    // sin = ルート(1 - cos2乗)
+    float cosTheta  = randomU2;
     float sinTheta  = sqrt(1.0f - cosTheta * cosTheta);
 
     float3 directionLocal;
-    directionLocal.x = cos(anglePhi) * sinTheta;
-    directionLocal.y = sin(anglePhi) * sinTheta;
+    directionLocal.x = cos(angle) * sinTheta;
+    directionLocal.y = sin(angle) * sinTheta;
     directionLocal.z = cosTheta;               // +Z 半球
     return directionLocal;                     // 既に単位長
 }
 
-// Normalized Device Coordinates（正規化デバイス座標）
-float2 NdcToUv(float4 clip)
+// -1 ~ +1を0 ~ 1にする
+float2 PolygonToUV(float4 clip)
 {
     float2 ndc = clip.xy / clip.w;
     float2 uv;

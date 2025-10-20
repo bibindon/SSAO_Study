@@ -38,7 +38,7 @@ LPDIRECT3DVERTEXDECLARATION9    g_pQuadDecl = NULL;
 bool                            g_bClose = false;
 
 float                           g_posRange = 8.f;
-bool                            g_bUseTexture = true;
+bool                            g_bUseTexture = false;
 
 D3DXMATRIX                      g_mView;
 D3DXMATRIX                      g_mProj;
