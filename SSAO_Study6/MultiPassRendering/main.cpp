@@ -584,8 +584,8 @@ void DrawFullscreenQuad()
 
     v[0] = { -1, -1, 0, 1, 0 + du, 1 - dv };
     v[1] = { -1,  1, 0, 1, 0 + du, 0 + dv };
-    v[2] = { 1, -1, 0, 1, 1 - du, 1 - dv };
-    v[3] = { 1,  1, 0, 1, 1 - du, 0 + dv };
+    v[2] = {  1, -1, 0, 1, 1 - du, 1 - dv };
+    v[3] = {  1,  1, 0, 1, 1 - du, 0 + dv };
 
     g_pd3dDevice->SetVertexDeclaration(g_pQuadDecl);
 

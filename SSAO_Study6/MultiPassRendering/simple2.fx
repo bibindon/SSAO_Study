@@ -83,22 +83,201 @@ VS_OUT VS_Fullscreen(float4 p : POSITION, float2 uv : TEXCOORD0)
     return o;
 }
 
+float3 DecodeWorldPos(float3 enc);
+
+// D3D9 half-texel aware
+float2 NdcToUv(float4 clip);
+
+// Low-discrepancy hemisphere dir
+float3 HemiDirFromIndex(int i);
+
+// BuildBasis関数の戻り値用構造体
+// HLSLは複数の戻り値を戻したい場合、構造体しか方法がない。
+struct Basis
+{
+    float3 normalizedView;
+    float3 vOrigin;
+    float zRef;
+};
+
+Basis BuildBasis(float2 uv);
+
+//-------------------------------------------------------------
+// Ambient Occlusion
+//-------------------------------------------------------------
+float4 PS_AO(VS_OUT i) : COLOR0
+{
+    Basis b = BuildBasis(i.uv);
+
+    float3 normalizedView = b.normalizedView;
+
+    // small lift along +normalizedView
+    float3 vOrigin = b.vOrigin + normalizedView * (g_originPush * g_aoStepWorld);
+    float zRef = b.zRef;
+
+    // TBN
+    float3 up = (abs(normalizedView.z) < 0.999f) ? float3(0, 0, 1) : float3(0, 1, 0);
+    float3 T = normalize(cross(up, normalizedView));
+    float3 B = cross(normalizedView, T);
+
+    int occ = 0;
+    const int kSamples = 64;
+
+    [unroll]
+    for (int k = 0; k < kSamples; ++k)
+    {
+        float3 h = HemiDirFromIndex(k);
+        float3 dirV = normalize(T * h.x + B * h.y + normalizedView * h.z);
+
+        float u = ((float) k + 0.5f) / (float) kSamples;
+        float radius = g_aoStepWorld * (u * u);
+
+        float3 vSample = vOrigin + dirV * radius;
+
+        float4 clip = mul(float4(vSample, 1.0f), g_matProj);
+        if (clip.w <= 0.0f)
+            continue;
+
+        float2 suv = NdcToUv(clip);
+        if (suv.x < 0.0f || suv.x > 1.0f || suv.y < 0.0f || suv.y > 1.0f)
+        {
+            continue;
+        }
+
+        // Edge guard: sample is valid if it's near the FAR side OR the center depth
+        float zImg = tex2D(sampZ, suv).a;
+        float zCtr = tex2D(sampZ, i.uv).a;
+        if (abs(zImg - zRef) > g_edgeZ && abs(zImg - zCtr) > g_edgeZ)
+        {
+            continue;
+        }
+
+        // Depth test in linear-Z (no plane-based rejection here)
+        float zNei = saturate((vSample.z - g_fNear) / (g_fFar - g_fNear));
+        if (zImg + g_aoBias < zNei)
+        {
+            occ++;
+        }
+    }
+
+    float occl = (float) occ / (float) kSamples;
+    float ao = 1.0f - g_aoStrength * occl;
+
+    return float4(saturate(ao).xxx, 1.0f);
+}
+
+//--------------------------------------------------------------
+// Blur H
+//--------------------------------------------------------------
+float4 PS_BlurH(VS_OUT i) : COLOR0
+{
+    // 奇数であること
+    const int WIDTH = 51;
+
+    float centerZ = tex2D(sampZ, i.uv).a;
+    float centerAO = tex2D(sampAO, i.uv).r;
+
+    float2 stepUV = float2(g_invSize.x, 0.0f);
+
+    float sumAO = centerAO;
+    float sumW = 1.0f;
+
+    [unroll]
+    for (int k = 1; k < (WIDTH / 2); ++k)
+    {
+        float2 uvL = i.uv - stepUV * k;
+        float2 uvR = i.uv + stepUV * k;
+
+        float zL = tex2D(sampZ, uvL).a;
+        float zR = tex2D(sampZ, uvR).a;
+
+        // Z値が大きく異なる場所の陰はブラーに使わない
+        if (abs(zL - centerZ) <= g_depthReject)
+        {
+            float aoL = tex2D(sampAO, uvL).r;
+            sumAO += aoL * WIDTH;
+            sumW += WIDTH;
+        }
+
+        if (abs(zR - centerZ) <= g_depthReject)
+        {
+            float aoR = tex2D(sampAO, uvR).r;
+            sumAO += aoR * WIDTH;
+            sumW += WIDTH;
+        }
+    }
+
+    float ao = sumAO / sumW;
+    return float4(ao, ao, ao, 1.0f);
+}
+
+//--------------------------------------------------------------
+// Blur V
+//--------------------------------------------------------------
+float4 PS_BlurV(VS_OUT i) : COLOR0
+{
+    // 奇数であること
+    const int WIDTH = 51;
+
+    float centerZ = tex2D(sampZ, i.uv).a;
+    float centerAO = tex2D(sampAO, i.uv).r;
+
+    float2 stepUV = float2(0.0f, g_invSize.y);
+
+    float sumAO = centerAO;
+    float sumW = 1.0f;
+
+    [unroll]
+    for (int k = 1; k < (WIDTH / 2); ++k)
+    {
+        float2 uvD = i.uv + stepUV * k;
+        float2 uvU = i.uv - stepUV * k;
+
+        float zD = tex2D(sampZ, uvD).a;
+        float zU = tex2D(sampZ, uvU).a;
+
+        if (abs(zD - centerZ) <= g_depthReject)
+        {
+            float aoD = tex2D(sampAO, uvD).r;
+            sumAO += aoD * WIDTH;
+            sumW += WIDTH;
+        }
+
+        if (abs(zU - centerZ) <= g_depthReject)
+        {
+            float aoU = tex2D(sampAO, uvU).r;
+            sumAO += aoU * WIDTH;
+            sumW += WIDTH;
+        }
+    }
+
+    float ao = sumAO / sumW;
+    return float4(ao, ao, ao, 1.0f);
+}
+
+//--------------------------------------------------------------
+// Composite
+//--------------------------------------------------------------
+float4 PS_Composite(VS_OUT i) : COLOR0
+{
+    float3 col = tex2D(sampColor, i.uv).rgb;
+
+    // なぜか1ピクセルズレている
+    i.uv.x += g_invSize.x;
+    i.uv.y += g_invSize.y;
+
+    float ao = tex2D(sampAO, i.uv).r;
+    return float4(col * ao, 1.0f);
+}
+
+//--------------------------------------------------------------
+// Other functions
+//--------------------------------------------------------------
 float3 DecodeWorldPos(float3 enc)
 {
     return (enc * 2.0f - 1.0f) * g_posRange;
 }
 
-// D3D9 half-texel aware
-float2 NdcToUv(float4 clip)
-{
-    float2 ndc = clip.xy / clip.w;
-    float2 uv;
-    uv.x = ndc.x * 0.5f + 0.5f;
-    uv.y = -ndc.y * 0.5f + 0.5f;
-    return uv + 0.5f * g_invSize;
-}
-
-// Low-discrepancy hemisphere dir
 float3 HemiDirFromIndex(int i)
 {
     float a = frac(0.754877666f * (i + 0.5f));
@@ -109,13 +288,14 @@ float3 HemiDirFromIndex(int i)
     return float3(cos(phi) * s, sin(phi) * s, c);
 }
 
-// ========= Basis (normal + origin + reference Z) =========
-struct Basis
+float2 NdcToUv(float4 clip)
 {
-    float3 Nv;
-    float3 vOrigin;
-    float zRef;
-};
+    float2 ndc = clip.xy / clip.w;
+    float2 uv;
+    uv.x = ndc.x * 0.5f + 0.5f;
+    uv.y = -ndc.y * 0.5f + 0.5f;
+    return uv + 0.5f * g_invSize;
+}
 
 Basis BuildBasis(float2 uv)
 {
@@ -203,8 +383,8 @@ Basis BuildBasis(float2 uv)
         }
     }
 
-    float3 Nw = normalize(cross(vx, vy));
-    float3 Nv = normalize(mul(float4(Nw, 0), g_matView).xyz);
+    float3 normalizedWorld = normalize(cross(vx, vy));
+    float3 normalizedView = normalize(mul(float4(normalizedWorld, 0), g_matView).xyz);
 
     // 原点（位置）：どちらかの軸で採用する場合は、その軸の “より遠い方” を使う
     float zFarN = zC;
@@ -266,177 +446,10 @@ Basis BuildBasis(float2 uv)
     }
 
     // 出力（原点はレンジガード付きの選択、それ以外は従来どおり）
-    result.Nv = Nv;
+    result.normalizedView = normalizedView;
     result.vOrigin = mul(float4(pFarN, 1.0f), g_matView).xyz; // 採用しない場合は pC になる
     result.zRef = zRef;
     return result;
-}
-
-//-------------------------------------------------------------
-// Ambient Occlusion
-//-------------------------------------------------------------
-float4 PS_AO(VS_OUT i) : COLOR0
-{
-    Basis b = BuildBasis(i.uv);
-
-    float3 Nv = b.Nv;
-    float3 vOrigin = b.vOrigin + Nv * (g_originPush * g_aoStepWorld); // small lift along +Nv
-    float zRef = b.zRef;
-
-    // TBN
-    float3 up = (abs(Nv.z) < 0.999f) ? float3(0, 0, 1) : float3(0, 1, 0);
-    float3 T = normalize(cross(up, Nv));
-    float3 B = cross(Nv, T);
-
-    int occ = 0;
-    const int kSamples = 64;
-
-    [unroll]
-    for (int k = 0; k < kSamples; ++k)
-    {
-        float3 h = HemiDirFromIndex(k);
-        float3 dirV = normalize(T * h.x + B * h.y + Nv * h.z);
-
-        float u = ((float) k + 0.5f) / (float) kSamples;
-        float radius = g_aoStepWorld * (u * u);
-
-        float3 vSample = vOrigin + dirV * radius;
-
-        float4 clip = mul(float4(vSample, 1.0f), g_matProj);
-        if (clip.w <= 0.0f)
-            continue;
-
-        float2 suv = NdcToUv(clip);
-        if (suv.x < 0.0f || suv.x > 1.0f || suv.y < 0.0f || suv.y > 1.0f)
-        {
-            continue;
-        }
-
-        // Edge guard: sample is valid if it's near the FAR side OR the center depth
-        float zImg = tex2D(sampZ, suv).a;
-        float zCtr = tex2D(sampZ, i.uv).a;
-        if (abs(zImg - zRef) > g_edgeZ && abs(zImg - zCtr) > g_edgeZ)
-        {
-            continue;
-        }
-
-        // Depth test in linear-Z (no plane-based rejection here)
-        float zNei = saturate((vSample.z - g_fNear) / (g_fFar - g_fNear));
-        if (zImg + g_aoBias < zNei)
-        {
-            occ++;
-        }
-    }
-
-    float occl = (float) occ / (float) kSamples;
-    float ao = 1.0f - g_aoStrength * occl;
-
-    return float4(saturate(ao).xxx, 1.0f);
-}
-
-float GaussianW(int k, float sigma)
-{
-    float fk = (float) k;
-    float denom = 2.0f * sigma * sigma;
-    return exp(-(fk * fk) / denom);
-}
-
-//--------------------------------------------------------------
-// Blur H
-//--------------------------------------------------------------
-float4 PS_BlurH(VS_OUT i) : COLOR0
-{
-    // 奇数であること
-    const int WIDTH = 51;
-
-    float centerZ = tex2D(sampZ, i.uv).a;
-    float centerAO = tex2D(sampAO, i.uv).r;
-
-    float2 stepUV = float2(g_invSize.x, 0.0f);
-
-    float sumAO = centerAO;
-    float sumW = 1.0f;
-
-    [unroll]
-    for (int k = 1; k <= (WIDTH / 2); ++k)
-    {
-        float2 uvL = i.uv - stepUV * k;
-        float2 uvR = i.uv + stepUV * k;
-
-        float zL = tex2D(sampZ, uvL).a;
-        float zR = tex2D(sampZ, uvR).a;
-
-        if (abs(zL - centerZ) <= g_depthReject)
-        {
-            float aoL = tex2D(sampAO, uvL).r;
-            sumAO += aoL * WIDTH;
-            sumW += WIDTH;
-        }
-
-        if (abs(zR - centerZ) <= g_depthReject)
-        {
-            float aoR = tex2D(sampAO, uvR).r;
-            sumAO += aoR * WIDTH;
-            sumW += WIDTH;
-        }
-    }
-
-    float ao = sumAO / max(sumW, 0.000001f);
-    return float4(ao, ao, ao, 1.0f);
-}
-
-//--------------------------------------------------------------
-// Blur V
-//--------------------------------------------------------------
-float4 PS_BlurV(VS_OUT i) : COLOR0
-{
-    // 奇数であること
-    const int WIDTH = 51;
-
-    float centerZ = tex2D(sampZ, i.uv).a;
-    float centerAO = tex2D(sampAO, i.uv).r;
-
-    float2 stepUV = float2(0.0f, g_invSize.y);
-
-    float sumAO = centerAO;
-    float sumW = 1.0f;
-
-    [unroll]
-    for (int k = 1; k <= (WIDTH / 2); ++k)
-    {
-        float2 uvD = i.uv + stepUV * k;
-        float2 uvU = i.uv - stepUV * k;
-
-        float zD = tex2D(sampZ, uvD).a;
-        float zU = tex2D(sampZ, uvU).a;
-
-        if (abs(zD - centerZ) <= g_depthReject)
-        {
-            float aoD = tex2D(sampAO, uvD).r;
-            sumAO += aoD * WIDTH;
-            sumW += WIDTH;
-        }
-
-        if (abs(zU - centerZ) <= g_depthReject)
-        {
-            float aoU = tex2D(sampAO, uvU).r;
-            sumAO += aoU * WIDTH;
-            sumW += WIDTH;
-        }
-    }
-
-    float ao = sumAO / max(sumW, 0.000001f);
-    return float4(ao, ao, ao, 1.0f);
-}
-
-//--------------------------------------------------------------
-// Composite
-//--------------------------------------------------------------
-float4 PS_Composite(VS_OUT i) : COLOR0
-{
-    float3 col = tex2D(sampColor, i.uv).rgb;
-    float ao = tex2D(sampAO, i.uv).r;
-    return float4(col * ao, 1.0f);
 }
 
 technique TechniqueAO_Create
