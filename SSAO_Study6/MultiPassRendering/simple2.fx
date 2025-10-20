@@ -85,7 +85,7 @@ VS_OUT VS_Fullscreen(float4 p : POSITION, float2 uv : TEXCOORD0)
 
 float3 DecodeWorldPos(float3 enc);
 
-float2 PolygonToUV(float4 clip);
+float2 PolygonToUV(float4 vClip);
 
 // Low-discrepancy hemisphere dir
 float3 RandomHemiDir(int in_);
@@ -139,18 +139,18 @@ float4 PS_AO(VS_OUT in_) : COLOR0
                                         vBinormalVS * vRandomDir.y +
                                         vHemisphereAxisVS * vRandomDir.z);
 
-        float normalizedIndex = ((float) i + 0.5f) / (float) kSamples;
-        float radius = g_aoStepWorld * (normalizedIndex * normalizedIndex);
+        float fNormalizedIndex = ((float) i + 0.5f) / (float) kSamples;
+        float fRadius = g_aoStepWorld * (fNormalizedIndex * fNormalizedIndex);
 
-        float3 vSamplePosVS = vOriginVS + vRandomDirVS * radius;
+        float3 vSamplePosVS = vOriginVS + vRandomDirVS * fRadius;
 
-        float4 clip = mul(float4(vSamplePosVS, 1.0f), g_matProj);
-        if (clip.w <= 0.0f)
+        float4 vClip = mul(float4(vSamplePosVS, 1.0f), g_matProj);
+        if (vClip.w <= 0.0f)
         {
             continue;
         }
 
-        float2 sampleUV = PolygonToUV(clip);
+        float2 sampleUV = PolygonToUV(vClip);
         if (sampleUV.x < 0.0f || 1.0f < sampleUV.x)
         {
             continue;
@@ -331,9 +331,9 @@ float3 RandomHemiDir(int index)
 }
 
 // -1 ~ +1を0 ~ 1にする
-float2 PolygonToUV(float4 clip)
+float2 PolygonToUV(float4 vClip)
 {
-    float2 Polygon = clip.xy / clip.w;
+    float2 Polygon = vClip.xy / vClip.w;
     float2 uv;
 
     uv.x = Polygon.x * 0.5f + 0.5f;
