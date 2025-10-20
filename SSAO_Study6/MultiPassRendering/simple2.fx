@@ -151,26 +151,27 @@ float4 PS_AO(VS_OUT in_) : COLOR0
             continue;
         }
 
-        float2 suv = PolygonToUV(clip);
-        if (suv.x < 0.0f || 1.0f < suv.x)
+        float2 sampleUV = PolygonToUV(clip);
+        if (sampleUV.x < 0.0f || 1.0f < sampleUV.x)
         {
             continue;
         }
 
-        if (suv.y < 0.0f || 1.0f < suv.y)
+        if (sampleUV.y < 0.0f || 1.0f < sampleUV.y)
         {
             continue;
         }
 
-        float zImg = tex2D(sampZ, suv).a;
-        float zCtr = tex2D(sampZ, in_.uv).a;
-        if (abs(zImg - fZRef) > g_edgeZ && abs(zImg - zCtr) > g_edgeZ)
+        float Z_Image = tex2D(sampZ, sampleUV).a;
+        float Z_Center = tex2D(sampZ, in_.uv).a;
+
+        if (abs(Z_Image - fZRef) > g_edgeZ && abs(Z_Image - Z_Center) > g_edgeZ)
         {
             continue;
         }
 
         float zNei = saturate((vSamplePosVS.z - g_fNear) / (g_fFar - g_fNear));
-        if (zImg + g_aoBias < zNei)
+        if (Z_Image + g_aoBias < zNei)
         {
             occlusionNum++;
         }
