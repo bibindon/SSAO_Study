@@ -89,7 +89,7 @@ float3 DecodeWorldPos(float3 enc);
 float2 NdcToUv(float4 clip);
 
 // Low-discrepancy hemisphere dir
-float3 HemiDirFromIndex(int i);
+float3 RandomHemiDir(int i);
 
 // BuildBasis関数の戻り値用構造体
 // HLSLは複数の戻り値を戻したい場合、構造体しか方法がない。
@@ -120,13 +120,13 @@ float4 PS_AO(VS_OUT i) : COLOR0
     float3 tangent = normalize(cross(up, normalizedView));
     float3 binormal = cross(normalizedView, tangent);
 
-    int occ = 0;
+    int occlusionNum = 0;
     const int kSamples = 64;
 
     [unroll]
     for (int k = 0; k < kSamples; ++k)
     {
-        float3 h = HemiDirFromIndex(k);
+        float3 h = RandomHemiDir(k);
         float3 dirV = normalize(tangent * h.x + binormal * h.y + normalizedView * h.z);
 
         float u = ((float) k + 0.5f) / (float) kSamples;
@@ -158,11 +158,11 @@ float4 PS_AO(VS_OUT i) : COLOR0
         float zNei = saturate((vSample.z - g_fNear) / (g_fFar - g_fNear));
         if (zImg + g_aoBias < zNei)
         {
-            occ++;
+            occlusionNum++;
         }
     }
 
-    float occl = (float) occ / (float) kSamples;
+    float occl = (float) occlusionNum / (float) kSamples;
     float ao = 1.0f - g_aoStrength * occl;
 
     return float4(saturate(ao).xxx, 1.0f);
@@ -265,8 +265,8 @@ float4 PS_Composite(VS_OUT i) : COLOR0
     float3 col = tex2D(sampColor, i.uv).rgb;
 
     // なぜか1ピクセルズレている
-    i.uv.x += g_invSize.x;
-    i.uv.y += g_invSize.y;
+    // i.uv.x += g_invSize.x;
+    // i.uv.y += g_invSize.y;
 
     float ao = tex2D(sampAO, i.uv).r;
     return float4(col * ao, 1.0f);
@@ -280,8 +280,9 @@ float3 DecodeWorldPos(float3 enc)
     return (enc * 2.0f - 1.0f) * g_posRange;
 }
 
-float3 HemiDirFromIndex(int i)
+float3 RandomHemiDir(int i)
 {
+    // frac関数は小数部を返す
     float a = frac(0.754877666f * (i + 0.5f));
     float b = frac(0.569840296f * (i + 0.5f));
     float phi = a * 6.2831853f;
@@ -294,8 +295,8 @@ float2 NdcToUv(float4 clip)
 {
     float2 ndc = clip.xy / clip.w;
     float2 uv;
-    uv.x = ndc.x * 0.5f + 0.5f;
-    uv.y = -ndc.y * 0.5f + 0.5f;
+    uv.x = ndc.x * 0.5f +0.5f;
+    uv.y = -ndc.y * 0.5f +0.5f;
     return uv + 0.5f * g_invSize;
 }
 
