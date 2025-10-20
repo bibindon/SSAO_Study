@@ -20,6 +20,8 @@ float g_farAdoptMaxZ;
 
 float g_depthReject;
 
+float PI = 3.1415926535;
+
 texture texZ;
 texture texPos;
 
@@ -190,18 +192,18 @@ float4 PS_BlurH(VS_OUT i) : COLOR0
         float2 uvL = i.uv - stepUV * k;
         float2 uvR = i.uv + stepUV * k;
 
-        float zL = tex2D(sampZ, uvL).a;
-        float zR = tex2D(sampZ, uvR).a;
+        float ZLeft = tex2D(sampZ, uvL).a;
+        float ZRight = tex2D(sampZ, uvR).a;
 
         // Z値が大きく異なる場所の陰はブラーに使わない
-        if (abs(zL - centerZ) <= g_depthReject)
+        if (abs(ZLeft - centerZ) <= g_depthReject)
         {
             float aoL = tex2D(sampAO, uvL).r;
             sumAO += aoL * WIDTH;
             sumW += WIDTH;
         }
 
-        if (abs(zR - centerZ) <= g_depthReject)
+        if (abs(ZRight - centerZ) <= g_depthReject)
         {
             float aoR = tex2D(sampAO, uvR).r;
             sumAO += aoR * WIDTH;
@@ -235,17 +237,17 @@ float4 PS_BlurV(VS_OUT i) : COLOR0
         float2 uvD = i.uv + stepUV * k;
         float2 uvU = i.uv - stepUV * k;
 
-        float zD = tex2D(sampZ, uvD).a;
-        float zU = tex2D(sampZ, uvU).a;
+        float ZDown = tex2D(sampZ, uvD).a;
+        float ZUp = tex2D(sampZ, uvU).a;
 
-        if (abs(zD - centerZ) <= g_depthReject)
+        if (abs(ZDown - centerZ) <= g_depthReject)
         {
             float aoD = tex2D(sampAO, uvD).r;
             sumAO += aoD * WIDTH;
             sumW += WIDTH;
         }
 
-        if (abs(zU - centerZ) <= g_depthReject)
+        if (abs(ZUp - centerZ) <= g_depthReject)
         {
             float aoU = tex2D(sampAO, uvU).r;
             sumAO += aoU * WIDTH;
@@ -280,23 +282,32 @@ float3 DecodeWorldPos(float3 enc)
     return (enc * 2.0f - 1.0f) * g_posRange;
 }
 
-float3 RandomHemiDir(int i)
+// ランダムな方向を返す。ただし半球状
+float3 RandomHemiDir(int index)
 {
-    // frac関数は小数部を返す
-    float a = frac(0.754877666f * (i + 0.5f));
-    float b = frac(0.569840296f * (i + 0.5f));
-    float phi = a * 6.2831853f;
-    float c = b; // cos(theta) in [0,1]
-    float s = sqrt(saturate(1.0f - c * c));
-    return float3(cos(phi) * s, sin(phi) * s, c);
+    // 準乱数（0..1）
+    float randomU1 = frac(0.754877666f * (index + 0.5f));
+    float randomU2 = frac(0.569840296f * (index + 0.5f));
+
+    // 方位角 φ と、cosθ を一様に取る（これで固有立体角で一様になる）
+    float anglePhi  = randomU1 * 6.2831853f;   // = 2π
+    float cosTheta  = randomU2;                // z 成分
+    float sinTheta  = sqrt(1.0f - cosTheta * cosTheta);
+
+    float3 directionLocal;
+    directionLocal.x = cos(anglePhi) * sinTheta;
+    directionLocal.y = sin(anglePhi) * sinTheta;
+    directionLocal.z = cosTheta;               // +Z 半球
+    return directionLocal;                     // 既に単位長
 }
 
+// Normalized Device Coordinates（正規化デバイス座標）
 float2 NdcToUv(float4 clip)
 {
     float2 ndc = clip.xy / clip.w;
     float2 uv;
-    uv.x = ndc.x * 0.5f +0.5f;
-    uv.y = -ndc.y * 0.5f +0.5f;
+    uv.x = ndc.x * 0.5f + 0.5f;
+    uv.y = -ndc.y * 0.5f + 0.5f;
     return uv + 0.5f * g_invSize;
 }
 
@@ -304,35 +315,35 @@ Basis BuildBasis(float2 uv)
 {
     Basis result;
 
-    float zC = tex2D(sampZ, uv).a;
-    float3 pC = DecodeWorldPos(tex2D(sampPos, uv).rgb);
+    float ZCenter = tex2D(sampZ, uv).a;
+    float3 posCenter = DecodeWorldPos(tex2D(sampPos, uv).rgb);
 
     float2 dx = float2(g_invSize.x, 0.0f) * 2;
     float2 dy = float2(0.0f, g_invSize.y) * 2;
 
-    float3 pR = DecodeWorldPos(tex2D(sampPos, uv + dx).rgb);
-    float3 pL = DecodeWorldPos(tex2D(sampPos, uv - dx).rgb);
-    float3 pU = DecodeWorldPos(tex2D(sampPos, uv - dy).rgb);
-    float3 pD = DecodeWorldPos(tex2D(sampPos, uv + dy).rgb);
+    float3 posRight = DecodeWorldPos(tex2D(sampPos, uv + dx).rgb);
+    float3 posLeft  = DecodeWorldPos(tex2D(sampPos, uv - dx).rgb);
+    float3 posUp    = DecodeWorldPos(tex2D(sampPos, uv - dy).rgb);
+    float3 posDown  = DecodeWorldPos(tex2D(sampPos, uv + dy).rgb);
 
-    float zR = tex2D(sampZ, uv + dx).a;
-    float zL = tex2D(sampZ, uv - dx).a;
-    float zU = tex2D(sampZ, uv - dy).a;
-    float zD = tex2D(sampZ, uv + dy).a;
+    float ZRight    = tex2D(sampZ, uv + dx).a;
+    float ZLeft     = tex2D(sampZ, uv - dx).a;
+    float ZUp       = tex2D(sampZ, uv - dy).a;
+    float ZDown     = tex2D(sampZ, uv + dy).a;
 
     // --- “輪郭かつ遠側を採るか” をレンジで判定 ---
-    float dzX = abs(zR - zL);
-    float dzY = abs(zD - zU);
+    float ZXDelta = abs(ZRight - ZLeft);
+    float ZYDelta = abs(ZDown - ZUp);
 
     bool adoptFarX = false;
     bool adoptFarY = false;
 
-    if ((dzX >= g_farAdoptMinZ) && (dzX <= g_farAdoptMaxZ))
+    if ((ZXDelta >= g_farAdoptMinZ) && (ZXDelta <= g_farAdoptMaxZ))
     {
         adoptFarX = true;
     }
 
-    if ((dzY >= g_farAdoptMinZ) && (dzY <= g_farAdoptMaxZ))
+    if ((ZYDelta >= g_farAdoptMinZ) && (ZYDelta <= g_farAdoptMaxZ))
     {
         adoptFarY = true;
     }
@@ -341,48 +352,48 @@ Basis BuildBasis(float2 uv)
     float3 vx;
     if (adoptFarX)
     {
-        if (zR > zL)
+        if (ZRight > ZLeft)
         {
-            vx = pR - pC;
+            vx = posRight - posCenter;
         }
         else
         {
-            vx = pC - pL;
+            vx = posCenter - posLeft;
         }
     }
     else
     {
-        if (abs(zR - zC) <= abs(zL - zC))
+        if (abs(ZRight - ZCenter) <= abs(ZLeft - ZCenter))
         {
-            vx = pR - pC;
+            vx = posRight - posCenter;
         }
         else
         {
-            vx = pC - pL;
+            vx = posCenter - posLeft;
         }
     }
 
     float3 vy;
     if (adoptFarY)
     {
-        if (zD > zU)
+        if (ZDown > ZUp)
         {
-            vy = pD - pC;
+            vy = posDown - posCenter;
         }
         else
         {
-            vy = pC - pU;
+            vy = posCenter - posUp;
         }
     }
     else
     {
-        if (abs(zD - zC) <= abs(zU - zC))
+        if (abs(ZDown - ZCenter) <= abs(ZUp - ZCenter))
         {
-            vy = pD - pC;
+            vy = posDown - posCenter;
         }
         else
         {
-            vy = pC - pU;
+            vy = posCenter - posUp;
         }
     }
 
@@ -390,12 +401,12 @@ Basis BuildBasis(float2 uv)
     float3 normalizedView = normalize(mul(float4(normalizedWorld, 0), g_matView).xyz);
 
     // 原点（位置）：どちらかの軸で採用する場合は、その軸の “より遠い方” を使う
-    float zFarN = zC;
-    float3 pFarN = pC;
+    float zFarN = ZCenter;
+    float3 pFarN = posCenter;
     if (adoptFarX)
     {
-        float zX = max(zR, zL);
-        float3 pX = (zR > zL) ? pR : pL;
+        float zX = max(ZRight, ZLeft);
+        float3 pX = (ZRight > ZLeft) ? posRight : posLeft;
         if (zX > zFarN)
         {
             zFarN = zX;
@@ -405,8 +416,8 @@ Basis BuildBasis(float2 uv)
 
     if (adoptFarY)
     {
-        float zY = max(zD, zU);
-        float3 pY = (zD > zU) ? pD : pU;
+        float zY = max(ZDown, ZUp);
+        float3 pY = (ZDown > ZUp) ? posDown : posUp;
         if (zY > zFarN)
         {
             zFarN = zY;
@@ -416,41 +427,41 @@ Basis BuildBasis(float2 uv)
 
     // 参照Z（zRef）は従来どおり“遠い側”を使って明るいハロを防止（ここはレンジ外でもOK）
     const float kEdge = 0.004f; // 以前の kEdge（シルエット検出） – 必要なら 0.003〜0.006
-    float zRef = zC;
-    float3 pRef = pC;
-    if (abs(zR - zL) > kEdge)
+    float zRef = ZCenter;
+    float3 pRef = posCenter;
+    if (abs(ZRight - ZLeft) > kEdge)
     {
-        if (zR > zRef)
+        if (ZRight > zRef)
         {
-            zRef = zR;
-            pRef = pR;
+            zRef = ZRight;
+            pRef = posRight;
         }
 
-        if (zL > zRef)
+        if (ZLeft > zRef)
         {
-            zRef = zL;
-            pRef = pL;
+            zRef = ZLeft;
+            pRef = posLeft;
         }
     }
 
-    if (abs(zD - zU) > kEdge)
+    if (abs(ZDown - ZUp) > kEdge)
     {
-        if (zD > zRef)
+        if (ZDown > zRef)
         {
-            zRef = zD;
-            pRef = pD;
+            zRef = ZDown;
+            pRef = posDown;
         }
 
-        if (zU > zRef)
+        if (ZUp > zRef)
         {
-            zRef = zU;
-            pRef = pU;
+            zRef = ZUp;
+            pRef = posUp;
         }
     }
 
     // 出力（原点はレンジガード付きの選択、それ以外は従来どおり）
     result.normalizedView = normalizedView;
-    result.vOrigin = mul(float4(pFarN, 1.0f), g_matView).xyz; // 採用しない場合は pC になる
+    result.vOrigin = mul(float4(pFarN, 1.0f), g_matView).xyz; // 採用しない場合は posCenter になる
     result.zRef = zRef;
     return result;
 }
