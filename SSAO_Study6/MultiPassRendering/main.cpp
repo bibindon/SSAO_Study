@@ -474,7 +474,6 @@ void RenderPass2()
         g_pEffect2->SetFloat("g_aoBias",        0.0002f);
 
         g_pEffect2->SetFloat("g_edgeZ",         0.006f);
-        g_pEffect2->SetFloat("g_originPush",    0.05f);
 
         // これ以上なら輪郭とみなす（小さすぎは通常面）
         g_pEffect2->SetFloat("g_farAdoptMinZ",  0.00001f);
