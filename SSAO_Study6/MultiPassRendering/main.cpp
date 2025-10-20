@@ -15,32 +15,34 @@
 static const int kBackW = 1600;
 static const int kBackH = 900;
 
-LPDIRECT3D9                   g_pD3D = NULL;
-LPDIRECT3DDEVICE9             g_pd3dDevice = NULL;
-LPD3DXMESH                    g_pMeshCube = NULL;
-LPD3DXMESH                    g_pMeshSphere = NULL;
-LPD3DXMESH                    g_pMeshSky = NULL;
+LPDIRECT3D9                     g_pD3D = NULL;
+LPDIRECT3DDEVICE9               g_pd3dDevice = NULL;
+LPD3DXMESH                      g_pMeshCube = NULL;
+LPD3DXMESH                      g_pMeshSphere = NULL;
+LPD3DXMESH                      g_pMeshSky = NULL;
 std::vector<LPDIRECT3DTEXTURE9> g_pTextures;
 std::vector<LPDIRECT3DTEXTURE9> g_pTextures2;
 std::vector<LPDIRECT3DTEXTURE9> g_pTextures3;
-DWORD                         g_dwNumMaterials = 0;
+DWORD                           g_dwNumMaterials = 0;
 
-LPD3DXEFFECT                  g_pEffect1 = NULL; // simple.fx
-LPD3DXEFFECT                  g_pEffect2 = NULL; // simple2.fx
+LPD3DXEFFECT                    g_pEffect1 = NULL; // simple.fx
+LPD3DXEFFECT                    g_pEffect2 = NULL; // simple2.fx
 
 // MRT: 3枚
-LPDIRECT3DTEXTURE9            g_pRenderTarget = NULL;  // RT0: color
-LPDIRECT3DTEXTURE9            g_pRenderTarget2 = NULL; // RT1: Z画像
-LPDIRECT3DTEXTURE9            g_pRenderTarget3 = NULL; // RT2: POS画像
-LPDIRECT3DTEXTURE9 g_pAoTex = NULL; // AO(生)
-LPDIRECT3DTEXTURE9 g_pAoTemp = NULL; // 横ブラー出力
+LPDIRECT3DTEXTURE9              g_pRenderTarget = NULL;  // RT0: color
+LPDIRECT3DTEXTURE9              g_pRenderTargetZ = NULL; // RT1: Z画像
+LPDIRECT3DTEXTURE9              g_pRenderTargetPos = NULL; // RT2: POS画像
+LPDIRECT3DTEXTURE9              g_pAoTex = NULL; // AO(生)
+LPDIRECT3DTEXTURE9              g_pAoTempBlur = NULL;
 
-LPDIRECT3DVERTEXDECLARATION9  g_pQuadDecl = NULL;
-bool                          g_bClose = false;
+LPDIRECT3DVERTEXDECLARATION9    g_pQuadDecl = NULL;
+bool                            g_bClose = false;
 
-float g_posRange = 15.f;
+float                           g_posRange = 30.f;
+bool                            g_bUseTexture = false;
 
-D3DXMATRIX g_lastView, g_lastProj;
+D3DXMATRIX                      g_mView;
+D3DXMATRIX                      g_mProj;
 
 struct QuadVertex {
     float x, y, z, w;
@@ -54,7 +56,15 @@ static void RenderPass2();
 static void DrawFullscreenQuad();
 LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int)
+extern int WINAPI _tWinMain(_In_ HINSTANCE hInstance,
+                            _In_opt_ HINSTANCE hPrevInstance,
+                            _In_ LPSTR lpCmdLine,
+                            _In_ int nShowCmd);
+
+int WINAPI _tWinMain(_In_ HINSTANCE hInstance,
+                     _In_opt_ HINSTANCE hPrevInstance,
+                     _In_ LPSTR lpCmdLine,
+                     _In_ int nShowCmd)
 {
     WNDCLASSEX wc = { sizeof(WNDCLASSEX) };
     wc.style = CS_CLASSDC;
@@ -65,10 +75,17 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int)
 
     RECT rc = { 0,0,kBackW,kBackH };
     AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
-    HWND hWnd = CreateWindow(_T("SSAODemo"), _T("SSAO Demo"),
-                             WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
-                             rc.right - rc.left, rc.bottom - rc.top,
-                             NULL, NULL, hInstance, NULL);
+    HWND hWnd = CreateWindow(_T("SSAODemo"),
+                             _T("SSAO Demo"),
+                             WS_OVERLAPPEDWINDOW,
+                             CW_USEDEFAULT,
+                             CW_USEDEFAULT,
+                             rc.right - rc.left,
+                             rc.bottom - rc.top,
+                             NULL,
+                             NULL,
+                             hInstance,
+                             NULL);
 
     InitD3D(hWnd);
     ShowWindow(hWnd, SW_SHOWDEFAULT);
@@ -76,16 +93,22 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int)
     MSG msg;
     while (true)
     {
-        if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+        if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
+        {
             DispatchMessage(&msg);
         }
-        else {
+        else
+        {
             Sleep(16);
             RenderPass1();
             RenderPass2();
             g_pd3dDevice->Present(NULL, NULL, NULL, NULL);
         }
-        if (g_bClose) break;
+
+        if (g_bClose)
+        {
+            break;
+        }
     }
 
     Cleanup();
@@ -189,14 +212,14 @@ void InitD3D(HWND hWnd)
                       D3DPOOL_DEFAULT, &g_pRenderTarget);
     D3DXCreateTexture(g_pd3dDevice, kBackW, kBackH, 1,
                       D3DUSAGE_RENDERTARGET, D3DFMT_A16B16G16R16F,
-                      D3DPOOL_DEFAULT, &g_pRenderTarget2);
+                      D3DPOOL_DEFAULT, &g_pRenderTargetZ);
     D3DXCreateTexture(g_pd3dDevice, kBackW, kBackH, 1,
                       D3DUSAGE_RENDERTARGET, D3DFMT_A16B16G16R16F,
-                      D3DPOOL_DEFAULT, &g_pRenderTarget3);
+                      D3DPOOL_DEFAULT, &g_pRenderTargetPos);
     D3DXCreateTexture(g_pd3dDevice, kBackW, kBackH, 1,
                       D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_pAoTex);
     D3DXCreateTexture(g_pd3dDevice, kBackW, kBackH, 1,
-                      D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_pAoTemp);
+                      D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &g_pAoTempBlur);
 
     // クアッド宣言
     D3DVERTEXELEMENT9 elems[] = {
@@ -216,10 +239,10 @@ void Cleanup()
     SAFE_RELEASE(g_pEffect1);
     SAFE_RELEASE(g_pEffect2);
     SAFE_RELEASE(g_pRenderTarget);
-    SAFE_RELEASE(g_pRenderTarget2);
-    SAFE_RELEASE(g_pRenderTarget3);
+    SAFE_RELEASE(g_pRenderTargetZ);
+    SAFE_RELEASE(g_pRenderTargetPos);
     SAFE_RELEASE(g_pAoTex);
-    SAFE_RELEASE(g_pAoTemp);
+    SAFE_RELEASE(g_pAoTempBlur);
     SAFE_RELEASE(g_pQuadDecl);
     SAFE_RELEASE(g_pd3dDevice);
     SAFE_RELEASE(g_pD3D);
@@ -227,15 +250,17 @@ void Cleanup()
 
 void RenderPass1()
 {
-    // バックバッファ退避
     LPDIRECT3DSURFACE9 pOldRT0 = NULL;
     g_pd3dDevice->GetRenderTarget(0, &pOldRT0);
 
-    // MRT設定
-    LPDIRECT3DSURFACE9 pRT0, pRT1, pRT2;
+    LPDIRECT3DSURFACE9 pRT0 = NULL;
+    LPDIRECT3DSURFACE9 pRT1 = NULL;
+    LPDIRECT3DSURFACE9 pRT2 = NULL;
+
     g_pRenderTarget->GetSurfaceLevel(0, &pRT0);
-    g_pRenderTarget2->GetSurfaceLevel(0, &pRT1);
-    g_pRenderTarget3->GetSurfaceLevel(0, &pRT2);
+    g_pRenderTargetZ->GetSurfaceLevel(0, &pRT1);
+    g_pRenderTargetPos->GetSurfaceLevel(0, &pRT2);
+
     g_pd3dDevice->SetRenderTarget(0, pRT0);
     g_pd3dDevice->SetRenderTarget(1, pRT1);
     g_pd3dDevice->SetRenderTarget(2, pRT2);
@@ -243,49 +268,56 @@ void RenderPass1()
     static float t = 0.0f;
     t += 0.01f;
 
-    // カメラ設定
-    D3DXMATRIX W, V, P, WVP;
-    D3DXMatrixIdentity(&W);
-    D3DXVECTOR3 eye(10.0f * sinf(t), 5.0f, -10.0f * cosf(t));
-    D3DXVECTOR3 at(0, 2, 0), up(0, 1, 0);
-    D3DXMatrixLookAtLH(&V, &eye, &at, &up);
-    D3DXMatrixPerspectiveFovLH(&P, D3DXToRadian(45.0f),
-                               (float)kBackW / (float)kBackH, 1.0f, 1000.0f);
-    WVP = W * V * P;
+    D3DXMATRIX mWorld;
+    D3DXMATRIX mView;
+    D3DXMATRIX mProj;
+    D3DXMATRIX mWorldViewProj;
 
-    g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
-                        D3DCOLOR_XRGB(100, 100, 100), 1.0f, 0);
+    D3DXMatrixIdentity(&mWorld);
+
+    D3DXVECTOR3 eye(10.0f * sinf(t), 5.0f, -10.0f * cosf(t));
+    D3DXVECTOR3 at(0, 2, 0);
+    D3DXVECTOR3 up(0, 1, 0);
+    D3DXMatrixLookAtLH(&mView, &eye, &at, &up);
+
+    D3DXMatrixPerspectiveFovLH(&mProj,
+                               D3DXToRadian(45.0f),
+                               (float)kBackW / (float)kBackH,
+                               1.0f,
+                               1000.0f);
+
+    mWorldViewProj = mWorld * mView * mProj;
+
+    g_pd3dDevice->Clear(0,
+                        NULL,
+                        D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
+                        D3DCOLOR_XRGB(100, 100, 100),
+                        1.0f,
+                        0);
 
     g_pd3dDevice->BeginScene();
 
-    // エフェクトパラメータ設定
-    g_pEffect1->SetMatrix("g_matWorld", &W);
-    g_pEffect1->SetMatrix("g_matView", &V);
-    g_pEffect1->SetMatrix("g_matProj", &P);
-    g_pEffect1->SetMatrix("g_matWorldViewProj", &WVP);
+    g_pEffect1->SetMatrix("g_matWorld", &mWorld);
+    g_pEffect1->SetMatrix("g_matView", &mView);
+    g_pEffect1->SetMatrix("g_matWorldViewProj", &mWorldViewProj);
     g_pEffect1->SetFloat("g_fNear", 1.0f);
     g_pEffect1->SetFloat("g_fFar", 1000.0f);
-    g_pEffect1->SetFloat("g_vizMax", 100.0f);
-    g_pEffect1->SetFloat("g_vizGamma", 0.25f);
     g_pEffect1->SetFloat("g_posRange", g_posRange);
 
-    // 描画
     g_pEffect1->SetTechnique("TechniqueMRT");
-    UINT nPass;
+    UINT nPass = 0;
     g_pEffect1->Begin(&nPass, 0);
     g_pEffect1->BeginPass(0);
-
-    bool bUseTexture = false;
 
     // キューブ描画
     for (DWORD i = 0; i < g_dwNumMaterials; ++i)
     {
         if (g_pTextures[i])
         {
-            if (bUseTexture)
+            if (g_bUseTexture)
             {
                 g_pEffect1->SetBool("g_bUseTexture", TRUE);
-                g_pEffect1->SetTexture("g_tex0", g_pTextures[i]);   // ★ simple.fx の g_tex0 にセット
+                g_pEffect1->SetTexture("g_tex0", g_pTextures[i]);
             }
         }
         else
@@ -300,16 +332,16 @@ void RenderPass1()
     // 球体描画（上に配置）
     static float t2 = 0.0f;
     t2 += 0.02f;
-    D3DXMatrixTranslation(&W, 0.0f, 2.0f + sinf(t2) * 1, 0.0f);
-    g_pEffect1->SetMatrix("g_matWorld", &W);
+    D3DXMatrixTranslation(&mWorld, 0.0f, 2.0f + sinf(t2) * 1, 0.0f);
+    g_pEffect1->SetMatrix("g_matWorld", &mWorld);
     for (DWORD i = 0; i < g_dwNumMaterials; ++i)
     {
         if (g_pTextures2[i])
         {
-            if (bUseTexture)
+            if (g_bUseTexture)
             {
                 g_pEffect1->SetBool("g_bUseTexture", TRUE);
-                g_pEffect1->SetTexture("g_tex0", g_pTextures2[i]);   // ★ simple.fx の g_tex0 にセット
+                g_pEffect1->SetTexture("g_tex0", g_pTextures2[i]);
             }
         }
         else
@@ -325,10 +357,10 @@ void RenderPass1()
     {
         if (g_pTextures3[i])
         {
-            if (bUseTexture)
+            if (g_bUseTexture)
             {
                 g_pEffect1->SetBool("g_bUseTexture", TRUE);
-                g_pEffect1->SetTexture("g_tex0", g_pTextures3[i]);   // ★ simple.fx の g_tex0 にセット
+                g_pEffect1->SetTexture("g_tex0", g_pTextures3[i]);
             }
         }
         else
@@ -344,14 +376,17 @@ void RenderPass1()
     g_pEffect1->End();
     g_pd3dDevice->EndScene();
 
-    // 復帰
     g_pd3dDevice->SetRenderTarget(2, NULL);
     g_pd3dDevice->SetRenderTarget(1, NULL);
     g_pd3dDevice->SetRenderTarget(0, pOldRT0);
-    SAFE_RELEASE(pRT0); SAFE_RELEASE(pRT1); SAFE_RELEASE(pRT2); SAFE_RELEASE(pOldRT0);
 
-    g_lastView = V;
-    g_lastProj = P;
+    SAFE_RELEASE(pRT0);
+    SAFE_RELEASE(pRT1);
+    SAFE_RELEASE(pRT2);
+    SAFE_RELEASE(pOldRT0);
+
+    g_mView = mView;
+    g_mProj = mProj;
 }
 
 void RenderPass2()
@@ -370,13 +405,13 @@ void RenderPass2()
     g_pEffect2->SetFloatArray("g_invSize", (FLOAT*)&invSize, 2);   // ★ 追加
 
     g_pEffect2->SetTechnique("TechniqueAO_Create");
-    g_pEffect2->SetMatrix("g_matView", &g_lastView);
-    g_pEffect2->SetMatrix("g_matProj", &g_lastProj);
+    g_pEffect2->SetMatrix("g_matView", &g_mView);
+    g_pEffect2->SetMatrix("g_matProj", &g_mProj);
     g_pEffect2->SetFloat("g_fNear", 1.0f);
     g_pEffect2->SetFloat("g_fFar", 1000.0f);
     g_pEffect2->SetFloat("g_posRange", g_posRange);
-    g_pEffect2->SetTexture("texZ", g_pRenderTarget2);
-    g_pEffect2->SetTexture("texPos", g_pRenderTarget3);
+    g_pEffect2->SetTexture("texZ", g_pRenderTargetZ);
+    g_pEffect2->SetTexture("texPos", g_pRenderTargetPos);
 
     g_pEffect2->SetFloat("g_aoStepWorld", 4.0f);   // 5 → 4（半径を少し縮める）
     g_pEffect2->SetFloat("g_originPush", 0.05f);  // 0.15 → 0.05（押し出し弱め）
@@ -398,14 +433,14 @@ void RenderPass2()
     {
         // --- Pass B: 横ブラー → g_pAoTemp ---
         LPDIRECT3DSURFACE9 pTemp = NULL;
-        g_pAoTemp->GetSurfaceLevel(0, &pTemp);
+        g_pAoTempBlur->GetSurfaceLevel(0, &pTemp);
         g_pd3dDevice->SetRenderTarget(0, pTemp);
         g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET, 0, 1.0f, 0);
         g_pd3dDevice->BeginScene();
 
         g_pEffect2->SetTechnique("TechniqueAO_BlurH");
         g_pEffect2->SetTexture("texAO", g_pAoTex);
-        g_pEffect2->SetTexture("texZ", g_pRenderTarget2);     // ★ 追加：Z を渡す
+        g_pEffect2->SetTexture("texZ", g_pRenderTargetZ);     // ★ 追加：Z を渡す
         g_pEffect2->SetFloatArray("g_invSize", (FLOAT*)&invSize, 2);
         g_pEffect2->SetFloat("g_sigmaPx", 8.0f);               // お好みで
         g_pEffect2->SetFloat("g_depthReject", 0.0001f);          // 近いほど遮断厳しめ
@@ -426,8 +461,8 @@ void RenderPass2()
         g_pd3dDevice->BeginScene();
 
         g_pEffect2->SetTechnique("TechniqueAO_BlurV");
-        g_pEffect2->SetTexture("texAO", g_pAoTemp);          // ソース：横ブラー結果
-        g_pEffect2->SetTexture("texZ", g_pRenderTarget2);   // 深度（ガイド）
+        g_pEffect2->SetTexture("texAO", g_pAoTempBlur);          // ソース：横ブラー結果
+        g_pEffect2->SetTexture("texZ", g_pRenderTargetZ);   // 深度（ガイド）
         g_pEffect2->SetFloatArray("g_invSize", (FLOAT*)&invSize, 2);
         g_pEffect2->SetFloat("g_sigmaPx", 8.0f);
         g_pEffect2->SetFloat("g_depthReject", 0.0001f);
