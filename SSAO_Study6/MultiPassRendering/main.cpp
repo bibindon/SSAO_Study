@@ -264,7 +264,7 @@ void RenderPass1()
     g_pEffect1->SetMatrix("g_matProj", &P);
     g_pEffect1->SetMatrix("g_matWorldViewProj", &WVP);
     g_pEffect1->SetFloat("g_fNear", 1.0f);
-    g_pEffect1->SetFloat("g_fFar", 1030.0f);
+    g_pEffect1->SetFloat("g_fFar", 1000.0f);
     g_pEffect1->SetFloat("g_vizMax", 100.0f);
     g_pEffect1->SetFloat("g_vizGamma", 0.25f);
     g_pEffect1->SetFloat("g_posRange", g_posRange);
@@ -373,7 +373,7 @@ void RenderPass2()
     g_pEffect2->SetMatrix("g_matView", &g_lastView);
     g_pEffect2->SetMatrix("g_matProj", &g_lastProj);
     g_pEffect2->SetFloat("g_fNear", 1.0f);
-    g_pEffect2->SetFloat("g_fFar", 1030.0f);
+    g_pEffect2->SetFloat("g_fFar", 1000.0f);
     g_pEffect2->SetFloat("g_posRange", g_posRange);
     g_pEffect2->SetTexture("texZ", g_pRenderTarget2);
     g_pEffect2->SetTexture("texPos", g_pRenderTarget3);
@@ -394,7 +394,7 @@ void RenderPass2()
     g_pd3dDevice->EndScene();
     SAFE_RELEASE(pAo);
 
-    if (false)
+    if (true)
     {
         // --- Pass B: 横ブラー → g_pAoTemp ---
         LPDIRECT3DSURFACE9 pTemp = NULL;

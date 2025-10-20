@@ -6,7 +6,7 @@ float4x4 g_matView;
 float4x4 g_matProj;
 
 float g_fNear = 1.0f;
-float g_fFar = 30.0f;
+float g_fFar = 1000.0f;
 
 float2 g_invSize; // 1 / RT size (pixels)
 float g_posRange = 50.0f; // WorldPos encode range (simple.fx)
