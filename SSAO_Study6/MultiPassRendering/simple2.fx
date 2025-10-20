@@ -1,30 +1,28 @@
-// simple2.fx — SSAO (edge-safe: use FAR side at silhouettes)
-// Shader Model 3.0
 
-// ========= Globals =========
 float4x4 g_matView;
 float4x4 g_matProj;
 
-float g_fNear = 1.0f;
-float g_fFar = 1000.0f;
+float g_fNear;
+float g_fFar;
 
-float2 g_invSize; // 1 / RT size (pixels)
-float g_posRange = 50.0f; // WorldPos encode range (simple.fx)
+float2 g_invSize;
+float g_posRange;
 
-// AO controls
-float g_aoStrength = 1.0f; // 0..2
-float g_aoStepWorld = 0.75f; // base radius in world units
-float g_aoBias = 0.0002f; // small bias in linear-Z
+float g_aoStrength;
+float g_aoStepWorld;
+float g_aoBias;
 
-// Edge handling
-float g_edgeZ = 0.006f; // linear-Z guard near edges
-float g_originPush = 0.05f; // small lift along +Nv (× g_aoStepWorld)
+float g_edgeZ;
+float g_originPush;
 
-// ========= Textures / Samplers =========
-texture texZ; // RT1: A = linear Z
-texture texPos; // RT2: WorldPos encoded 0..1 with g_posRange
-texture texAO; // AO buffer (for composite)
-texture texColor; // Color buffer (for composite)
+float g_farAdoptMinZ;
+float g_farAdoptMaxZ;
+
+texture texZ;
+texture texPos;
+
+texture texAO;
+texture texColor;
 
 sampler sampZ = sampler_state
 {
@@ -35,6 +33,7 @@ sampler sampZ = sampler_state
     AddressU = CLAMP;
     AddressV = CLAMP;
 };
+
 sampler sampPos = sampler_state
 {
     Texture = (texPos);
@@ -44,6 +43,7 @@ sampler sampPos = sampler_state
     AddressU = CLAMP;
     AddressV = CLAMP;
 };
+
 sampler sampAO = sampler_state
 {
     Texture = (texAO);
@@ -53,6 +53,7 @@ sampler sampAO = sampler_state
     AddressU = CLAMP;
     AddressV = CLAMP;
 };
+
 sampler sampColor = sampler_state
 {
     Texture = (texColor);
@@ -63,7 +64,6 @@ sampler sampColor = sampler_state
     AddressV = CLAMP;
 };
 
-// ========= Helpers =========
 float3 DecodeWorldPos(float3 enc)
 {
     return (enc * 2.0f - 1.0f) * g_posRange;
@@ -95,6 +95,7 @@ struct VS_OUT
     float4 pos : POSITION;
     float2 uv : TEXCOORD0;
 };
+
 VS_OUT VS_Fullscreen(float4 p : POSITION, float2 uv : TEXCOORD0)
 {
     VS_OUT o;
@@ -110,8 +111,6 @@ struct Basis
     float3 vOrigin;
     float zRef;
 };
-float g_farAdoptMinZ = 0.0001f; // これ以上なら輪郭とみなす（小さすぎは通常面）
-float g_farAdoptMaxZ = 0.01f; // これ以上は大きすぎ（別オブジェクト/空）→遠側採用しない
 
 Basis BuildBasis(float2 uv)
 {
@@ -140,12 +139,53 @@ Basis BuildBasis(float2 uv)
     bool adoptFarY = (dzY >= g_farAdoptMinZ) && (dzY <= g_farAdoptMaxZ);
 
     // 法線用の差分：軸ごとにレンジ内なら FAR 側、そうでなければセンターに近い側
-    float3 vx = adoptFarX
-              ? ((zR > zL) ? (pR - pC) : (pC - pL))
-              : ((abs(zR - zC) <= abs(zL - zC)) ? (pR - pC) : (pC - pL));
-    float3 vy = adoptFarY
-              ? ((zD > zU) ? (pD - pC) : (pC - pU))
-              : ((abs(zD - zC) <= abs(zU - zC)) ? (pD - pC) : (pC - pU));
+    float3 vx;
+    if (adoptFarX)
+    {
+        if (zR > zL)
+        {
+            vx = pR - pC;
+        }
+        else
+        {
+            vx = pC - pL;
+        }
+    }
+    else
+    {
+        if (abs(zR - zC) <= abs(zL - zC))
+        {
+            vx = pR - pC;
+        }
+        else
+        {
+            vx = pC - pL;
+        }
+    }
+
+    float3 vy;
+    if (adoptFarY)
+    {
+        if (zD > zU)
+        {
+            vy = pD - pC;
+        }
+        else
+        {
+            vy = pC - pU;
+        }
+    }
+    else
+    {
+        if (abs(zD - zC) <= abs(zU - zC))
+        {
+            vy = pD - pC;
+        }
+        else
+        {
+            vy = pC - pU;
+        }
+    }
 
     float3 Nw = normalize(cross(vx, vy));
     float3 Nv = normalize(mul(float4(Nw, 0), g_matView).xyz);
@@ -191,6 +231,7 @@ Basis BuildBasis(float2 uv)
             pRef = pL;
         }
     }
+
     if (abs(zD - zU) > kEdge)
     {
         if (zD > zRef)
@@ -269,35 +310,8 @@ float4 PS_AO(VS_OUT i) : COLOR0
     {
         ao = 0.2f;
     }
+
     return float4(saturate(ao).xxx, 1.0f);
-}
-
-// ========= Composite =========
-float4 PS_Composite(VS_OUT i) : COLOR0
-{
-    float3 col = tex2D(sampColor, i.uv).rgb;
-    float ao = tex2D(sampAO, i.uv).r;
-    return float4(col * ao, 1.0f);
-}
-
-technique TechniqueAO_Create
-{
-    pass P0
-    {
-        CullMode = NONE;
-        VertexShader = compile vs_3_0 VS_Fullscreen();
-        PixelShader = compile ps_3_0 PS_AO();
-    }
-}
-
-technique TechniqueAO_Composite
-{
-    pass P0
-    {
-        CullMode = NONE;
-        VertexShader = compile vs_3_0 VS_Fullscreen();
-        PixelShader = compile ps_3_0 PS_Composite();
-    }
 }
 
 // === Bilateral-like separable blur (depth-guided) ===
@@ -311,6 +325,9 @@ float GaussianW(int k, float sigma)
     return exp(-(fk * fk) / denom);
 }
 
+//--------------------------------------------------------------
+// Blur H
+//--------------------------------------------------------------
 float4 PS_BlurH(VS_OUT i) : COLOR0
 {
     const int R = 20; // 13 taps (±6 + center): SM3.0で安全
@@ -351,6 +368,9 @@ float4 PS_BlurH(VS_OUT i) : COLOR0
     return float4(ao, ao, ao, 1.0f);
 }
 
+//--------------------------------------------------------------
+// Blur V
+//--------------------------------------------------------------
 float4 PS_BlurV(VS_OUT i) : COLOR0
 {
     const int R = 20; // 13 taps
@@ -391,6 +411,26 @@ float4 PS_BlurV(VS_OUT i) : COLOR0
     return float4(ao, ao, ao, 1.0f);
 }
 
+//--------------------------------------------------------------
+// Composite
+//--------------------------------------------------------------
+float4 PS_Composite(VS_OUT i) : COLOR0
+{
+    float3 col = tex2D(sampColor, i.uv).rgb;
+    float ao = tex2D(sampAO, i.uv).r;
+    return float4(col * ao, 1.0f);
+}
+
+technique TechniqueAO_Create
+{
+    pass P0
+    {
+        CullMode = NONE;
+        VertexShader = compile vs_3_0 VS_Fullscreen();
+        PixelShader = compile ps_3_0 PS_AO();
+    }
+}
+
 technique TechniqueAO_BlurH
 {
     pass P0
@@ -400,6 +440,7 @@ technique TechniqueAO_BlurH
         PixelShader = compile ps_3_0 PS_BlurH();
     }
 }
+
 technique TechniqueAO_BlurV
 {
     pass P0
@@ -409,3 +450,14 @@ technique TechniqueAO_BlurV
         PixelShader = compile ps_3_0 PS_BlurV();
     }
 }
+
+technique TechniqueAO_Composite
+{
+    pass P0
+    {
+        CullMode = NONE;
+        VertexShader = compile vs_3_0 VS_Fullscreen();
+        PixelShader = compile ps_3_0 PS_Composite();
+    }
+}
+

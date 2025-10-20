@@ -86,6 +86,7 @@ void PixelShaderMRT3(in float4 inScreenColor : COLOR0,
     outPosWS = float4(enc, 1.0f);
 }
 
+// MRT...Multi Render Target
 technique TechniqueMRT
 {
     pass P0
