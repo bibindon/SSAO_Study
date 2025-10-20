@@ -349,55 +349,55 @@ Basis BuildBasis(float2 uv)
     }
 
     // 法線用の差分：軸ごとにレンジ内なら FAR 側、そうでなければセンターに近い側
-    float3 vx;
+    float3 diffX;
     if (adoptFarX)
     {
         if (ZRight > ZLeft)
         {
-            vx = posRight - posCenter;
+            diffX = posRight - posCenter;
         }
         else
         {
-            vx = posCenter - posLeft;
+            diffX = posCenter - posLeft;
         }
     }
     else
     {
         if (abs(ZRight - ZCenter) <= abs(ZLeft - ZCenter))
         {
-            vx = posRight - posCenter;
+            diffX = posRight - posCenter;
         }
         else
         {
-            vx = posCenter - posLeft;
+            diffX = posCenter - posLeft;
         }
     }
 
-    float3 vy;
+    float3 diffY;
     if (adoptFarY)
     {
         if (ZDown > ZUp)
         {
-            vy = posDown - posCenter;
+            diffY = posDown - posCenter;
         }
         else
         {
-            vy = posCenter - posUp;
+            diffY = posCenter - posUp;
         }
     }
     else
     {
         if (abs(ZDown - ZCenter) <= abs(ZUp - ZCenter))
         {
-            vy = posDown - posCenter;
+            diffY = posDown - posCenter;
         }
         else
         {
-            vy = posCenter - posUp;
+            diffY = posCenter - posUp;
         }
     }
 
-    float3 normalizedWorld = normalize(cross(vx, vy));
+    float3 normalizedWorld = normalize(cross(diffX, diffY));
     float3 normalizedView = normalize(mul(float4(normalizedWorld, 0), g_matView).xyz);
 
     // 原点（位置）：どちらかの軸で採用する場合は、その軸の “より遠い方” を使う
@@ -406,7 +406,18 @@ Basis BuildBasis(float2 uv)
     if (adoptFarX)
     {
         float zX = max(ZRight, ZLeft);
-        float3 pX = (ZRight > ZLeft) ? posRight : posLeft;
+
+        float3 pX = float3(0, 0, 0);
+        
+        if (ZRight > ZLeft)
+        {
+            pX = posRight;
+        }
+        else
+        {
+            pX = posLeft;
+        }
+
         if (zX > zFarN)
         {
             zFarN = zX;
@@ -417,7 +428,17 @@ Basis BuildBasis(float2 uv)
     if (adoptFarY)
     {
         float zY = max(ZDown, ZUp);
-        float3 pY = (ZDown > ZUp) ? posDown : posUp;
+
+        float3 pY = float3(0, 0, 0);
+        if (ZDown > ZUp)
+        {
+            pY = posDown;
+        }
+        else
+        {
+            pY = posUp;
+        }
+
         if (zY > zFarN)
         {
             zFarN = zY;
@@ -461,8 +482,11 @@ Basis BuildBasis(float2 uv)
 
     // 出力（原点はレンジガード付きの選択、それ以外は従来どおり）
     result.normalizedView = normalizedView;
-    result.vOrigin = mul(float4(pFarN, 1.0f), g_matView).xyz; // 採用しない場合は posCenter になる
+
+    // 採用しない場合は posCenter になる
+    result.vOrigin = mul(float4(pFarN, 1.0f), g_matView).xyz;
     result.zRef = zRef;
+
     return result;
 }
 

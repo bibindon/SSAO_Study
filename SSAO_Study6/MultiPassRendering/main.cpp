@@ -576,6 +576,7 @@ void RenderPass2()
     g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, TRUE);
 }
 
+// 怪しい処理
 void DrawFullscreenQuad()
 {
     QuadVertex v[4] = {};
