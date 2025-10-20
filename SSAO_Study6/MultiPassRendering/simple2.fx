@@ -1,4 +1,4 @@
-﻿
+
 float4x4 g_matView;
 float4x4 g_matProj;
 
@@ -266,8 +266,8 @@ float4 PS_Composite(VS_OUT i) : COLOR0
     float3 col = tex2D(sampColor, i.uv).rgb;
 
     // なぜか1ピクセルズレている
-    // i.uv.x += g_invSize.x;
-    // i.uv.y += g_invSize.y;
+    i.uv.x += g_invSize.x;
+    i.uv.y += g_invSize.y;
 
     float ao = tex2D(sampAO, i.uv).r;
     return float4(col * ao, 1.0f);
@@ -403,87 +403,99 @@ Basis BuildBasis(float2 uv)
         }
     }
 
+    // 外積 = 法線
     float3 vNormalizedWorld = normalize(cross(vPosDeltaX, vPosDeltaY));
     float3 vNormalizedView = normalize(mul(float4(vNormalizedWorld, 0), g_matView).xyz);
 
-    // 原点（位置）：どちらかの軸で採用する場合は、その軸の “より遠い方” を使う
+    // 原点
+    // 輪郭線で明るい線が出てしまうのを防ぐために上下左右を見て、遠い方を原点とする
     float fZFarNeighbor = fZCenter;
     float3 vPosFarNeighbor = vPosCenter;
-    if (bAdoptFarX)
+
+    if (false)
     {
-        float zX = max(fZRight, fZLeft);
+        if (bAdoptFarX)
+        {
+            float zX = max(fZRight, fZLeft);
 
-        float3 pX = float3(0, 0, 0);
-        
-        if (fZLeft < fZRight)
-        {
-            pX = vPosRight;
-        }
-        else
-        {
-            pX = vPosLeft;
+            float3 pX = float3(0, 0, 0);
+            
+            if (fZLeft < fZRight)
+            {
+                pX = vPosRight;
+            }
+            else
+            {
+                pX = vPosLeft;
+            }
+
+            if (zX > fZFarNeighbor)
+            {
+                fZFarNeighbor = zX;
+                vPosFarNeighbor = pX;
+            }
         }
 
-        if (zX > fZFarNeighbor)
+        if (bAdoptFarY)
         {
-            fZFarNeighbor = zX;
-            vPosFarNeighbor = pX;
+            float zY = max(fZDown, fZUp);
+
+            float3 pY = float3(0, 0, 0);
+            if (fZUp < fZDown)
+            {
+                pY = vPosDown;
+            }
+            else
+            {
+                pY = vPosUp;
+            }
+
+            if (zY > fZFarNeighbor)
+            {
+                fZFarNeighbor = zY;
+                vPosFarNeighbor = pY;
+            }
         }
     }
 
-    if (bAdoptFarY)
-    {
-        float zY = max(fZDown, fZUp);
+    // 参照Z
+    // 輪郭線で明るい線が出てしまうのを防ぐために上下左右を見て、遠い方を参照Zとする
 
-        float3 pY = float3(0, 0, 0);
-        if (fZUp < fZDown)
-        {
-            pY = vPosDown;
-        }
-        else
-        {
-            pY = vPosUp;
-        }
-
-        if (zY > fZFarNeighbor)
-        {
-            fZFarNeighbor = zY;
-            vPosFarNeighbor = pY;
-        }
-    }
-
-    // 参照Z（fZRef）は従来どおり“遠い側”を使って明るいハロを防止（ここはレンジ外でもOK）
-    const float kEdge = 0.004f; // 以前の kEdge（シルエット検出） – 必要なら 0.003〜0.006
+    // 以前の kEdge（シルエット検出） – 必要なら 0.003〜0.006
+    const float kEdge = 0.004f;
     float fZRef = fZCenter;
     float3 vPosRef = vPosCenter;
 
-    if (abs(fZRight - fZLeft) > kEdge)
+    if (false)
     {
-        if (fZRef < fZRight)
+        if (abs(fZRight - fZLeft) > kEdge)
         {
-            fZRef = fZRight;
-            vPosRef = vPosRight;
+            if (fZRef < fZRight)
+            {
+                fZRef = fZRight;
+                vPosRef = vPosRight;
+            }
+
+            if (fZRef < fZLeft)
+            {
+                fZRef = fZLeft;
+                vPosRef = vPosLeft;
+            }
         }
 
-        if (fZRef < fZLeft)
+        if (abs(fZDown - fZUp) > kEdge)
         {
-            fZRef = fZLeft;
-            vPosRef = vPosLeft;
-        }
-    }
+            if (fZRef < fZDown)
+            {
+                fZRef = fZDown;
+                vPosRef = vPosDown;
+            }
 
-    if (abs(fZDown - fZUp) > kEdge)
-    {
-        if (fZRef < fZDown)
-        {
-            fZRef = fZDown;
-            vPosRef = vPosDown;
-        }
-
-        if (fZRef < fZUp)
-        {
-            fZRef = fZUp;
-            vPosRef = vPosUp;
+            if (fZRef < fZUp)
+            {
+                fZRef = fZUp;
+                vPosRef = vPosUp;
+            }
         }
     }
 

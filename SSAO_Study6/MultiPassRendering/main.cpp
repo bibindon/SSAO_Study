@@ -38,7 +38,7 @@ LPDIRECT3DVERTEXDECLARATION9    g_pQuadDecl = NULL;
 bool                            g_bClose = false;
 
 float                           g_posRange = 8.f;
-bool                            g_bUseTexture = false;
+bool                            g_bUseTexture = true;
 
 D3DXMATRIX                      g_mView;
 D3DXMATRIX                      g_mProj;
@@ -391,7 +391,7 @@ void RenderPass1()
 
     static float t2 = 0.0f;
     t2 += 0.02f;
-    D3DXMatrixTranslation(&mWorld, 0.0f, 2.0f + sinf(t2) * 1, 0.0f);
+    D3DXMatrixTranslation(&mWorld, 0.0f, sinf(t2) * 1 + 0.0f, 0.0f);
     g_pEffect1->SetMatrix("g_matWorld", &mWorld);
     for (DWORD i = 0; i < g_dwNumMaterials; ++i)
     {
