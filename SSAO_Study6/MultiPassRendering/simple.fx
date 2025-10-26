@@ -16,7 +16,7 @@ sampler sampBase = sampler_state
     Texture = (g_texBase);
     MinFilter = POINT;
     MagFilter = POINT;
-    MipFilter = POINT;
+    MipFilter = NONE;
     AddressU = WRAP;
     AddressV = WRAP;
 };

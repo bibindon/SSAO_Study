@@ -107,6 +107,9 @@ Basis BuildBasis(float2 uv);
 //-------------------------------------------------------------
 float4 PS_AO(VS_OUT in_) : COLOR0
 {
+//    in_.uv.x += g_invSize.x * 0.5;
+//    in_.uv.y += g_invSize.y * 0.5;
+
     Basis basis = BuildBasis(in_.uv);
 
     float3 vHemisphereAxisVS = basis.vHemisphereAxisVS;
@@ -196,13 +199,133 @@ float4 PS_AO(VS_OUT in_) : COLOR0
     return outColor;
 }
 
+/*
+// 横ブラーを、任意の中心UVで実行して AO を返す
+float BlurH_At(float2 baseUV)
+{
+    // 奇数であること
+    const int WIDTH = 5;
+
+    float centerDepth = tex2D(sampZ,  baseUV).a;
+    float centerAO    = tex2D(sampAO, baseUV).r;
+
+    float2 stepUV = float2(g_invSize.x, 0.0f);
+
+    float sumAO     = centerAO;
+    float sumWeight = 1.0f;
+
+    [unroll]
+    for (int i = 1; i <= (WIDTH / 2); ++i)
+    {
+        float2 uvLeft  = baseUV - stepUV * i;
+        float2 uvRight = baseUV + stepUV * i;
+
+        float depthLeft  = tex2D(sampZ, uvLeft).a;
+        float depthRight = tex2D(sampZ, uvRight).a;
+
+        // Z値が大きく異なる場所の陰はブラーに使わない
+        if (abs(depthLeft - centerDepth) <= g_depthReject)
+        {
+            float aoLeft = tex2D(sampAO, uvLeft).r;
+            sumAO     += aoLeft * WIDTH;
+            sumWeight += WIDTH;
+        }
+
+        if (abs(depthRight - centerDepth) <= g_depthReject)
+        {
+            float aoRight = tex2D(sampAO, uvRight).r;
+            sumAO     += aoRight * WIDTH;
+            sumWeight += WIDTH;
+        }
+    }
+
+    return sumAO / sumWeight;
+}
+
+//--------------------------------------------------------------
+// Blur H（中心／左隣／右隣の3回実行し、最も黒い結果を採用）
+//--------------------------------------------------------------
+float4 PS_BlurH(VS_OUT in_) : COLOR0
+{
+    float2 oneStepH = float2(g_invSize.x, 0.0f);
+
+    float aoCenter = BlurH_At(in_.uv);
+    float aoLeft   = BlurH_At(in_.uv - oneStepH);
+    float aoRight  = BlurH_At(in_.uv + oneStepH);
+
+    // AOは小さいほど暗い → 最小値を採用
+    float ao = min(aoCenter, min(aoLeft, aoRight));
+
+    return float4(ao, ao, ao, 1.0f);
+}
+
+// 任意の中心UVで「縦ブラー」を実行して AO を返す
+float BlurV_At(float2 baseUV)
+{
+    // 奇数であること
+    const int WIDTH = 5;
+
+    float centerDepth = tex2D(sampZ,  baseUV).a;
+    float centerAO    = tex2D(sampAO, baseUV).r;
+
+    float2 stepUV = float2(0.0f, g_invSize.y);
+
+    float sumAO     = centerAO;
+    float sumWeight = 1.0f;
+
+    [unroll]
+    for (int i = 1; i <= (WIDTH / 2); ++i)
+    {
+        float2 uvDown = baseUV + stepUV * i;
+        float2 uvUp   = baseUV - stepUV * i;
+
+        float depthDown = tex2D(sampZ, uvDown).a;
+        float depthUp   = tex2D(sampZ, uvUp).a;
+
+        // Z値が大きく異なる場所の陰はブラーに使わない
+        if (abs(depthDown - centerDepth) <= g_depthReject)
+        {
+            float aoDown = tex2D(sampAO, uvDown).r;
+            sumAO     += aoDown * WIDTH;
+            sumWeight += WIDTH;
+        }
+
+        if (abs(depthUp - centerDepth) <= g_depthReject)
+        {
+            float aoUp = tex2D(sampAO, uvUp).r;
+            sumAO     += aoUp * WIDTH;
+            sumWeight += WIDTH;
+        }
+    }
+
+    return sumAO / sumWeight;
+}
+
+//--------------------------------------------------------------
+// Blur V（中心／上隣／下隣の3回実行し、最も黒い結果を採用）
+//--------------------------------------------------------------
+float4 PS_BlurV(VS_OUT in_) : COLOR0
+{
+    float2 oneStepV = float2(0.0f, g_invSize.y);
+
+    float aoCenter = BlurV_At(in_.uv);
+    float aoUp     = BlurV_At(in_.uv - oneStepV);
+    float aoDown   = BlurV_At(in_.uv + oneStepV);
+
+    // AOは小さいほど暗い → 最小値を採用
+    float ao = min(aoCenter, min(aoUp, aoDown));
+
+    return float4(ao, ao, ao, 1.0f);
+}
+*/
+
 //--------------------------------------------------------------
 // Blur H
 //--------------------------------------------------------------
 float4 PS_BlurH(VS_OUT in_) : COLOR0
 {
     // 奇数であること
-    const int WIDTH = 15;
+    const int WIDTH = 5;
 
     float centerZ = tex2D(sampZ, in_.uv).a;
     float centerAO = tex2D(sampAO, in_.uv).r;
@@ -247,7 +370,7 @@ float4 PS_BlurH(VS_OUT in_) : COLOR0
 float4 PS_BlurV(VS_OUT in_) : COLOR0
 {
     // 奇数であること
-    const int WIDTH = 15;
+    const int WIDTH = 5;
 
     float centerZ = tex2D(sampZ, in_.uv).a;
     float centerAO = tex2D(sampAO, in_.uv).r;
@@ -292,9 +415,9 @@ float4 PS_Composite(VS_OUT in_) : COLOR0
 {
     float3 col = tex2D(sampColor, in_.uv).rgb;
 
-    // なぜか0.5ピクセルズレている
-    in_.uv.x += g_invSize.x * 0.5;
-    in_.uv.y += g_invSize.y * 0.5;
+    // なぜか1ピクセルズレている
+//    in_.uv.x += g_invSize.x;
+//    in_.uv.y += g_invSize.y;
 
     float ao = tex2D(sampAO, in_.uv).r;
     return float4(col * ao, 1.0f);
@@ -346,6 +469,8 @@ float2 PolygonToUV(float4 vClip)
 
 Basis BuildBasis(float2 uv)
 {
+//    uv.x *= 1599.f / 1600.f;
+//    uv.y *= 899.f / 900.f;
     Basis result;
 
     float fZCenter = tex2D(sampZ, uv).a;

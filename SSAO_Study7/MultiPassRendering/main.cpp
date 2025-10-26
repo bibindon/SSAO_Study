@@ -30,6 +30,8 @@ LPD3DXEFFECT                    g_pEffect2 = NULL; // simple2.fx
 LPDIRECT3DTEXTURE9              g_pRenderTarget = NULL;  // RT0: color
 LPDIRECT3DTEXTURE9              g_pRenderTargetZ = NULL; // RT1: Z画像
 LPDIRECT3DTEXTURE9              g_pRenderTargetPos = NULL; // RT2: POS画像
+LPDIRECT3DTEXTURE9              g_pRenderTargetNormal = NULL;
+
 LPDIRECT3DTEXTURE9              g_pAoTex = NULL; // AO(生)
 LPDIRECT3DTEXTURE9              g_pAoTempBlur = NULL;
 
@@ -241,6 +243,15 @@ void InitD3D(HWND hWnd)
                       kBackH,
                       1,
                       D3DUSAGE_RENDERTARGET,
+                      D3DFMT_A16B16G16R16F,
+                      D3DPOOL_DEFAULT,
+                      &g_pRenderTargetNormal);
+
+    D3DXCreateTexture(g_pd3dDevice,
+                      kBackW,
+                      kBackH,
+                      1,
+                      D3DUSAGE_RENDERTARGET,
                       D3DFMT_A8R8G8B8,
                       D3DPOOL_DEFAULT,
                       &g_pAoTex);
@@ -293,37 +304,42 @@ void RenderPass1()
     LPDIRECT3DSURFACE9 pRT0 = NULL;
     LPDIRECT3DSURFACE9 pRT1 = NULL;
     LPDIRECT3DSURFACE9 pRT2 = NULL;
+    LPDIRECT3DSURFACE9 pRT3 = NULL; // NormalWS 用
 
-    g_pRenderTarget->GetSurfaceLevel(0, &pRT0);
-    g_pRenderTargetZ->GetSurfaceLevel(0, &pRT1);
-    g_pRenderTargetPos->GetSurfaceLevel(0, &pRT2);
+    // それぞれのテクスチャからサーフェイスを取得
+    g_pRenderTarget    ->GetSurfaceLevel(0, &pRT0); // COLOR
+    g_pRenderTargetZ   ->GetSurfaceLevel(0, &pRT1); // LINEAR Z
+    g_pRenderTargetPos ->GetSurfaceLevel(0, &pRT2); // POS WS
+    g_pRenderTargetNormal->GetSurfaceLevel(0, &pRT3); // NORMAL WS（InitD3Dで作成が必要）
 
+    // MRT: 0..3 を設定
     g_pd3dDevice->SetRenderTarget(0, pRT0);
     g_pd3dDevice->SetRenderTarget(1, pRT1);
     g_pd3dDevice->SetRenderTarget(2, pRT2);
+    g_pd3dDevice->SetRenderTarget(3, pRT3);
 
-    static float t = 0.0f;
-    t += -0.01f;
+    static float timeOrbit = 0.0f;
+    timeOrbit += -0.01f;
 
-    D3DXMATRIX mWorld;
-    D3DXMATRIX mView;
-    D3DXMATRIX mProj;
-    D3DXMATRIX mWorldViewProj;
+    D3DXMATRIX matWorld;
+    D3DXMATRIX matView;
+    D3DXMATRIX matProj;
+    D3DXMATRIX matWorldViewProj;
 
-    D3DXMatrixIdentity(&mWorld);
+    D3DXMatrixIdentity(&matWorld);
 
-    D3DXVECTOR3 eye(10.0f * sinf(t), 2.0f, -10.0f * cosf(t));
+    D3DXVECTOR3 eye(6.0f * sinf(timeOrbit), 3.0f, -6.0f * cosf(timeOrbit));
     D3DXVECTOR3 at(0, 1, 0);
     D3DXVECTOR3 up(0, 1, 0);
-    D3DXMatrixLookAtLH(&mView, &eye, &at, &up);
+    D3DXMatrixLookAtLH(&matView, &eye, &at, &up);
 
-    D3DXMatrixPerspectiveFovLH(&mProj,
+    D3DXMatrixPerspectiveFovLH(&matProj,
                                D3DXToRadian(45.0f),
                                (float)kBackW / (float)kBackH,
                                1.0f,
                                1000.0f);
 
-    mWorldViewProj = mWorld * mView * mProj;
+    matWorldViewProj = matWorld * matView * matProj;
 
     g_pd3dDevice->Clear(0,
                         NULL,
@@ -334,56 +350,66 @@ void RenderPass1()
 
     g_pd3dDevice->BeginScene();
 
-    g_pEffect1->SetMatrix("g_matWorld", &mWorld);
-    g_pEffect1->SetMatrix("g_matView", &mView);
-    g_pEffect1->SetMatrix("g_matWorldViewProj", &mWorldViewProj);
+    // エフェクトパラメータ
+    g_pEffect1->SetMatrix("g_matWorld", &matWorld);
+    g_pEffect1->SetMatrix("g_matView", &matView);
+    g_pEffect1->SetMatrix("g_matWorldViewProj", &matWorldViewProj);
     g_pEffect1->SetFloat("g_fNear", 1.0f);
     g_pEffect1->SetFloat("g_fFar", 1000.0f);
     g_pEffect1->SetFloat("g_posRange", g_posRange);
 
     g_pEffect1->SetTechnique("TechniqueMRT");
-    UINT nPass = 0;
-    g_pEffect1->Begin(&nPass, 0);
+    UINT numPass = 0;
+    g_pEffect1->Begin(&numPass, 0);
     g_pEffect1->BeginPass(0);
 
-    for (DWORD i = 0; i < g_dwNumMaterials; ++i)
+    // モンキーメッシュ
+    for (DWORD matIndex = 0; matIndex < g_dwNumMaterials; ++matIndex)
     {
-        if (g_pTexMonkey[i])
+        if (g_pTexMonkey[matIndex] && g_bUseTexture)
         {
-            if (g_bUseTexture)
-            {
-                g_pEffect1->SetBool("g_bUseTexture", TRUE);
-                g_pEffect1->SetTexture("g_texBase", g_pTexMonkey[i]);
-            }
+            g_pEffect1->SetBool("g_bUseTexture", TRUE);
+            g_pEffect1->SetTexture("g_texBase", g_pTexMonkey[matIndex]);
         }
         else
         {
             g_pEffect1->SetBool("g_bUseTexture", FALSE);
             g_pEffect1->SetTexture("g_texBase", NULL);
         }
+
         g_pEffect1->CommitChanges();
-        g_pMeshMonkey->DrawSubset(i);
+        g_pMeshMonkey->DrawSubset(matIndex);
     }
 
+    // 障害物（動かす）
     static float t2 = 0.0f;
     t2 += 0.02f;
-    D3DXMatrixTranslation(&mWorld, cosf(t2) * 2, sinf(t2) * 2 + 12.0f, sinf(t2) * 2);
-    g_pEffect1->SetMatrix("g_matWorld", &mWorld);
-    for (DWORD i = 0; i < g_dwNumMaterials; ++i)
+
+    //D3DXMatrixTranslation(&matWorld,
+    //                      cosf(t2) * 2.0f,
+    //                      sinf(t2) * 2.0f - 2.0f,
+    //                      sinf(t2) * 2.0f);
+    D3DXMatrixTranslation(&matWorld,
+                          0.0f,
+                          sinf(t2) * 1.0f + 1.0f,
+                          0.0f);
+
+    g_pEffect1->SetMatrix("g_matWorld", &matWorld);
+    g_pEffect1->CommitChanges();
+
+    for (DWORD matIndex2 = 0; matIndex2 < g_dwNumMaterials; ++matIndex2)
     {
-        if (g_pTexObstacle[i])
+        if (g_pTexObstacle[matIndex2] && g_bUseTexture)
         {
-            if (g_bUseTexture)
-            {
-                g_pEffect1->SetBool("g_bUseTexture", TRUE);
-                g_pEffect1->SetTexture("g_texBase", g_pTexObstacle[i]);
-            }
+            g_pEffect1->SetBool("g_bUseTexture", TRUE);
+            g_pEffect1->SetTexture("g_texBase", g_pTexObstacle[matIndex2]);
         }
         else
         {
             g_pEffect1->SetBool("g_bUseTexture", FALSE);
             g_pEffect1->SetTexture("g_texBase", NULL);
         }
+
         g_pEffect1->CommitChanges();
         g_pMeshObstacle->DrawSubset(0);
     }
@@ -392,6 +418,8 @@ void RenderPass1()
     g_pEffect1->End();
     g_pd3dDevice->EndScene();
 
+    // MRT を解除して元に戻す
+    g_pd3dDevice->SetRenderTarget(3, NULL);
     g_pd3dDevice->SetRenderTarget(2, NULL);
     g_pd3dDevice->SetRenderTarget(1, NULL);
     g_pd3dDevice->SetRenderTarget(0, pOldRT0);
@@ -399,10 +427,12 @@ void RenderPass1()
     SAFE_RELEASE(pRT0);
     SAFE_RELEASE(pRT1);
     SAFE_RELEASE(pRT2);
+    SAFE_RELEASE(pRT3);
     SAFE_RELEASE(pOldRT0);
 
-    g_mView = mView;
-    g_mProj = mProj;
+    // View/Proj を保持（後段で使用しているため）
+    g_mView = matView;
+    g_mProj = matProj;
 }
 
 void RenderPass2()
@@ -425,11 +455,12 @@ void RenderPass2()
         g_pEffect2->SetFloat("g_posRange", g_posRange);
         g_pEffect2->SetTexture("texZ", g_pRenderTargetZ);
         g_pEffect2->SetTexture("texPos", g_pRenderTargetPos);
+        g_pEffect2->SetTexture("texNormal", g_pRenderTargetNormal);
 
         g_pEffect2->SetFloat("g_aoStrength",    1.6f);
         g_pEffect2->SetFloat("g_aoStepWorld",   2.0f);
 
-        g_pEffect2->SetFloat("g_edgeZ",         0.006f);
+        g_pEffect2->SetFloat("g_edgeZ",         0.005f);
 
         // これ以上なら輪郭とみなす（小さすぎは通常面）
         g_pEffect2->SetFloat("g_farAdoptMinZ",  0.00001f);
@@ -539,7 +570,7 @@ void DrawFullscreenQuad()
     float du = 0.f;
     float dv = 0.f;
 
-    if (false)
+    if (true)
     {
         du = 0.5f / (float)kBackW;
         dv = 0.5f / (float)kBackH;
