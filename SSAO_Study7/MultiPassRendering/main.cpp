@@ -100,7 +100,6 @@ int WINAPI _tWinMain(_In_ HINSTANCE hInstance,
         }
         else
         {
-            Sleep(16);
             RenderPass1();
             RenderPass2();
             g_pd3dDevice->Present(NULL, NULL, NULL, NULL);
@@ -165,10 +164,9 @@ void InitD3D(HWND hWnd)
     }
 
     // 障害物
-    // sphere.xロード
     {
         LPD3DXBUFFER pMtrlBuf = NULL;
-        D3DXLoadMeshFromX(L"sphere.x",
+        D3DXLoadMeshFromX(L"cube.x",
                           D3DXMESH_SYSTEMMEM,
                           g_pd3dDevice,
                           NULL,
@@ -310,7 +308,7 @@ void RenderPass1()
     g_pRenderTarget    ->GetSurfaceLevel(0, &pRT0); // COLOR
     g_pRenderTargetZ   ->GetSurfaceLevel(0, &pRT1); // LINEAR Z
     g_pRenderTargetPos ->GetSurfaceLevel(0, &pRT2); // POS WS
-    g_pRenderTargetNormal->GetSurfaceLevel(0, &pRT3); // NORMAL WS（InitD3Dで作成が必要）
+    g_pRenderTargetNormal->GetSurfaceLevel(0, &pRT3); // NORMAL WS
 
     // MRT: 0..3 を設定
     g_pd3dDevice->SetRenderTarget(0, pRT0);
@@ -319,7 +317,7 @@ void RenderPass1()
     g_pd3dDevice->SetRenderTarget(3, pRT3);
 
     static float timeOrbit = 0.0f;
-    timeOrbit += -0.01f;
+    timeOrbit += -0.005f;
 
     D3DXMATRIX matWorld;
     D3DXMATRIX matView;
@@ -383,7 +381,7 @@ void RenderPass1()
 
     // 障害物（動かす）
     static float t2 = 0.0f;
-    t2 += 0.02f;
+    t2 += 0.01f;
 
     //D3DXMatrixTranslation(&matWorld,
     //                      cosf(t2) * 2.0f,
