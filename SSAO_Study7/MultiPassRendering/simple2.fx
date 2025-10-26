@@ -152,7 +152,7 @@ float4 PS_AO(VS_OUT in_) : COLOR0
     float3 vBinormalVS = cross(vHemisphereAxisVS, vTangentVS);
 
     int occlusionNum = 0;
-    const int kSamples = 64;
+    const int kSamples = 128;
 
     [unroll]
     for (int i = 0; i < kSamples; ++i)

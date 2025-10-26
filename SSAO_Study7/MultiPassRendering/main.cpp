@@ -11,8 +11,8 @@
 
 #define SAFE_RELEASE(p) do { if (p) { (p)->Release(); (p)=NULL; } } while(0)
 
-static const int kBackW = 1600;
-static const int kBackH = 900;
+static const int kBackW = (int)(1600 * 1.0);
+static const int kBackH = (int)(900 * 1.0);
 
 LPDIRECT3D9                     g_pD3D = NULL;
 LPDIRECT3DDEVICE9               g_pd3dDevice = NULL;
