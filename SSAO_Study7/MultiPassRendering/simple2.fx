@@ -1,7 +1,4 @@
 
-
-
-
 float4x4 g_matView;
 float4x4 g_matProj;
 
@@ -107,18 +104,6 @@ float2 PolygonToUV(float4 vClip);
 // Low-discrepancy hemisphere dir
 float3 RandomHemiDir(int in_);
 
-// BuildBasis関数の戻り値用構造体
-// HLSLは複数の戻り値を戻したい場合、構造体しか方法がない。
-struct Basis
-{
-    float3 vHemisphereAxisVS;
-    float3 vNormalizedNormalWS;
-    float3 vOriginVS;
-    float fZRef;
-};
-
-Basis BuildBasis(float2 uv);
-
 //-------------------------------------------------------------
 // Ambient Occlusion
 //-------------------------------------------------------------
@@ -172,15 +157,20 @@ float4 PS_AO(VS_OUT in_) : COLOR0
             continue;
 
         float2 sampleUV = PolygonToUV(vClip);
+
         if (sampleUV.x < 0.0f || sampleUV.x > 1.0f ||
-        sampleUV.y < 0.0f || sampleUV.y > 1.0f)
+            sampleUV.y < 0.0f || sampleUV.y > 1.0f)
+        {
             continue;
+        }
 
         float Z_SampleInUV = tex2D(sampZ, sampleUV).a;
         float Z_CenterInUV = tex2D(sampZ, in_.uv).a;
 
         if (abs(Z_SampleInUV - Z_CenterInUV) > g_edgeZ)
+        {
             continue;
+        }
 
         float Z_SampleInRay = saturate((vSamplePosVS.z - g_fNear) / (g_fFar - g_fNear));
 
