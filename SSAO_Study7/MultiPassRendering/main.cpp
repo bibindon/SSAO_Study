@@ -38,7 +38,7 @@ LPDIRECT3DTEXTURE9              g_pAoTempBlur = NULL;
 LPDIRECT3DVERTEXDECLARATION9    g_pQuadDecl = NULL;
 bool                            g_bClose = false;
 
-float                           g_posRange = 16.f;
+float                           g_posRange = 24.f;
 bool                            g_bUseTexture = true;
 bool                            g_bUseBlur = true;
 
@@ -460,13 +460,7 @@ void RenderPass2()
         g_pEffect2->SetFloat("g_aoStrength",    1.6f);
         g_pEffect2->SetFloat("g_aoStepWorld",   2.0f);
 
-        g_pEffect2->SetFloat("g_edgeZ",         0.005f);
-
-        // これ以上なら輪郭とみなす（小さすぎは通常面）
-        g_pEffect2->SetFloat("g_farAdoptMinZ",  0.00001f);
-
-        // これ以上は大きすぎ（別オブジェクト/空）→遠側採用しない
-        g_pEffect2->SetFloat("g_farAdoptMaxZ",  0.01f);
+        g_pEffect2->SetFloat("g_edgeZ",         0.006f);
 
         LPDIRECT3DSURFACE9 pAo = NULL;
         g_pAoTex->GetSurfaceLevel(0, &pAo);
@@ -567,16 +561,12 @@ void DrawFullscreenQuad()
 {
     QuadVertex v[4] = {};
 
-    float du = 0.f;
-    float dv = 0.f;
+    // このduは必要。これがないとウィンドウの左上から右下に直線状の断層ができる
+    float du = 0.5f / (float)kBackW;
+    float dv = 0.5f / (float)kBackH;
 
-    if (true)
-    {
-        du = 0.5f / (float)kBackW;
-        dv = 0.5f / (float)kBackH;
-    }
-
-
+    // テクスチャは半ピクセルずつ内側に移動させる
+    // Y座標は上がプラスで、V座標は下がプラスなので注意
     v[0] = { -1, -1, 0, 1, 0 + du, 1 - dv };
     v[1] = { -1,  1, 0, 1, 0 + du, 0 + dv };
     v[2] = {  1, -1, 0, 1, 1 - du, 1 - dv };

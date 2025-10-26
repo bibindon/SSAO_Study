@@ -1,4 +1,4 @@
-﻿
+
 
 
 
@@ -15,9 +15,6 @@ float g_aoStrength;
 float g_aoStepWorld;
 
 float g_edgeZ;
-
-float g_farAdoptMinZ;
-float g_farAdoptMaxZ;
 
 float g_depthReject;
 
@@ -208,7 +205,7 @@ float4 PS_BlurH(VS_OUT in_) : COLOR0
     in_.uv += g_invSize * 0.5f;
 
     // 奇数であること
-    const int WIDTH = 5;
+    const int WIDTH = 25;
 
     float centerZ = tex2D(sampZ, in_.uv).a;
     float centerAO = tex2D(sampAO, in_.uv).r;
@@ -255,7 +252,7 @@ float4 PS_BlurV(VS_OUT in_) : COLOR0
     in_.uv += g_invSize * 0.5f;
 
     // 奇数であること
-    const int WIDTH = 5;
+    const int WIDTH = 25;
 
     float centerZ = tex2D(sampZ, in_.uv).a;
     float centerAO = tex2D(sampAO, in_.uv).r;
