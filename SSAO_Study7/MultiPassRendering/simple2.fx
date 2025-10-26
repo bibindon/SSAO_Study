@@ -1,4 +1,4 @@
-
+﻿
 
 
 
@@ -127,6 +127,8 @@ Basis BuildBasis(float2 uv);
 //-------------------------------------------------------------
 float4 PS_AO(VS_OUT in_) : COLOR0
 {
+    in_.uv += g_invSize * 0.5f;
+    
     // 中心の WS 位置と WS 法線を取得
     float3 posWS_center = DecodeWorldPos(tex2D(sampPos,    in_.uv).rgb);
     float3 nWS_center   = DecodeNormalWS( tex2D(sampNormal, in_.uv).rgb );
@@ -203,6 +205,8 @@ float4 PS_AO(VS_OUT in_) : COLOR0
 //--------------------------------------------------------------
 float4 PS_BlurH(VS_OUT in_) : COLOR0
 {
+    in_.uv += g_invSize * 0.5f;
+
     // 奇数であること
     const int WIDTH = 5;
 
@@ -248,6 +252,8 @@ float4 PS_BlurH(VS_OUT in_) : COLOR0
 //--------------------------------------------------------------
 float4 PS_BlurV(VS_OUT in_) : COLOR0
 {
+    in_.uv += g_invSize * 0.5f;
+
     // 奇数であること
     const int WIDTH = 5;
 
@@ -296,9 +302,6 @@ float4 PS_Composite(VS_OUT in_) : COLOR0
     float2 uv3 = in_.uv;
 
     float3 col = tex2D(sampColor, uv3).rgb;
-
-    uv2.x *= 1600.0 / 1599.0;
-    uv2.y *= 900.0 / 899.0;
 
     float ao = tex2D(sampAO, uv2).r;
 

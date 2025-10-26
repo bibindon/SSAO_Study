@@ -40,7 +40,7 @@ bool                            g_bClose = false;
 
 float                           g_posRange = 16.f;
 bool                            g_bUseTexture = true;
-bool                            g_bUseBlur = false;
+bool                            g_bUseBlur = true;
 
 D3DXMATRIX                      g_mView;
 D3DXMATRIX                      g_mProj;
