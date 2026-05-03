@@ -58,14 +58,33 @@ struct SsaoSettings
     int blurRadius;
 };
 
+struct MeshAsset
+{
+    LPD3DXMESH mesh;
+    std::vector<LPDIRECT3DTEXTURE9> textures;
+    DWORD materialCount;
+};
+
 LPDIRECT3D9                     g_pD3D = NULL;
 LPDIRECT3DDEVICE9               g_pd3dDevice = NULL;
 LPD3DXMESH                      g_pMeshMonkey = NULL;
 LPD3DXMESH                      g_pMeshObstacle = NULL;
+LPD3DXMESH                      g_pMeshCubeSmall = NULL;
+LPD3DXMESH                      g_pMeshSphere = NULL;
+LPD3DXMESH                      g_pMeshPlate = NULL;
+LPD3DXMESH                      g_pMeshCubeRoom = NULL;
 std::vector<LPDIRECT3DTEXTURE9> g_pTexMonkey;
 std::vector<LPDIRECT3DTEXTURE9> g_pTexObstacle;
+std::vector<LPDIRECT3DTEXTURE9> g_pTexCubeSmall;
+std::vector<LPDIRECT3DTEXTURE9> g_pTexSphere;
+std::vector<LPDIRECT3DTEXTURE9> g_pTexPlate;
+std::vector<LPDIRECT3DTEXTURE9> g_pTexCubeRoom;
 DWORD                           g_dwNumMonkeyMaterials = 0;
 DWORD                           g_dwNumObstacleMaterials = 0;
+DWORD                           g_dwNumCubeSmallMaterials = 0;
+DWORD                           g_dwNumSphereMaterials = 0;
+DWORD                           g_dwNumPlateMaterials = 0;
+DWORD                           g_dwNumCubeRoomMaterials = 0;
 
 LPD3DXEFFECT                    g_pEffect1 = NULL; // simple.fx
 LPD3DXEFFECT                    g_pEffect2 = NULL; // simple2.fx
@@ -127,6 +146,13 @@ static std::wstring FormatIntValue(int value);
 static void DrawOverlayText(const wchar_t* text, int x, int y, D3DCOLOR color);
 static bool IsMainWindowFocused();
 static void PositionSettingsWindowNextToMain();
+static bool LoadMeshWithTextures(const wchar_t* meshPath,
+                                 LPD3DXMESH* ppMesh,
+                                 std::vector<LPDIRECT3DTEXTURE9>* pTextures,
+                                 DWORD* pMaterialCount);
+static void DrawMeshWithEffect(LPD3DXMESH pMesh,
+                               const std::vector<LPDIRECT3DTEXTURE9>& textures,
+                               DWORD materialCount);
 
 LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK SettingsWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -211,6 +237,78 @@ static D3DXVECTOR3 GetCameraForward()
     return D3DXVECTOR3(sinf(g_cameraYaw) * cosPitch,
                        sinf(g_cameraPitch),
                        cosf(g_cameraYaw) * cosPitch);
+}
+
+static bool LoadMeshWithTextures(const wchar_t* meshPath,
+                                 LPD3DXMESH* ppMesh,
+                                 std::vector<LPDIRECT3DTEXTURE9>* pTextures,
+                                 DWORD* pMaterialCount)
+{
+    if (ppMesh == NULL || pTextures == NULL || pMaterialCount == NULL)
+    {
+        return false;
+    }
+
+    LPD3DXBUFFER pMtrlBuf = NULL;
+    if (FAILED(D3DXLoadMeshFromX(meshPath,
+                                 D3DXMESH_SYSTEMMEM,
+                                 g_pd3dDevice,
+                                 NULL,
+                                 &pMtrlBuf,
+                                 NULL,
+                                 pMaterialCount,
+                                 ppMesh)))
+    {
+        SAFE_RELEASE(pMtrlBuf);
+        return false;
+    }
+
+    pTextures->assign(*pMaterialCount, NULL);
+    if (pMtrlBuf != NULL)
+    {
+        D3DXMATERIAL* pMtrls = (D3DXMATERIAL*)pMtrlBuf->GetBufferPointer();
+        for (DWORD i = 0; i < *pMaterialCount; ++i)
+        {
+            if (pMtrls[i].pTextureFilename != NULL && pMtrls[i].pTextureFilename[0] != '\0')
+            {
+                LPDIRECT3DTEXTURE9 pTex = NULL;
+                if (SUCCEEDED(D3DXCreateTextureFromFileA(g_pd3dDevice, pMtrls[i].pTextureFilename, &pTex)))
+                {
+                    (*pTextures)[i] = pTex;
+                }
+            }
+        }
+    }
+
+    SAFE_RELEASE(pMtrlBuf);
+    return true;
+}
+
+static void DrawMeshWithEffect(LPD3DXMESH pMesh,
+                               const std::vector<LPDIRECT3DTEXTURE9>& textures,
+                               DWORD materialCount)
+{
+    if (pMesh == NULL)
+    {
+        return;
+    }
+
+    for (DWORD matIndex = 0; matIndex < materialCount; ++matIndex)
+    {
+        if (matIndex < textures.size() && textures[matIndex] != NULL && g_bUseTexture)
+        {
+            g_pEffect1->SetBool("g_bUseTexture", TRUE);
+            g_pEffect1->SetTexture("g_texBase", textures[matIndex]);
+        }
+        else
+        {
+            g_pEffect1->SetBool("g_bUseTexture", FALSE);
+            g_pEffect1->SetTexture("g_texBase", NULL);
+        }
+
+        g_pEffect1->CommitChanges();
+        pMesh->DrawSubset(matIndex);
+    }
 }
 
 int WINAPI _tWinMain(_In_ HINSTANCE hInstance,
@@ -312,57 +410,12 @@ void InitD3D(HWND hWnd)
                          &pp,
                          &g_pd3dDevice);
 
-    {
-        LPD3DXBUFFER pMtrlBuf = NULL;
-        D3DXLoadMeshFromX(L"monkey.blend.x",
-                          D3DXMESH_SYSTEMMEM,
-                          g_pd3dDevice,
-                          NULL,
-                          &pMtrlBuf,
-                          NULL,
-                          &g_dwNumMonkeyMaterials,
-                          &g_pMeshMonkey);
-
-        D3DXMATERIAL* mtrls = (D3DXMATERIAL*)pMtrlBuf->GetBufferPointer();
-        g_pTexMonkey.resize(g_dwNumMonkeyMaterials, NULL);
-
-        for (DWORD i = 0; i < g_dwNumMonkeyMaterials; ++i)
-        {
-            if (mtrls[i].pTextureFilename && mtrls[i].pTextureFilename[0] != '\0')
-            {
-                LPDIRECT3DTEXTURE9 tex = NULL;
-                D3DXCreateTextureFromFileA(g_pd3dDevice, mtrls[i].pTextureFilename, &tex);
-                g_pTexMonkey[i] = tex;
-            }
-        }
-        SAFE_RELEASE(pMtrlBuf);
-    }
-
-    {
-        LPD3DXBUFFER pMtrlBuf = NULL;
-        D3DXLoadMeshFromX(L"cube.x",
-                          D3DXMESH_SYSTEMMEM,
-                          g_pd3dDevice,
-                          NULL,
-                          &pMtrlBuf,
-                          NULL,
-                          &g_dwNumObstacleMaterials,
-                          &g_pMeshObstacle);
-
-        D3DXMATERIAL* mtrls = (D3DXMATERIAL*)pMtrlBuf->GetBufferPointer();
-        g_pTexObstacle.resize(g_dwNumObstacleMaterials, NULL);
-
-        for (DWORD i = 0; i < g_dwNumObstacleMaterials; ++i)
-        {
-            if (mtrls[i].pTextureFilename && mtrls[i].pTextureFilename[0] != '\0')
-            {
-                LPDIRECT3DTEXTURE9 tex = NULL;
-                D3DXCreateTextureFromFileA(g_pd3dDevice, mtrls[i].pTextureFilename, &tex);
-                g_pTexObstacle[i] = tex;
-            }
-        }
-        SAFE_RELEASE(pMtrlBuf);
-    }
+    LoadMeshWithTextures(L"monkey.blend.x", &g_pMeshMonkey, &g_pTexMonkey, &g_dwNumMonkeyMaterials);
+    LoadMeshWithTextures(L"cube.x", &g_pMeshObstacle, &g_pTexObstacle, &g_dwNumObstacleMaterials);
+    LoadMeshWithTextures(L"cubeSmall.x", &g_pMeshCubeSmall, &g_pTexCubeSmall, &g_dwNumCubeSmallMaterials);
+    LoadMeshWithTextures(L"sphere.x", &g_pMeshSphere, &g_pTexSphere, &g_dwNumSphereMaterials);
+    LoadMeshWithTextures(L"plate.x", &g_pMeshPlate, &g_pTexPlate, &g_dwNumPlateMaterials);
+    LoadMeshWithTextures(L"cubeRoom.x", &g_pMeshCubeRoom, &g_pTexCubeRoom, &g_dwNumCubeRoomMaterials);
 
     D3DXCreateEffectFromFile(g_pd3dDevice,
                              _T("../x64/Debug/simple.cso"),
@@ -462,8 +515,32 @@ void Cleanup()
         SAFE_RELEASE(g_pTexObstacle[i]);
     }
 
+    for (size_t i = 0; i < g_pTexCubeSmall.size(); ++i)
+    {
+        SAFE_RELEASE(g_pTexCubeSmall[i]);
+    }
+
+    for (size_t i = 0; i < g_pTexSphere.size(); ++i)
+    {
+        SAFE_RELEASE(g_pTexSphere[i]);
+    }
+
+    for (size_t i = 0; i < g_pTexPlate.size(); ++i)
+    {
+        SAFE_RELEASE(g_pTexPlate[i]);
+    }
+
+    for (size_t i = 0; i < g_pTexCubeRoom.size(); ++i)
+    {
+        SAFE_RELEASE(g_pTexCubeRoom[i]);
+    }
+
     SAFE_RELEASE(g_pMeshMonkey);
     SAFE_RELEASE(g_pMeshObstacle);
+    SAFE_RELEASE(g_pMeshCubeSmall);
+    SAFE_RELEASE(g_pMeshSphere);
+    SAFE_RELEASE(g_pMeshPlate);
+    SAFE_RELEASE(g_pMeshCubeRoom);
     SAFE_RELEASE(g_pEffect1);
     SAFE_RELEASE(g_pEffect2);
     SAFE_RELEASE(g_pRenderTarget);
@@ -645,7 +722,15 @@ void RenderPass1()
 
     g_pd3dDevice->BeginScene();
 
-    D3DXMatrixIdentity(&matWorld);
+    static float t2 = 0.0f;
+    t2 += 0.01f;
+
+    D3DXMATRIX matScale;
+    D3DXMATRIX matRot;
+    D3DXMatrixScaling(&matScale, 0.8f, 0.8f, 0.8f);
+    D3DXMatrixRotationY(&matRot, t2 * 0.4f);
+    D3DXMatrixTranslation(&matWorld, 0.0f, 1.5f, 0.0f);
+    matWorld = matScale * matRot * matWorld;
     matWorldViewProj = matWorld * matView * g_mProj;
 
     g_pEffect1->SetMatrix("g_matWorld", &matWorld);
@@ -661,52 +746,51 @@ void RenderPass1()
     g_pEffect1->Begin(&numPass, 0);
     g_pEffect1->BeginPass(0);
 
-    for (DWORD matIndex = 0; matIndex < g_dwNumMonkeyMaterials; ++matIndex)
-    {
-        if (g_pTexMonkey[matIndex] && g_bUseTexture)
-        {
-            g_pEffect1->SetBool("g_bUseTexture", TRUE);
-            g_pEffect1->SetTexture("g_texBase", g_pTexMonkey[matIndex]);
-        }
-        else
-        {
-            g_pEffect1->SetBool("g_bUseTexture", FALSE);
-            g_pEffect1->SetTexture("g_texBase", NULL);
-        }
-
-        g_pEffect1->CommitChanges();
-        g_pMeshMonkey->DrawSubset(matIndex);
-    }
-
-    static float t2 = 0.0f;
-    t2 += 0.01f;
-
-    D3DXMatrixTranslation(&matWorld,
-                          0.0f,
-                          sinf(t2) * 1.0f + 1.0f,
-                          0.0f);
-    matWorldViewProj = matWorld * matView * g_mProj;
-
     g_pEffect1->SetMatrix("g_matWorld", &matWorld);
     g_pEffect1->SetMatrix("g_matWorldViewProj", &matWorldViewProj);
-    g_pEffect1->CommitChanges();
+    DrawMeshWithEffect(g_pMeshMonkey, g_pTexMonkey, g_dwNumMonkeyMaterials);
 
-    for (DWORD matIndex2 = 0; matIndex2 < g_dwNumObstacleMaterials; ++matIndex2)
-    {
-        if (g_pTexObstacle[matIndex2] && g_bUseTexture)
-        {
-            g_pEffect1->SetBool("g_bUseTexture", TRUE);
-            g_pEffect1->SetTexture("g_texBase", g_pTexObstacle[matIndex2]);
-        }
-        else
-        {
-            g_pEffect1->SetBool("g_bUseTexture", FALSE);
-            g_pEffect1->SetTexture("g_texBase", NULL);
-        }
+    D3DXMatrixIdentity(&matWorld);
+    matWorldViewProj = matWorld * matView * g_mProj;
+    g_pEffect1->SetMatrix("g_matWorld", &matWorld);
+    g_pEffect1->SetMatrix("g_matWorldViewProj", &matWorldViewProj);
+    DrawMeshWithEffect(g_pMeshPlate, g_pTexPlate, g_dwNumPlateMaterials);
 
-        g_pEffect1->CommitChanges();
-        g_pMeshObstacle->DrawSubset(matIndex2);
-    }
+    D3DXMatrixIdentity(&matWorld);
+    matWorldViewProj = matWorld * matView * g_mProj;
+    g_pEffect1->SetMatrix("g_matWorld", &matWorld);
+    g_pEffect1->SetMatrix("g_matWorldViewProj", &matWorldViewProj);
+    DrawMeshWithEffect(g_pMeshCubeRoom, g_pTexCubeRoom, g_dwNumCubeRoomMaterials);
+
+    D3DXMatrixTranslation(&matWorld, 0.0f, sinf(t2) * 1.0f + 1.0f, 0.0f);
+    matWorldViewProj = matWorld * matView * g_mProj;
+    g_pEffect1->SetMatrix("g_matWorld", &matWorld);
+    g_pEffect1->SetMatrix("g_matWorldViewProj", &matWorldViewProj);
+    DrawMeshWithEffect(g_pMeshObstacle, g_pTexObstacle, g_dwNumObstacleMaterials);
+
+    D3DXMatrixTranslation(&matWorld, 2.5f, 0.5f, 2.5f);
+    matWorldViewProj = matWorld * matView * g_mProj;
+    g_pEffect1->SetMatrix("g_matWorld", &matWorld);
+    g_pEffect1->SetMatrix("g_matWorldViewProj", &matWorldViewProj);
+    DrawMeshWithEffect(g_pMeshCubeSmall, g_pTexCubeSmall, g_dwNumCubeSmallMaterials);
+
+    D3DXMatrixTranslation(&matWorld, -2.0f, 0.5f, 2.0f);
+    matWorldViewProj = matWorld * matView * g_mProj;
+    g_pEffect1->SetMatrix("g_matWorld", &matWorld);
+    g_pEffect1->SetMatrix("g_matWorldViewProj", &matWorldViewProj);
+    DrawMeshWithEffect(g_pMeshCubeSmall, g_pTexCubeSmall, g_dwNumCubeSmallMaterials);
+
+    D3DXMatrixTranslation(&matWorld, 3.5f, 0.3f, -2.5f);
+    matWorldViewProj = matWorld * matView * g_mProj;
+    g_pEffect1->SetMatrix("g_matWorld", &matWorld);
+    g_pEffect1->SetMatrix("g_matWorldViewProj", &matWorldViewProj);
+    DrawMeshWithEffect(g_pMeshSphere, g_pTexSphere, g_dwNumSphereMaterials);
+
+    D3DXMatrixTranslation(&matWorld, -3.0f, 0.3f, -1.5f);
+    matWorldViewProj = matWorld * matView * g_mProj;
+    g_pEffect1->SetMatrix("g_matWorld", &matWorld);
+    g_pEffect1->SetMatrix("g_matWorldViewProj", &matWorldViewProj);
+    DrawMeshWithEffect(g_pMeshSphere, g_pTexSphere, g_dwNumSphereMaterials);
 
     g_pEffect1->EndPass();
     g_pEffect1->End();
