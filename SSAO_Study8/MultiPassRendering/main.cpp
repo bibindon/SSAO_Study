@@ -126,6 +126,7 @@ static std::wstring FormatFloatValue(float value, int decimals);
 static std::wstring FormatIntValue(int value);
 static void DrawOverlayText(const wchar_t* text, int x, int y, D3DCOLOR color);
 static bool IsMainWindowFocused();
+static void PositionSettingsWindowNextToMain();
 
 LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK SettingsWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -957,9 +958,61 @@ static void ToggleSettingsWindow()
     else
     {
         SyncSettingsControls();
+        PositionSettingsWindowNextToMain();
         ShowWindow(g_hSettingsWnd, SW_SHOW);
         SetForegroundWindow(g_hSettingsWnd);
     }
+}
+
+static void PositionSettingsWindowNextToMain()
+{
+    if (g_hMainWnd == NULL || g_hSettingsWnd == NULL)
+    {
+        return;
+    }
+
+    RECT mainRect = {};
+    RECT settingsRect = {};
+    GetWindowRect(g_hMainWnd, &mainRect);
+    GetWindowRect(g_hSettingsWnd, &settingsRect);
+
+    const int settingsWidth = settingsRect.right - settingsRect.left;
+    const int settingsHeight = settingsRect.bottom - settingsRect.top;
+    const int gap = 16;
+
+    int x = mainRect.right + gap;
+    int y = mainRect.top;
+
+    HMONITOR hMonitor = MonitorFromWindow(g_hMainWnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO monitorInfo = {};
+    monitorInfo.cbSize = sizeof(monitorInfo);
+    if (GetMonitorInfo(hMonitor, &monitorInfo))
+    {
+        RECT workArea = monitorInfo.rcWork;
+
+        if (x + settingsWidth > workArea.right)
+        {
+            x = max(workArea.left, mainRect.left - gap - settingsWidth);
+        }
+
+        if (y + settingsHeight > workArea.bottom)
+        {
+            y = max(workArea.top, workArea.bottom - settingsHeight);
+        }
+
+        if (y < workArea.top)
+        {
+            y = workArea.top;
+        }
+    }
+
+    SetWindowPos(g_hSettingsWnd,
+                 NULL,
+                 x,
+                 y,
+                 0,
+                 0,
+                 SWP_NOACTIVATE | SWP_NOSIZE | SWP_NOZORDER);
 }
 
 static std::wstring FormatFloatValue(float value, int decimals)
