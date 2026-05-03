@@ -128,7 +128,14 @@ float4 PS_AO(VS_OUT in_) : COLOR0
         }
 
         float3 vRandomDir = RandomHemiDir(i);
-        vRandomDir.xy = Rotate2D(vRandomDir.xy, randomAngle);
+        if (g_sampleCount == 1)
+        {
+            vRandomDir = float3(0.0f, 0.0f, 1.0f);
+        }
+        else
+        {
+            vRandomDir.xy = Rotate2D(vRandomDir.xy, randomAngle);
+        }
 
         float3 vRandomDirVS = normalize(vTangentVS * vRandomDir.x +
                                         vBinormalVS * vRandomDir.y +

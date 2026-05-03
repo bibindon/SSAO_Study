@@ -989,7 +989,7 @@ static void CreateSettingsWindow(HINSTANCE hInstance)
     CreateLabeledTrack(g_hSettingsWnd, L"Blur Reject", 190, ID_TRACK_AO_DEPTH_REJECT, ID_VALUE_AO_DEPTH_REJECT, 1, 500);
     CreateLabeledTrack(g_hSettingsWnd, L"AO Bias", 240, ID_TRACK_AO_BIAS, ID_VALUE_AO_BIAS, 1, 1000);
     CreateLabeledTrack(g_hSettingsWnd, L"AO Power", 290, ID_TRACK_AO_POWER, ID_VALUE_AO_POWER, 50, 400);
-    CreateLabeledTrack(g_hSettingsWnd, L"Sample Count", 340, ID_TRACK_AO_SAMPLES, ID_VALUE_AO_SAMPLES, 4, 64);
+    CreateLabeledTrack(g_hSettingsWnd, L"Sample Count", 340, ID_TRACK_AO_SAMPLES, ID_VALUE_AO_SAMPLES, 1, 64);
     CreateLabeledTrack(g_hSettingsWnd, L"Blur Radius", 390, ID_TRACK_BLUR_RADIUS, ID_VALUE_BLUR_RADIUS, 0, 16);
     CreateLabeledTrack(g_hSettingsWnd, L"Pos Range", 440, ID_TRACK_POS_RANGE, ID_VALUE_POS_RANGE, 4, 64);
 
