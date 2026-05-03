@@ -82,9 +82,9 @@ LPDIRECT3DVERTEXDECLARATION9    g_pQuadDecl = NULL;
 HWND                            g_hMainWnd = NULL;
 HWND                            g_hSettingsWnd = NULL;
 bool                            g_bClose = false;
-bool                            g_bAppActive = true;
 bool                            g_bMouseLookInitialized = false;
 bool                            g_bCursorHidden = false;
+bool                            g_bMouseCaptureEnabled = true;
 
 float                           g_posRange = 24.0f;
 bool                            g_bUseTexture = true;
@@ -124,6 +124,8 @@ static void ApplyTrackbarSetting(int controlId, int value);
 static void UpdateProjectionMatrix();
 static std::wstring FormatFloatValue(float value, int decimals);
 static std::wstring FormatIntValue(int value);
+static void DrawOverlayText(const wchar_t* text, int x, int y, D3DCOLOR color);
+static bool IsMainWindowFocused();
 
 LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK SettingsWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -141,6 +143,11 @@ static void SetCheckState(HWND hWnd, int controlId, bool checked)
 static bool IsSettingsWindowVisible()
 {
     return g_hSettingsWnd != NULL && IsWindowVisible(g_hSettingsWnd) != FALSE;
+}
+
+static bool IsMainWindowFocused()
+{
+    return GetForegroundWindow() == g_hMainWnd;
 }
 
 static void UpdateValueText(int controlId, const wchar_t* label, const std::wstring& value)
@@ -469,6 +476,23 @@ void Cleanup()
     SAFE_RELEASE(g_pD3D);
 }
 
+static void DrawOverlayText(const wchar_t* text, int x, int y, D3DCOLOR color)
+{
+    RECT rc = { x, y, x + 700, y + 40 };
+    g_pd3dDevice->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
+    D3DXFONT_DESCW fontDesc = {};
+    fontDesc.Height = 22;
+    fontDesc.Weight = FW_BOLD;
+    wcscpy_s(fontDesc.FaceName, L"Meiryo");
+
+    ID3DXFont* pFont = NULL;
+    if (SUCCEEDED(D3DXCreateFontIndirectW(g_pd3dDevice, &fontDesc, &pFont)) && pFont)
+    {
+        pFont->DrawTextW(NULL, text, -1, &rc, DT_LEFT | DT_TOP | DT_NOCLIP, color);
+    }
+    SAFE_RELEASE(pFont);
+}
+
 static void UpdateProjectionMatrix()
 {
     D3DXMatrixPerspectiveFovLH(&g_mProj,
@@ -502,51 +526,55 @@ static void UpdateFrame()
 
 static void UpdateCamera(float deltaSeconds)
 {
-    if (!g_bAppActive || IsSettingsWindowVisible())
+    if (!IsMainWindowFocused())
     {
         SetMouseLookEnabled(false);
         return;
     }
 
-    SetMouseLookEnabled(true);
+    const bool canUseMouseLook = g_bMouseCaptureEnabled;
+    SetMouseLookEnabled(canUseMouseLook);
 
-    RECT clientRect = {};
-    GetClientRect(g_hMainWnd, &clientRect);
-
-    POINT center =
+    if (canUseMouseLook)
     {
-        (clientRect.left + clientRect.right) / 2,
-        (clientRect.top + clientRect.bottom) / 2
-    };
-    ClientToScreen(g_hMainWnd, &center);
+        RECT clientRect = {};
+        GetClientRect(g_hMainWnd, &clientRect);
 
-    POINT cursorPos = {};
-    GetCursorPos(&cursorPos);
-
-    if (!g_bMouseLookInitialized)
-    {
-        SetCursorPos(center.x, center.y);
-        g_bMouseLookInitialized = true;
-    }
-    else
-    {
-        LONG deltaX = cursorPos.x - center.x;
-        LONG deltaY = cursorPos.y - center.y;
-
-        g_cameraYaw += (float)deltaX * g_mouseSensitivity;
-        g_cameraPitch -= (float)deltaY * g_mouseSensitivity;
-
-        const float pitchLimit = D3DXToRadian(89.0f);
-        if (g_cameraPitch > pitchLimit)
+        POINT center =
         {
-            g_cameraPitch = pitchLimit;
-        }
-        if (g_cameraPitch < -pitchLimit)
-        {
-            g_cameraPitch = -pitchLimit;
-        }
+            (clientRect.left + clientRect.right) / 2,
+            (clientRect.top + clientRect.bottom) / 2
+        };
+        ClientToScreen(g_hMainWnd, &center);
 
-        SetCursorPos(center.x, center.y);
+        POINT cursorPos = {};
+        GetCursorPos(&cursorPos);
+
+        if (!g_bMouseLookInitialized)
+        {
+            SetCursorPos(center.x, center.y);
+            g_bMouseLookInitialized = true;
+        }
+        else
+        {
+            LONG deltaX = cursorPos.x - center.x;
+            LONG deltaY = cursorPos.y - center.y;
+
+            g_cameraYaw += (float)deltaX * g_mouseSensitivity;
+            g_cameraPitch -= (float)deltaY * g_mouseSensitivity;
+
+            const float pitchLimit = D3DXToRadian(89.0f);
+            if (g_cameraPitch > pitchLimit)
+            {
+                g_cameraPitch = pitchLimit;
+            }
+            if (g_cameraPitch < -pitchLimit)
+            {
+                g_cameraPitch = -pitchLimit;
+            }
+
+            SetCursorPos(center.x, center.y);
+        }
     }
 
     D3DXVECTOR3 forward = GetCameraForward();
@@ -802,6 +830,8 @@ void RenderPass2()
         g_pEffect2->End();
         g_pd3dDevice->EndScene();
 
+        DrawOverlayText(L"Press 1 to open SSAO settings / Esc to toggle mouse look", 16, 16, D3DCOLOR_ARGB(255, 255, 255, 255));
+
         SAFE_RELEASE(pBack);
     }
 
@@ -853,14 +883,14 @@ static void CreateSettingsWindow(HINSTANCE hInstance)
                                      WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
                                      CW_USEDEFAULT,
                                      CW_USEDEFAULT,
-                                     420,
                                      520,
+                                     700,
                                      g_hMainWnd,
                                      NULL,
                                      hInstance,
                                      NULL);
 
-    CreateLabel(g_hSettingsWnd, L"1キーで開閉 / ダイアログ表示中はマウス操作停止", 16, 12, 360, 20, 0);
+    CreateLabel(g_hSettingsWnd, L"1キーで開閉 / メイン画面にフォーカス中は移動可能", 16, 12, 460, 20, 0);
     CreateLabeledTrack(g_hSettingsWnd, L"AO Strength", 40, ID_TRACK_AO_STRENGTH, ID_VALUE_AO_STRENGTH, 0, 400);
     CreateLabeledTrack(g_hSettingsWnd, L"AO Radius", 90, ID_TRACK_AO_RADIUS, ID_VALUE_AO_RADIUS, 10, 800);
     CreateLabeledTrack(g_hSettingsWnd, L"Edge Reject", 140, ID_TRACK_AO_EDGE_Z, ID_VALUE_AO_EDGE_Z, 1, 500);
@@ -871,12 +901,14 @@ static void CreateSettingsWindow(HINSTANCE hInstance)
     CreateLabeledTrack(g_hSettingsWnd, L"Blur Radius", 390, ID_TRACK_BLUR_RADIUS, ID_VALUE_BLUR_RADIUS, 0, 16);
     CreateLabeledTrack(g_hSettingsWnd, L"Pos Range", 440, ID_TRACK_POS_RANGE, ID_VALUE_POS_RANGE, 4, 64);
 
+    CreateLabel(g_hSettingsWnd, L"Render Options", 16, 520, 180, 24, 0);
+
     CreateWindowW(L"BUTTON",
                   L"Base Texture",
                   WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                   16,
-                  470,
-                  110,
+                  552,
+                  130,
                   20,
                   g_hSettingsWnd,
                   (HMENU)(INT_PTR)ID_CHECK_USE_TEXTURE,
@@ -886,9 +918,9 @@ static void CreateSettingsWindow(HINSTANCE hInstance)
     CreateWindowW(L"BUTTON",
                   L"AO Blur",
                   WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-                  140,
-                  470,
-                  90,
+                  170,
+                  552,
+                  110,
                   20,
                   g_hSettingsWnd,
                   (HMENU)(INT_PTR)ID_CHECK_USE_BLUR,
@@ -898,9 +930,9 @@ static void CreateSettingsWindow(HINSTANCE hInstance)
     CreateWindowW(L"BUTTON",
                   L"Lambert",
                   WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-                  250,
-                  470,
-                  90,
+                  310,
+                  552,
+                  110,
                   20,
                   g_hSettingsWnd,
                   (HMENU)(INT_PTR)ID_CHECK_USE_LAMBERT,
@@ -1050,12 +1082,6 @@ LRESULT CALLBACK SettingsWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPar
             ToggleSettingsWindow();
             return 0;
         }
-        if (wParam == VK_ESCAPE)
-        {
-            ShowWindow(hWnd, SW_HIDE);
-            SetForegroundWindow(g_hMainWnd);
-            return 0;
-        }
         break;
 
     case WM_CLOSE:
@@ -1071,18 +1097,16 @@ LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     switch (msg)
     {
-    case WM_ACTIVATE:
-        g_bAppActive = (LOWORD(wParam) != WA_INACTIVE);
-        if (!g_bAppActive)
-        {
-            SetMouseLookEnabled(false);
-        }
-        return 0;
-
     case WM_KEYDOWN:
         if (wParam == '1')
         {
             ToggleSettingsWindow();
+            return 0;
+        }
+        if (wParam == VK_ESCAPE)
+        {
+            g_bMouseCaptureEnabled = !g_bMouseCaptureEnabled;
+            SetMouseLookEnabled(g_bMouseCaptureEnabled);
             return 0;
         }
         break;
