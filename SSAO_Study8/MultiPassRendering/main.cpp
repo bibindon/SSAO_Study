@@ -778,28 +778,26 @@ void RenderPass1()
     D3DXMatrixTranslation(&matWorld, 0.0f, sinf(t2) * 1.0f + 1.0f, 0.0f);
     DrawMeshInstance(g_pMeshObstacle, g_pTexObstacle, g_dwNumObstacleMaterials, matWorld, matView);
 
-    LPD3DXMESH pSmallMesh = (g_pMeshCubeSmall != NULL) ? g_pMeshCubeSmall : g_pMeshObstacle;
-    const std::vector<LPDIRECT3DTEXTURE9>& smallTex = (g_pMeshCubeSmall != NULL) ? g_pTexCubeSmall : g_pTexObstacle;
-    DWORD smallMatCount = (g_pMeshCubeSmall != NULL) ? g_dwNumCubeSmallMaterials : g_dwNumObstacleMaterials;
+    if (g_pMeshCubeSmall != NULL)
+    {
+        D3DXMatrixTranslation(&matWorld, 2.0f, 0.5f, 1.5f);
+        DrawMeshInstance(g_pMeshCubeSmall, g_pTexCubeSmall, g_dwNumCubeSmallMaterials, matWorld, matView);
 
-    D3DXMatrixTranslation(&matWorld, 2.0f, 0.5f, 1.5f);
-    DrawMeshInstance(pSmallMesh, smallTex, smallMatCount, matWorld, matView);
+        D3DXMatrixTranslation(&matWorld, -2.5f, 0.5f, 1.0f);
+        DrawMeshInstance(g_pMeshCubeSmall, g_pTexCubeSmall, g_dwNumCubeSmallMaterials, matWorld, matView);
 
-    D3DXMatrixTranslation(&matWorld, -2.5f, 0.5f, 1.0f);
-    DrawMeshInstance(pSmallMesh, smallTex, smallMatCount, matWorld, matView);
+        D3DXMatrixTranslation(&matWorld, 1.0f, 0.5f, 3.5f);
+        DrawMeshInstance(g_pMeshCubeSmall, g_pTexCubeSmall, g_dwNumCubeSmallMaterials, matWorld, matView);
+    }
 
-    D3DXMatrixTranslation(&matWorld, 1.0f, 0.5f, 3.5f);
-    DrawMeshInstance(pSmallMesh, smallTex, smallMatCount, matWorld, matView);
+    if (g_pMeshSphere != NULL)
+    {
+        D3DXMatrixTranslation(&matWorld, 3.5f, 0.3f, -2.0f);
+        DrawMeshInstance(g_pMeshSphere, g_pTexSphere, g_dwNumSphereMaterials, matWorld, matView);
 
-    LPD3DXMESH pSphereMesh = (g_pMeshSphere != NULL) ? g_pMeshSphere : g_pMeshObstacle;
-    const std::vector<LPDIRECT3DTEXTURE9>& sphereTex = (g_pMeshSphere != NULL) ? g_pTexSphere : g_pTexObstacle;
-    DWORD sphereMatCount = (g_pMeshSphere != NULL) ? g_dwNumSphereMaterials : g_dwNumObstacleMaterials;
-
-    D3DXMatrixTranslation(&matWorld, 3.5f, 0.3f, -2.0f);
-    DrawMeshInstance(pSphereMesh, sphereTex, sphereMatCount, matWorld, matView);
-
-    D3DXMatrixTranslation(&matWorld, -3.5f, 0.3f, -1.0f);
-    DrawMeshInstance(pSphereMesh, sphereTex, sphereMatCount, matWorld, matView);
+        D3DXMatrixTranslation(&matWorld, -3.5f, 0.3f, -1.0f);
+        DrawMeshInstance(g_pMeshSphere, g_pTexSphere, g_dwNumSphereMaterials, matWorld, matView);
+    }
 
     g_pEffect1->EndPass();
     g_pEffect1->End();

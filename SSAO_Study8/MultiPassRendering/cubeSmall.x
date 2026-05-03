@@ -1,4 +1,4 @@
-﻿xof 0303txt 0032
+xof 0303txt 0032
 
 Frame Root {
   FrameTransformMatrix {
@@ -104,7 +104,7 @@ Frame Root {
            96.078431;
            0.500000; 0.500000; 0.500000;;
            0.000000; 0.000000; 0.000000;;
-          TextureFilename {"grass2.png";}
+          TextureFilename {"grass.png";}
         }
       }
     }
