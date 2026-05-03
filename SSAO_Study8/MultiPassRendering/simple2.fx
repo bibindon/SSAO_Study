@@ -1,4 +1,3 @@
-
 float4x4 g_matView;
 float4x4 g_matProj;
 
@@ -10,17 +9,18 @@ float g_posRange;
 
 float g_aoStrength;
 float g_aoStepWorld;
-
 float g_edgeZ;
-
 float g_depthReject;
+float g_aoBias;
+float g_aoPower;
+int g_sampleCount;
+int g_blurRadius;
 
 float PI = 3.1415926535;
 
 texture texZ;
 texture texPos;
 texture texNormal;
-
 texture texAO;
 texture texColor;
 
@@ -76,13 +76,9 @@ sampler sampColor = sampler_state
 
 float3 DecodeNormalWS(float3 enc01)
 {
-    // 0..1 → -1..1 に戻して正規化
     return normalize(enc01 * 2.0f - 1.0f);
 }
 
-//-----------------------------------------------------------------
-// 頂点シェーダー
-//-----------------------------------------------------------------
 struct VS_OUT
 {
     float4 pos : POSITION;
@@ -98,135 +94,121 @@ VS_OUT VS_Fullscreen(float4 p : POSITION, float2 uv : TEXCOORD0)
 }
 
 float3 DecodeWorldPos(float3 enc);
-
 float2 PolygonToUV(float4 vClip);
-
-// Low-discrepancy hemisphere dir
 float3 RandomHemiDir(int in_);
+float Hash12(float2 p);
+float2 Rotate2D(float2 v, float angle);
 
-//-------------------------------------------------------------
-// Ambient Occlusion
-//-------------------------------------------------------------
 float4 PS_AO(VS_OUT in_) : COLOR0
 {
     in_.uv += g_invSize * 0.5f;
-    
-    // 中心の WS 位置と WS 法線を取得
-    float3 posWS_center = DecodeWorldPos(tex2D(sampPos,    in_.uv).rgb);
-    float3 nWS_center   = DecodeNormalWS( tex2D(sampNormal, in_.uv).rgb );
 
-    // 半球軸：WS 法線を View 空間へ
+    float3 posWS_center = DecodeWorldPos(tex2D(sampPos, in_.uv).rgb);
+    float3 nWS_center = DecodeNormalWS(tex2D(sampNormal, in_.uv).rgb);
+    float zCenterInUV = tex2D(sampZ, in_.uv).a;
+
     float3 vHemisphereAxisVS = normalize(mul(float4(nWS_center, 0), g_matView).xyz);
-
-    // 原点：中心位置を View 空間へ
     float3 vOriginVS = mul(float4(posWS_center, 1.0f), g_matView).xyz;
 
-    // ===== 以下は従来のまま（TBN を作り、半球内でサンプルして可視判定） =====
-    float3 vUp = float3(0, 0, 0);
-    if (abs(vHemisphereAxisVS.z) < 0.999f)
-    {
-        vUp.z = 1.f;
-    }
-
-    if (vUp.z == 0.f)
-    {
-        vUp.y = 1.f;
-    }
-
+    float3 vUp = (abs(vHemisphereAxisVS.z) < 0.999f) ? float3(0, 0, 1) : float3(0, 1, 0);
     float3 vTangentVS = normalize(cross(vUp, vHemisphereAxisVS));
     float3 vBinormalVS = cross(vHemisphereAxisVS, vTangentVS);
 
-    int occlusionNum = 0;
-    const int kSamples = 64;
+    float randomAngle = Hash12(in_.uv * float2(983.0f, 613.0f)) * (PI * 2.0f);
+
+    float occlusionNum = 0.0f;
+    const int kMaxSamples = 64;
 
     [unroll]
-    for (int i = 0; i < kSamples; ++i)
+    for (int i = 0; i < kMaxSamples; ++i)
     {
-        float3 vRandomDir = RandomHemiDir(i);
-        float3 vRandomDirVS = normalize(vTangentVS * vRandomDir.x +
-                                    vBinormalVS * vRandomDir.y +
-                                    vHemisphereAxisVS * vRandomDir.z);
+        if (i >= g_sampleCount)
+        {
+            continue;
+        }
 
-        float fNormalizedIndex = ((float) i + 0.5f) / (float) kSamples;
-        float fRadius = g_aoStepWorld * (fNormalizedIndex * fNormalizedIndex);
+        float3 vRandomDir = RandomHemiDir(i);
+        vRandomDir.xy = Rotate2D(vRandomDir.xy, randomAngle);
+
+        float3 vRandomDirVS = normalize(vTangentVS * vRandomDir.x +
+                                        vBinormalVS * vRandomDir.y +
+                                        vHemisphereAxisVS * vRandomDir.z);
+
+        float fNormalizedIndex = ((float)i + 0.5f) / (float)max(g_sampleCount, 1);
+        float fRadius = g_aoStepWorld * lerp(0.15f, 1.0f, fNormalizedIndex * fNormalizedIndex);
 
         float3 vSamplePosVS = vOriginVS + vRandomDirVS * fRadius;
-
         float4 vClip = mul(float4(vSamplePosVS, 1.0f), g_matProj);
         if (vClip.w <= 0.0f)
+        {
             continue;
+        }
 
         float2 sampleUV = PolygonToUV(vClip);
-
-        if (sampleUV.x < 0.0f || sampleUV.x > 1.0f ||
-            sampleUV.y < 0.0f || sampleUV.y > 1.0f)
+        if (sampleUV.x < 0.0f || sampleUV.x > 1.0f || sampleUV.y < 0.0f || sampleUV.y > 1.0f)
         {
             continue;
         }
 
-        float Z_SampleInUV = tex2D(sampZ, sampleUV).a;
-        float Z_CenterInUV = tex2D(sampZ, in_.uv).a;
-
-        if (abs(Z_SampleInUV - Z_CenterInUV) > g_edgeZ)
+        float zSampleInUV = tex2D(sampZ, sampleUV).a;
+        if (abs(zSampleInUV - zCenterInUV) > g_edgeZ)
         {
             continue;
         }
 
-        float Z_SampleInRay = saturate((vSamplePosVS.z - g_fNear) / (g_fFar - g_fNear));
-
-        float fOcclusionMin = 0.0001f * (g_posRange / 8);
-        if (Z_SampleInRay - Z_SampleInUV > fOcclusionMin)
+        float zSampleInRay = saturate((vSamplePosVS.z - g_fNear) / (g_fFar - g_fNear));
+        if ((zSampleInRay - zSampleInUV) > g_aoBias)
         {
-            occlusionNum++;
+            occlusionNum += 1.0f;
         }
     }
 
-    float fOcclusionRate = (float) occlusionNum / (float) kSamples;
-    float fBrightness = 1.0f - g_aoStrength * fOcclusionRate;
+    float fOcclusionRate = occlusionNum / (float)max(g_sampleCount, 1);
+    float fBrightness = pow(saturate(1.0f - g_aoStrength * fOcclusionRate), g_aoPower);
 
-    return float4(saturate(fBrightness).xxx, 1.0f);
+    return float4(fBrightness.xxx, 1.0f);
 }
 
-//--------------------------------------------------------------
-// Blur H
-//--------------------------------------------------------------
 float4 PS_BlurH(VS_OUT in_) : COLOR0
 {
     in_.uv += g_invSize * 0.5f;
 
-    // 奇数であること
-    const int WIDTH = 51;
-
     float centerZ = tex2D(sampZ, in_.uv).a;
     float centerAO = tex2D(sampAO, in_.uv).r;
-
     float2 stepUV = float2(g_invSize.x, 0.0f);
+    float sigma = max(1.0f, (float)g_blurRadius * 0.5f);
 
     float sumAO = centerAO;
     float sumW = 1.0f;
 
+    const int kMaxBlurRadius = 16;
     [unroll]
-    for (int i = 1; i < (WIDTH / 2); ++i)
+    for (int i = 1; i <= kMaxBlurRadius; ++i)
     {
+        if (i > g_blurRadius)
+        {
+            continue;
+        }
+
         float2 uvL = in_.uv - stepUV * i;
         float2 uvR = in_.uv + stepUV * i;
+        float weight = exp(-0.5f * ((float)(i * i)) / (sigma * sigma));
 
         float fZLeft = tex2D(sampZ, uvL).a;
         float fZRight = tex2D(sampZ, uvR).a;
 
-        // Z値が大きく異なる場所の陰はブラーに使わない
         if (abs(fZLeft - centerZ) <= g_depthReject)
         {
             float aoL = tex2D(sampAO, uvL).r;
-            sumAO += aoL * WIDTH;
-            sumW += WIDTH;
+            sumAO += aoL * weight;
+            sumW += weight;
         }
 
         if (abs(fZRight - centerZ) <= g_depthReject)
         {
             float aoR = tex2D(sampAO, uvR).r;
-            sumAO += aoR * WIDTH;
-            sumW += WIDTH;
+            sumAO += aoR * weight;
+            sumW += weight;
         }
     }
 
@@ -234,29 +216,30 @@ float4 PS_BlurH(VS_OUT in_) : COLOR0
     return float4(ao, ao, ao, 1.0f);
 }
 
-//--------------------------------------------------------------
-// Blur V
-//--------------------------------------------------------------
 float4 PS_BlurV(VS_OUT in_) : COLOR0
 {
     in_.uv += g_invSize * 0.5f;
 
-    // 奇数であること
-    const int WIDTH = 51;
-
     float centerZ = tex2D(sampZ, in_.uv).a;
     float centerAO = tex2D(sampAO, in_.uv).r;
-
     float2 stepUV = float2(0.0f, g_invSize.y);
+    float sigma = max(1.0f, (float)g_blurRadius * 0.5f);
 
     float sumAO = centerAO;
     float sumW = 1.0f;
 
+    const int kMaxBlurRadius = 16;
     [unroll]
-    for (int i = 1; i < (WIDTH / 2); ++i)
+    for (int i = 1; i <= kMaxBlurRadius; ++i)
     {
+        if (i > g_blurRadius)
+        {
+            continue;
+        }
+
         float2 uvD = in_.uv + stepUV * i;
         float2 uvU = in_.uv - stepUV * i;
+        float weight = exp(-0.5f * ((float)(i * i)) / (sigma * sigma));
 
         float fZDown = tex2D(sampZ, uvD).a;
         float fZUp = tex2D(sampZ, uvU).a;
@@ -264,15 +247,15 @@ float4 PS_BlurV(VS_OUT in_) : COLOR0
         if (abs(fZDown - centerZ) <= g_depthReject)
         {
             float aoD = tex2D(sampAO, uvD).r;
-            sumAO += aoD * WIDTH;
-            sumW += WIDTH;
+            sumAO += aoD * weight;
+            sumW += weight;
         }
 
         if (abs(fZUp - centerZ) <= g_depthReject)
         {
             float aoU = tex2D(sampAO, uvU).r;
-            sumAO += aoU * WIDTH;
-            sumW += WIDTH;
+            sumAO += aoU * weight;
+            sumW += weight;
         }
     }
 
@@ -280,62 +263,53 @@ float4 PS_BlurV(VS_OUT in_) : COLOR0
     return float4(ao, ao, ao, 1.0f);
 }
 
-//--------------------------------------------------------------
-// Composite
-//--------------------------------------------------------------
 float4 PS_Composite(VS_OUT in_) : COLOR0
 {
-    float2 uv2 = in_.uv;
-    float2 uv3 = in_.uv;
-
-    float3 col = tex2D(sampColor, uv3).rgb;
-
-    float ao = tex2D(sampAO, uv2).r;
-
+    float3 col = tex2D(sampColor, in_.uv).rgb;
+    float ao = tex2D(sampAO, in_.uv).r;
     return float4(col * ao, 1.0f);
 }
 
-//--------------------------------------------------------------
-// Other functions
-//--------------------------------------------------------------
 float3 DecodeWorldPos(float3 enc)
 {
     return (enc * 2.0f - 1.0f) * g_posRange;
 }
 
-// ランダムな方向を返す。ただし半球状
 float3 RandomHemiDir(int index)
 {
-    // 準乱数（0..1）
-    // frac関数は小数部分を返す
     float randomU1 = frac(0.754877666f * (index + 0.5f));
     float randomU2 = frac(0.569840296f * (index + 0.5f));
 
-    float angle  = randomU1 * PI * 2;
-
-    // z 成分
-    // sin2乗 + cos2乗 = 1、というのがある。
-    // 変形すると以下のようになる
-    // sin = ルート(1 - cos2乗)
-    float cosTheta  = randomU2;
-    float sinTheta  = sqrt(1.0f - cosTheta * cosTheta);
+    float angle = randomU1 * PI * 2.0f;
+    float cosTheta = randomU2;
+    float sinTheta = sqrt(1.0f - cosTheta * cosTheta);
 
     float3 directionLocal;
     directionLocal.x = cos(angle) * sinTheta;
     directionLocal.y = sin(angle) * sinTheta;
-    directionLocal.z = cosTheta;               // +Z 半球
-    return directionLocal;                     // 既に単位長
+    directionLocal.z = cosTheta;
+    return directionLocal;
 }
 
-// -1 ~ +1を0 ~ 1にする
+float Hash12(float2 p)
+{
+    float h = dot(p, float2(127.1f, 311.7f));
+    return frac(sin(h) * 43758.5453f);
+}
+
+float2 Rotate2D(float2 v, float angle)
+{
+    float s = sin(angle);
+    float c = cos(angle);
+    return float2(c * v.x - s * v.y, s * v.x + c * v.y);
+}
+
 float2 PolygonToUV(float4 vClip)
 {
-    float2 Polygon = vClip.xy / vClip.w;
+    float2 polygon = vClip.xy / vClip.w;
     float2 uv;
-
-    uv.x = Polygon.x * 0.5f + 0.5f;
-    uv.y = -Polygon.y * 0.5f + 0.5f;
-
+    uv.x = polygon.x * 0.5f + 0.5f;
+    uv.y = -polygon.y * 0.5f + 0.5f;
     return uv;
 }
 
@@ -378,4 +352,3 @@ technique TechniqueAO_Composite
         PixelShader = compile ps_3_0 PS_Composite();
     }
 }
-
