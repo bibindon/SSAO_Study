@@ -686,8 +686,8 @@ static void UpdateCamera(float deltaSeconds)
     if (GetAsyncKeyState('S') & 0x8000) { move -= forward; }
     if (GetAsyncKeyState('D') & 0x8000) { move += right; }
     if (GetAsyncKeyState('A') & 0x8000) { move -= right; }
-    if (GetAsyncKeyState(VK_SPACE) & 0x8000) { move.y += 1.0f; }
-    if (GetAsyncKeyState(VK_CONTROL) & 0x8000) { move.y -= 1.0f; }
+    if (GetAsyncKeyState('E') & 0x8000) { move.y += 1.0f; }
+    if (GetAsyncKeyState('Q') & 0x8000) { move.y -= 1.0f; }
 
     if (D3DXVec3LengthSq(&move) > 0.0f)
     {
@@ -792,10 +792,10 @@ void RenderPass1()
 
     if (g_pMeshSphere != NULL)
     {
-        D3DXMatrixTranslation(&matWorld, 3.5f, 0.3f, -2.0f);
+        D3DXMatrixTranslation(&matWorld, 5.5f, 0.3f, -3.0f);
         DrawMeshInstance(g_pMeshSphere, g_pTexSphere, g_dwNumSphereMaterials, matWorld, matView);
 
-        D3DXMatrixTranslation(&matWorld, -3.5f, 0.3f, -1.0f);
+        D3DXMatrixTranslation(&matWorld, -5.5f, 0.3f, -2.0f);
         DrawMeshInstance(g_pMeshSphere, g_pTexSphere, g_dwNumSphereMaterials, matWorld, matView);
     }
 
