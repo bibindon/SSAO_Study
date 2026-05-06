@@ -7,6 +7,7 @@
 
 #include <d3d9.h>
 #include <d3dx9.h>
+#include <commdlg.h>
 #include <string>
 #include <tchar.h>
 #include <cassert>
@@ -27,6 +28,7 @@ namespace
     constexpr int kCubeGridWidth = 11;
     constexpr int kCubeGridDepth = 11;
     constexpr float kCubeSpacing = 1.2f;
+    constexpr int kToolDialogButtonId = 1001;
 }
 
 LPDIRECT3D9 g_pD3D = NULL;
@@ -35,6 +37,7 @@ LPD3DXFONT g_pFont = NULL;
 LPD3DXMESH g_pMesh = NULL;
 LPD3DXMESH g_pLargeCubeMesh = NULL;
 LPD3DXMESH g_pPlateMesh = NULL;
+LPD3DXMESH g_pUserMesh = NULL;
 
 std::vector<D3DMATERIAL9> g_pMaterials;
 std::vector<LPDIRECT3DTEXTURE9> g_pTextures;
@@ -45,7 +48,10 @@ DWORD g_dwLargeCubeNumMaterials = 0;
 std::vector<D3DMATERIAL9> g_pPlateMaterials;
 std::vector<LPDIRECT3DTEXTURE9> g_pPlateTextures;
 DWORD g_dwPlateNumMaterials = 0;
-std::map<std::string, LPDIRECT3DTEXTURE9> g_textureCache;
+std::vector<D3DMATERIAL9> g_pUserMeshMaterials;
+std::vector<LPDIRECT3DTEXTURE9> g_pUserMeshTextures;
+DWORD g_dwUserMeshNumMaterials = 0;
+std::map<std::wstring, LPDIRECT3DTEXTURE9> g_textureCache;
 LPD3DXEFFECT g_pEffect1 = NULL;
 LPD3DXEFFECT g_pEffect2 = NULL;
 
@@ -65,11 +71,14 @@ bool g_bShowDebugSprite = false;
 bool g_bPrevToggleKeyDown = false;
 bool g_bPrevCursorToggleKeyDown = false;
 bool g_bPrevLambertToggleKeyDown = false;
+bool g_bPrevDialogToggleKeyDown = false;
 bool g_bMouseCursorVisible = false;
 bool g_bUseLambertLighting = true;
 float g_cameraYaw = -D3DX_PI * 0.25f;
 float g_cameraPitch = -0.34f;
 D3DXVECTOR3 g_cameraPosition(2.0f, 1.0f, -3.0f);
+HWND g_hToolDialog = NULL;
+HWND g_hOpenMeshButton = NULL;
 
 struct QuadVertex
 {
@@ -86,7 +95,16 @@ static void LoadMeshWithTextures(const TCHAR* meshPath,
                                  std::vector<D3DMATERIAL9>& materials,
                                  std::vector<LPDIRECT3DTEXTURE9>& textures,
                                  DWORD* pNumMaterials);
-static LPDIRECT3DTEXTURE9 LoadTextureCached(const std::string& texturePath);
+static std::wstring GetDirectoryFromPath(const std::wstring& path);
+static std::wstring ResolveTexturePath(const std::wstring& meshPath, const char* textureFilename);
+static LPDIRECT3DTEXTURE9 LoadTextureCached(const std::wstring& texturePath);
+static void ReleaseMeshOnly(LPD3DXMESH* ppMesh,
+                            std::vector<D3DMATERIAL9>& materials,
+                            std::vector<LPDIRECT3DTEXTURE9>& textures,
+                            DWORD* pNumMaterials);
+static void CreateToolDialog();
+static void ToggleToolDialog();
+static void OpenMeshFileDialog();
 static void SetMouseCursorVisible(bool visible);
 static void UpdateInputAndCamera();
 static void DrawOverlayText();
@@ -95,6 +113,7 @@ static void RenderPass2();
 static void DrawFullscreenQuad();
 
 LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 extern int WINAPI _tWinMain(_In_ HINSTANCE hInstance,
                             _In_opt_ HINSTANCE hPrevInstance,
@@ -321,6 +340,7 @@ void Cleanup()
     SAFE_RELEASE(g_pMesh);
     SAFE_RELEASE(g_pLargeCubeMesh);
     SAFE_RELEASE(g_pPlateMesh);
+    SAFE_RELEASE(g_pUserMesh);
     SAFE_RELEASE(g_pEffect1);
     SAFE_RELEASE(g_pEffect2);
     SAFE_RELEASE(g_pFont);
@@ -330,6 +350,11 @@ void Cleanup()
     SAFE_RELEASE(g_pRenderTarget2);
     SAFE_RELEASE(g_pQuadDecl);
     SAFE_RELEASE(g_pSprite);
+    if (g_hToolDialog)
+    {
+        DestroyWindow(g_hToolDialog);
+        g_hToolDialog = NULL;
+    }
 
     SAFE_RELEASE(g_pd3dDevice);
     SAFE_RELEASE(g_pD3D);
@@ -343,6 +368,7 @@ void LoadMeshWithTextures(const TCHAR* meshPath,
 {
     HRESULT hResult = E_FAIL;
     LPD3DXBUFFER pD3DXMtrlBuffer = NULL;
+    std::wstring meshPathW(meshPath);
 
     hResult = D3DXLoadMeshFromX(meshPath,
                                 D3DXMESH_SYSTEMMEM,
@@ -364,10 +390,10 @@ void LoadMeshWithTextures(const TCHAR* meshPath,
         materials[i].Ambient = materials[i].Diffuse;
         textures[i] = NULL;
 
-        std::string pTexPath(d3dxMaterials[i].pTextureFilename ? d3dxMaterials[i].pTextureFilename : "");
-        if (!pTexPath.empty())
+        std::wstring texturePath = ResolveTexturePath(meshPathW, d3dxMaterials[i].pTextureFilename);
+        if (!texturePath.empty())
         {
-            textures[i] = LoadTextureCached(pTexPath);
+            textures[i] = LoadTextureCached(texturePath);
             assert(textures[i] != NULL);
         }
     }
@@ -376,7 +402,38 @@ void LoadMeshWithTextures(const TCHAR* meshPath,
     assert(hResult == S_OK);
 }
 
-LPDIRECT3DTEXTURE9 LoadTextureCached(const std::string& texturePath)
+std::wstring GetDirectoryFromPath(const std::wstring& path)
+{
+    const size_t pos = path.find_last_of(L"\\/");
+    if (pos == std::wstring::npos)
+    {
+        return L"";
+    }
+    return path.substr(0, pos + 1);
+}
+
+std::wstring ResolveTexturePath(const std::wstring& meshPath, const char* textureFilename)
+{
+    if (!textureFilename || !textureFilename[0])
+    {
+        return L"";
+    }
+
+    const int len = MultiByteToWideChar(CP_ACP, 0, textureFilename, -1, nullptr, 0);
+    std::wstring texturePath(static_cast<size_t>(len - 1), L'\0');
+    MultiByteToWideChar(CP_ACP, 0, textureFilename, -1, &texturePath[0], len);
+
+    const bool isAbsolute = (texturePath.size() >= 2 && texturePath[1] == L':') ||
+                            (texturePath.size() >= 2 && texturePath[0] == L'\\' && texturePath[1] == L'\\');
+    if (isAbsolute)
+    {
+        return texturePath;
+    }
+
+    return GetDirectoryFromPath(meshPath) + texturePath;
+}
+
+LPDIRECT3DTEXTURE9 LoadTextureCached(const std::wstring& texturePath)
 {
     auto it = g_textureCache.find(texturePath);
     if (it != g_textureCache.end())
@@ -386,28 +443,100 @@ LPDIRECT3DTEXTURE9 LoadTextureCached(const std::string& texturePath)
 
     HRESULT hResult = E_FAIL;
     LPDIRECT3DTEXTURE9 pTexture = NULL;
-
-    bool bUnicode = false;
-#ifdef UNICODE
-    bUnicode = true;
-#endif
-    if (!bUnicode)
-    {
-        hResult = D3DXCreateTextureFromFileA(g_pd3dDevice, texturePath.c_str(), &pTexture);
-        assert(hResult == S_OK);
-    }
-    else
-    {
-        int len = MultiByteToWideChar(CP_ACP, 0, texturePath.c_str(), -1, nullptr, 0);
-        std::wstring texturePathW(len, 0);
-        MultiByteToWideChar(CP_ACP, 0, texturePath.c_str(), -1, &texturePathW[0], len);
-
-        hResult = D3DXCreateTextureFromFileW(g_pd3dDevice, texturePathW.c_str(), &pTexture);
-        assert(hResult == S_OK);
-    }
+    hResult = D3DXCreateTextureFromFileW(g_pd3dDevice, texturePath.c_str(), &pTexture);
+    assert(hResult == S_OK);
 
     g_textureCache[texturePath] = pTexture;
     return pTexture;
+}
+
+void ReleaseMeshOnly(LPD3DXMESH* ppMesh,
+                     std::vector<D3DMATERIAL9>& materials,
+                     std::vector<LPDIRECT3DTEXTURE9>& textures,
+                     DWORD* pNumMaterials)
+{
+    SAFE_RELEASE(*ppMesh);
+    materials.clear();
+    textures.clear();
+    *pNumMaterials = 0;
+}
+
+void CreateToolDialog()
+{
+    if (g_hToolDialog)
+    {
+        return;
+    }
+
+    WNDCLASS wc = { };
+    wc.lpfnWndProc = ToolDialogProc;
+    wc.hInstance = GetModuleHandle(NULL);
+    wc.lpszClassName = _T("MeshToolDialogClass");
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+    RegisterClass(&wc);
+
+    g_hToolDialog = CreateWindowEx(WS_EX_TOOLWINDOW,
+                                   wc.lpszClassName,
+                                   _T("Mesh Loader"),
+                                   WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+                                   CW_USEDEFAULT,
+                                   CW_USEDEFAULT,
+                                   260,
+                                   120,
+                                   g_hWnd,
+                                   NULL,
+                                   wc.hInstance,
+                                   NULL);
+    assert(g_hToolDialog != NULL);
+
+    g_hOpenMeshButton = CreateWindow(_T("BUTTON"),
+                                     _T("Open X File"),
+                                     WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                     20,
+                                     20,
+                                     200,
+                                     32,
+                                     g_hToolDialog,
+                                     reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogButtonId)),
+                                     wc.hInstance,
+                                     NULL);
+    assert(g_hOpenMeshButton != NULL);
+}
+
+void ToggleToolDialog()
+{
+    CreateToolDialog();
+
+    const bool showDialog = !IsWindowVisible(g_hToolDialog);
+    ShowWindow(g_hToolDialog, showDialog ? SW_SHOW : SW_HIDE);
+    if (showDialog)
+    {
+        SetMouseCursorVisible(true);
+        SetForegroundWindow(g_hToolDialog);
+    }
+}
+
+void OpenMeshFileDialog()
+{
+    OPENFILENAME ofn = { };
+    TCHAR filePath[MAX_PATH] = { };
+
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = g_hToolDialog ? g_hToolDialog : g_hWnd;
+    ofn.lpstrFilter = _T("X Files (*.x)\0*.x\0All Files (*.*)\0*.*\0");
+    ofn.lpstrFile = filePath;
+    ofn.nMaxFile = _countof(filePath);
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+    ofn.lpstrTitle = _T("Open X File");
+
+    if (!GetOpenFileName(&ofn))
+    {
+        return;
+    }
+
+    ReleaseMeshOnly(&g_pUserMesh, g_pUserMeshMaterials, g_pUserMeshTextures, &g_dwUserMeshNumMaterials);
+    LoadMeshWithTextures(filePath, &g_pUserMesh, g_pUserMeshMaterials, g_pUserMeshTextures, &g_dwUserMeshNumMaterials);
 }
 
 void SetMouseCursorVisible(bool visible)
@@ -440,6 +569,7 @@ void UpdateInputAndCamera()
     const bool toggleKeyDown = (GetAsyncKeyState('1') & 0x8000) != 0;
     const bool cursorToggleKeyDown = (GetAsyncKeyState('2') & 0x8000) != 0;
     const bool lambertToggleKeyDown = (GetAsyncKeyState('3') & 0x8000) != 0;
+    const bool dialogToggleKeyDown = (GetAsyncKeyState('4') & 0x8000) != 0;
 
     if (toggleKeyDown && !g_bPrevToggleKeyDown)
     {
@@ -458,6 +588,12 @@ void UpdateInputAndCamera()
         g_bUseLambertLighting = !g_bUseLambertLighting;
     }
     g_bPrevLambertToggleKeyDown = lambertToggleKeyDown;
+
+    if (dialogToggleKeyDown && !g_bPrevDialogToggleKeyDown)
+    {
+        ToggleToolDialog();
+    }
+    g_bPrevDialogToggleKeyDown = dialogToggleKeyDown;
 
     if (!isWindowActive)
     {
@@ -529,6 +665,7 @@ void DrawOverlayText()
         _T("1: toggle debug sprite"),
         _T("2: toggle mouse cursor"),
         _T("3: toggle lambert lighting"),
+        _T("4: toggle mesh dialog"),
     };
 
     for (int i = 0; i < _countof(lines); ++i)
@@ -613,6 +750,21 @@ void RenderPass1()
         hResult = g_pEffect1->SetTexture("texture1", g_pPlateTextures[i]); assert(hResult == S_OK);
         hResult = g_pEffect1->CommitChanges();                              assert(hResult == S_OK);
         hResult = g_pPlateMesh->DrawSubset(i);                              assert(hResult == S_OK);
+    }
+
+    if (g_pUserMesh)
+    {
+        D3DXMATRIX userMeshWorld;
+        D3DXMATRIX userMeshWorldViewProj;
+        D3DXMatrixTranslation(&userMeshWorld, 0.0f, 0.0f, 0.0f);
+        userMeshWorldViewProj = userMeshWorld * View * Proj;
+        hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &userMeshWorldViewProj); assert(hResult == S_OK);
+        for (DWORD i = 0; i < g_dwUserMeshNumMaterials; i++)
+        {
+            hResult = g_pEffect1->SetTexture("texture1", g_pUserMeshTextures[i]); assert(hResult == S_OK);
+            hResult = g_pEffect1->CommitChanges();                                 assert(hResult == S_OK);
+            hResult = g_pUserMesh->DrawSubset(i);                                  assert(hResult == S_OK);
+        }
     }
 
     for (int z = 0; z < kCubeGridDepth; ++z)
@@ -739,5 +891,28 @@ LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         return 0;
     }
     }
+    return DefWindowProc(hWnd, msg, wParam, lParam);
+}
+
+LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    switch (msg)
+    {
+    case WM_COMMAND:
+    {
+        if (LOWORD(wParam) == kToolDialogButtonId)
+        {
+            OpenMeshFileDialog();
+            return 0;
+        }
+        break;
+    }
+    case WM_CLOSE:
+    {
+        ShowWindow(hWnd, SW_HIDE);
+        return 0;
+    }
+    }
+
     return DefWindowProc(hWnd, msg, wParam, lParam);
 }
