@@ -33,6 +33,7 @@ LPDIRECT3DDEVICE9 g_pd3dDevice = NULL;
 LPD3DXFONT g_pFont = NULL;
 LPD3DXMESH g_pMesh = NULL;
 LPD3DXMESH g_pLargeCubeMesh = NULL;
+LPD3DXMESH g_pPlateMesh = NULL;
 
 std::vector<D3DMATERIAL9> g_pMaterials;
 std::vector<LPDIRECT3DTEXTURE9> g_pTextures;
@@ -40,6 +41,9 @@ DWORD g_dwNumMaterials = 0;
 std::vector<D3DMATERIAL9> g_pLargeCubeMaterials;
 std::vector<LPDIRECT3DTEXTURE9> g_pLargeCubeTextures;
 DWORD g_dwLargeCubeNumMaterials = 0;
+std::vector<D3DMATERIAL9> g_pPlateMaterials;
+std::vector<LPDIRECT3DTEXTURE9> g_pPlateTextures;
+DWORD g_dwPlateNumMaterials = 0;
 LPD3DXEFFECT g_pEffect1 = NULL;
 LPD3DXEFFECT g_pEffect2 = NULL;
 
@@ -63,7 +67,7 @@ bool g_bMouseCursorVisible = false;
 bool g_bUseLambertLighting = true;
 float g_cameraYaw = -D3DX_PI * 0.25f;
 float g_cameraPitch = -0.34f;
-D3DXVECTOR3 g_cameraPosition(10.0f, 5.0f, -10.0f);
+D3DXVECTOR3 g_cameraPosition(2.0f, 1.0f, -3.0f);
 
 struct QuadVertex
 {
@@ -244,6 +248,7 @@ void InitD3D(HWND hWnd)
 
     LoadMeshWithTextures(_T("small_cube.x"), &g_pMesh, g_pMaterials, g_pTextures, &g_dwNumMaterials);
     LoadMeshWithTextures(_T("large_cube_inside.x"), &g_pLargeCubeMesh, g_pLargeCubeMaterials, g_pLargeCubeTextures, &g_dwLargeCubeNumMaterials);
+    LoadMeshWithTextures(_T("plate.x"), &g_pPlateMesh, g_pPlateMaterials, g_pPlateTextures, &g_dwPlateNumMaterials);
 
     hResult = D3DXCreateEffectFromFile(g_pd3dDevice,
                                        _T("simple.fx"),
@@ -312,9 +317,14 @@ void Cleanup()
     {
         SAFE_RELEASE(texture);
     }
+    for (auto& texture : g_pPlateTextures)
+    {
+        SAFE_RELEASE(texture);
+    }
 
     SAFE_RELEASE(g_pMesh);
     SAFE_RELEASE(g_pLargeCubeMesh);
+    SAFE_RELEASE(g_pPlateMesh);
     SAFE_RELEASE(g_pEffect1);
     SAFE_RELEASE(g_pEffect2);
     SAFE_RELEASE(g_pFont);
@@ -577,6 +587,18 @@ void RenderPass1()
         hResult = g_pEffect1->SetTexture("texture1", g_pLargeCubeTextures[i]); assert(hResult == S_OK);
         hResult = g_pEffect1->CommitChanges();                                  assert(hResult == S_OK);
         hResult = g_pLargeCubeMesh->DrawSubset(i);                              assert(hResult == S_OK);
+    }
+
+    D3DXMATRIX plateWorld;
+    D3DXMATRIX plateWorldViewProj;
+    D3DXMatrixTranslation(&plateWorld, 0.0f, 0.0f, 0.0f);
+    plateWorldViewProj = plateWorld * View * Proj;
+    hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &plateWorldViewProj); assert(hResult == S_OK);
+    for (DWORD i = 0; i < g_dwPlateNumMaterials; i++)
+    {
+        hResult = g_pEffect1->SetTexture("texture1", g_pPlateTextures[i]); assert(hResult == S_OK);
+        hResult = g_pEffect1->CommitChanges();                              assert(hResult == S_OK);
+        hResult = g_pPlateMesh->DrawSubset(i);                              assert(hResult == S_OK);
     }
 
     for (int z = 0; z < kCubeGridDepth; ++z)
