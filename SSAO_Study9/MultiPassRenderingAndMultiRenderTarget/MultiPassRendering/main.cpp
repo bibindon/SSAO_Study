@@ -21,7 +21,7 @@ namespace
     constexpr int kRenderWidth = 1600;
     constexpr int kRenderHeight = 900;
     constexpr float kCameraMoveSpeed = 6.0f;
-    constexpr float kMouseSensitivity = 0.0018f;
+    constexpr float kMouseSensitivity = 0.0009f;
     constexpr float kMaxPitch = D3DX_PI * 0.45f;
 }
 
@@ -50,11 +50,11 @@ LPDIRECT3DVERTEXDECLARATION9 g_pQuadDecl = NULL;
 // 追加: スプライト
 LPD3DXSPRITE g_pSprite = NULL;
 HWND g_hWnd = NULL;
-bool g_bShowDebugSprite = true;
+bool g_bShowDebugSprite = false;
 bool g_bPrevToggleKeyDown = false;
 bool g_bPrevCursorToggleKeyDown = false;
 bool g_bMouseLookInitialized = false;
-bool g_bMouseCursorVisible = true;
+bool g_bMouseCursorVisible = false;
 POINT g_lastMouseClientPos = { 0, 0 };
 float g_cameraYaw = -D3DX_PI * 0.25f;
 float g_cameraPitch = -0.34f;
@@ -342,6 +342,10 @@ void InitD3D(HWND hWnd)
     // スプライト
     hResult = D3DXCreateSprite(g_pd3dDevice, &g_pSprite);
     assert(hResult == S_OK);
+
+    while (ShowCursor(FALSE) >= 0)
+    {
+    }
 }
 
 void Cleanup()
