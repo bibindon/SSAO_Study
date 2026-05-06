@@ -29,7 +29,9 @@ void PixelShader1(in float4 inPosition    : POSITION,
                   out float4 outColor     : COLOR)
 {
     float4 workColor = (float4)0;
-    workColor = tex2D(textureSampler, inTexCood);
+    float2 halfPixelOffset = 0.5f / g_screenSize;
+    float2 shiftedTexCoord = inTexCood + halfPixelOffset;
+    workColor = tex2D(textureSampler, shiftedTexCoord);
 
     //float average = (workColor.r + workColor.g + workColor.b) / 3;
     float average = workColor.r * 0.2 + workColor.g * 0.7 + workColor.b * 0.1;
@@ -52,7 +54,7 @@ void PixelShader1(in float4 inPosition    : POSITION,
 
     if (false)
     {
-        float2 pixelCoord = inTexCood * g_screenSize;
+        float2 pixelCoord = shiftedTexCoord * g_screenSize;
         float lineX = 1.0f - step(1.0f, fmod(pixelCoord.x, 5.0f));
         float lineY = 1.0f - step(1.0f, fmod(pixelCoord.y, 5.0f));
         float lineMask = saturate(lineX + lineY);
