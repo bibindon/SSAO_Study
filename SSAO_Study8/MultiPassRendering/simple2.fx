@@ -158,10 +158,12 @@ float4 PS_AO(VS_OUT in_) : COLOR0
         }
 
         float zSampleInUV = tex2D(sampZ, sampleUV).a;
+        /*
         if (abs(zSampleInUV - zCenterInUV) > g_edgeZ)
         {
             continue;
         }
+*/
 
         float zSampleInRay = saturate((vSamplePosVS.z - g_fNear) / (g_fFar - g_fNear));
         if ((zSampleInRay - zSampleInUV) > g_aoBias)
