@@ -1,5 +1,5 @@
 float4x4 g_matWorldViewProj;
-float4 g_lightNormal = { 0.3f, 1.0f, 0.5f, 0.0f };
+float4 g_lightNormal = { -0.3f, -1.0f, -0.5f, 0.0f };
 float3 g_ambient = { 0.3f, 0.3f, 0.3f };
 
 bool g_bUseTexture = true;

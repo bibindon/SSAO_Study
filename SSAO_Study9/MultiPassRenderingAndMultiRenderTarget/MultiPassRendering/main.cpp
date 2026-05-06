@@ -12,6 +12,7 @@
 #include <cassert>
 #include <crtdbg.h>
 #include <cmath>
+#include <map>
 #include <vector>
 
 #define SAFE_RELEASE(p) { if (p) { (p)->Release(); (p) = NULL; } }
@@ -44,6 +45,7 @@ DWORD g_dwLargeCubeNumMaterials = 0;
 std::vector<D3DMATERIAL9> g_pPlateMaterials;
 std::vector<LPDIRECT3DTEXTURE9> g_pPlateTextures;
 DWORD g_dwPlateNumMaterials = 0;
+std::map<std::string, LPDIRECT3DTEXTURE9> g_textureCache;
 LPD3DXEFFECT g_pEffect1 = NULL;
 LPD3DXEFFECT g_pEffect2 = NULL;
 
@@ -84,6 +86,7 @@ static void LoadMeshWithTextures(const TCHAR* meshPath,
                                  std::vector<D3DMATERIAL9>& materials,
                                  std::vector<LPDIRECT3DTEXTURE9>& textures,
                                  DWORD* pNumMaterials);
+static LPDIRECT3DTEXTURE9 LoadTextureCached(const std::string& texturePath);
 static void SetMouseCursorVisible(bool visible);
 static void UpdateInputAndCamera();
 static void DrawOverlayText();
@@ -309,18 +312,11 @@ void InitD3D(HWND hWnd)
 
 void Cleanup()
 {
-    for (auto& texture : g_pTextures)
+    for (auto& entry : g_textureCache)
     {
-        SAFE_RELEASE(texture);
+        SAFE_RELEASE(entry.second);
     }
-    for (auto& texture : g_pLargeCubeTextures)
-    {
-        SAFE_RELEASE(texture);
-    }
-    for (auto& texture : g_pPlateTextures)
-    {
-        SAFE_RELEASE(texture);
-    }
+    g_textureCache.clear();
 
     SAFE_RELEASE(g_pMesh);
     SAFE_RELEASE(g_pLargeCubeMesh);
@@ -371,29 +367,47 @@ void LoadMeshWithTextures(const TCHAR* meshPath,
         std::string pTexPath(d3dxMaterials[i].pTextureFilename ? d3dxMaterials[i].pTextureFilename : "");
         if (!pTexPath.empty())
         {
-            bool bUnicode = false;
-#ifdef UNICODE
-            bUnicode = true;
-#endif
-            if (!bUnicode)
-            {
-                hResult = D3DXCreateTextureFromFileA(g_pd3dDevice, pTexPath.c_str(), &textures[i]);
-                assert(hResult == S_OK);
-            }
-            else
-            {
-                int len = MultiByteToWideChar(CP_ACP, 0, pTexPath.c_str(), -1, nullptr, 0);
-                std::wstring pTexPathW(len, 0);
-                MultiByteToWideChar(CP_ACP, 0, pTexPath.c_str(), -1, &pTexPathW[0], len);
-
-                hResult = D3DXCreateTextureFromFileW(g_pd3dDevice, pTexPathW.c_str(), &textures[i]);
-                assert(hResult == S_OK);
-            }
+            textures[i] = LoadTextureCached(pTexPath);
+            assert(textures[i] != NULL);
         }
     }
 
     hResult = pD3DXMtrlBuffer->Release();
     assert(hResult == S_OK);
+}
+
+LPDIRECT3DTEXTURE9 LoadTextureCached(const std::string& texturePath)
+{
+    auto it = g_textureCache.find(texturePath);
+    if (it != g_textureCache.end())
+    {
+        return it->second;
+    }
+
+    HRESULT hResult = E_FAIL;
+    LPDIRECT3DTEXTURE9 pTexture = NULL;
+
+    bool bUnicode = false;
+#ifdef UNICODE
+    bUnicode = true;
+#endif
+    if (!bUnicode)
+    {
+        hResult = D3DXCreateTextureFromFileA(g_pd3dDevice, texturePath.c_str(), &pTexture);
+        assert(hResult == S_OK);
+    }
+    else
+    {
+        int len = MultiByteToWideChar(CP_ACP, 0, texturePath.c_str(), -1, nullptr, 0);
+        std::wstring texturePathW(len, 0);
+        MultiByteToWideChar(CP_ACP, 0, texturePath.c_str(), -1, &texturePathW[0], len);
+
+        hResult = D3DXCreateTextureFromFileW(g_pd3dDevice, texturePathW.c_str(), &pTexture);
+        assert(hResult == S_OK);
+    }
+
+    g_textureCache[texturePath] = pTexture;
+    return pTexture;
 }
 
 void SetMouseCursorVisible(bool visible)
