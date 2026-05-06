@@ -11,9 +11,19 @@
 #include <tchar.h>
 #include <cassert>
 #include <crtdbg.h>
+#include <cmath>
 #include <vector>
 
 #define SAFE_RELEASE(p) { if (p) { (p)->Release(); (p) = NULL; } }
+
+namespace
+{
+    constexpr int kRenderWidth = 1600;
+    constexpr int kRenderHeight = 900;
+    constexpr float kCameraMoveSpeed = 12.0f;
+    constexpr float kMouseSensitivity = 0.005f;
+    constexpr float kMaxPitch = D3DX_PI * 0.45f;
+}
 
 LPDIRECT3D9 g_pD3D = NULL;
 LPDIRECT3DDEVICE9 g_pd3dDevice = NULL;
@@ -39,6 +49,14 @@ LPDIRECT3DVERTEXDECLARATION9 g_pQuadDecl = NULL;
 
 // 追加: スプライト
 LPD3DXSPRITE g_pSprite = NULL;
+HWND g_hWnd = NULL;
+bool g_bShowDebugSprite = true;
+bool g_bPrevToggleKeyDown = false;
+bool g_bMouseLookInitialized = false;
+POINT g_lastMouseClientPos = { 0, 0 };
+float g_cameraYaw = -D3DX_PI * 0.25f;
+float g_cameraPitch = -0.34f;
+D3DXVECTOR3 g_cameraPosition(10.0f, 5.0f, -10.0f);
 
 struct QuadVertex
 {
@@ -50,6 +68,8 @@ static void TextDraw(LPD3DXFONT pFont, TCHAR* text, int X, int Y);
 static void InitD3D(HWND hWnd);
 static void Cleanup();
 
+static void UpdateInputAndCamera();
+static void DrawOverlayText();
 static void RenderPass1();
 static void RenderPass2();
 static void DrawFullscreenQuad();
@@ -86,7 +106,7 @@ int WINAPI _tWinMain(_In_ HINSTANCE hInstance,
     assert(atom != 0);
 
     RECT rect;
-    SetRect(&rect, 0, 0, 640, 480);
+    SetRect(&rect, 0, 0, kRenderWidth, kRenderHeight);
     AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE);
     rect.right = rect.right - rect.left;
     rect.bottom = rect.bottom - rect.top;
@@ -105,6 +125,7 @@ int WINAPI _tWinMain(_In_ HINSTANCE hInstance,
                              wc.hInstance,
                              NULL);
 
+    g_hWnd = hWnd;
     InitD3D(hWnd);
     ShowWindow(hWnd, SW_SHOWDEFAULT);
     UpdateWindow(hWnd);
@@ -121,6 +142,7 @@ int WINAPI _tWinMain(_In_ HINSTANCE hInstance,
         {
             Sleep(16);
 
+            UpdateInputAndCamera();
             RenderPass1();
             RenderPass2();
         }
@@ -162,7 +184,9 @@ void InitD3D(HWND hWnd)
     ZeroMemory(&d3dpp, sizeof(d3dpp));
     d3dpp.Windowed = TRUE;
     d3dpp.SwapEffect = D3DSWAPEFFECT_DISCARD;
-    d3dpp.BackBufferFormat = D3DFMT_UNKNOWN;
+    d3dpp.BackBufferWidth = kRenderWidth;
+    d3dpp.BackBufferHeight = kRenderHeight;
+    d3dpp.BackBufferFormat = D3DFMT_X8R8G8B8;
     d3dpp.BackBufferCount = 1;
     d3dpp.MultiSampleType = D3DMULTISAMPLE_NONE;
     d3dpp.MultiSampleQuality = 0;
@@ -285,7 +309,7 @@ void InitD3D(HWND hWnd)
 
     // === 変更: RT を 2 枚作成（両方 A8R8G8B8） ===
     hResult = D3DXCreateTexture(g_pd3dDevice,
-                                640, 480,
+                                kRenderWidth, kRenderHeight,
                                 1,
                                 D3DUSAGE_RENDERTARGET,
                                 D3DFMT_A8R8G8B8,
@@ -294,7 +318,7 @@ void InitD3D(HWND hWnd)
     assert(hResult == S_OK);
 
     hResult = D3DXCreateTexture(g_pd3dDevice,
-                                640, 480,
+                                kRenderWidth, kRenderHeight,
                                 1,
                                 D3DUSAGE_RENDERTARGET,
                                 D3DFMT_A8R8G8B8,
@@ -340,6 +364,90 @@ void Cleanup()
     SAFE_RELEASE(g_pD3D);
 }
 
+void UpdateInputAndCamera()
+{
+    const float deltaTime = 1.0f / 60.0f;
+    const bool isWindowActive = (GetForegroundWindow() == g_hWnd);
+    const bool toggleKeyDown = (GetAsyncKeyState('1') & 0x8000) != 0;
+
+    if (toggleKeyDown && !g_bPrevToggleKeyDown)
+    {
+        g_bShowDebugSprite = !g_bShowDebugSprite;
+    }
+    g_bPrevToggleKeyDown = toggleKeyDown;
+
+    if (!isWindowActive)
+    {
+        g_bMouseLookInitialized = false;
+        return;
+    }
+
+    POINT mousePos;
+    if (GetCursorPos(&mousePos))
+    {
+        ScreenToClient(g_hWnd, &mousePos);
+
+        if (!g_bMouseLookInitialized)
+        {
+            g_lastMouseClientPos = mousePos;
+            g_bMouseLookInitialized = true;
+        }
+        else
+        {
+            const LONG deltaX = mousePos.x - g_lastMouseClientPos.x;
+            const LONG deltaY = mousePos.y - g_lastMouseClientPos.y;
+
+            g_cameraYaw += static_cast<float>(deltaX) * kMouseSensitivity;
+            g_cameraPitch += static_cast<float>(deltaY) * kMouseSensitivity;
+            g_cameraPitch = (g_cameraPitch < -kMaxPitch) ? -kMaxPitch : g_cameraPitch;
+            g_cameraPitch = (g_cameraPitch > kMaxPitch) ? kMaxPitch : g_cameraPitch;
+
+            g_lastMouseClientPos = mousePos;
+        }
+    }
+
+    D3DXVECTOR3 forward(sinf(g_cameraYaw) * cosf(g_cameraPitch),
+                        sinf(g_cameraPitch),
+                        cosf(g_cameraYaw) * cosf(g_cameraPitch));
+    D3DXVec3Normalize(&forward, &forward);
+
+    D3DXVECTOR3 worldUp(0.0f, 1.0f, 0.0f);
+    D3DXVECTOR3 right;
+    D3DXVec3Cross(&right, &worldUp, &forward);
+    D3DXVec3Normalize(&right, &right);
+
+    D3DXVECTOR3 move(0.0f, 0.0f, 0.0f);
+    if (GetAsyncKeyState('W') & 0x8000) { move += forward; }
+    if (GetAsyncKeyState('S') & 0x8000) { move -= forward; }
+    if (GetAsyncKeyState('D') & 0x8000) { move += right; }
+    if (GetAsyncKeyState('A') & 0x8000) { move -= right; }
+    if (GetAsyncKeyState('E') & 0x8000) { move.y += 1.0f; }
+    if (GetAsyncKeyState('Q') & 0x8000) { move.y -= 1.0f; }
+
+    if (D3DXVec3LengthSq(&move) > 0.0f)
+    {
+        D3DXVec3Normalize(&move, &move);
+        g_cameraPosition += move * (kCameraMoveSpeed * deltaTime);
+    }
+}
+
+void DrawOverlayText()
+{
+    TCHAR lines[][128] =
+    {
+        _T("SSAO sample controls"),
+        _T("W/A/S/D: move"),
+        _T("E / Q: move up / down"),
+        _T("Mouse: look around"),
+        _T("1: toggle debug sprite"),
+    };
+
+    for (int i = 0; i < _countof(lines); ++i)
+    {
+        TextDraw(g_pFont, lines[i], 8, 8 + i * 22);
+    }
+}
+
 void RenderPass1()
 {
     HRESULT hResult = E_FAIL;
@@ -359,20 +467,20 @@ void RenderPass1()
     hResult = g_pd3dDevice->SetRenderTarget(0, pRT0); assert(hResult == S_OK);
     hResult = g_pd3dDevice->SetRenderTarget(1, pRT1); assert(hResult == S_OK);
 
-    static float f = 0.0f;
-    f += 0.025f;
-
     D3DXMATRIX mat;
     D3DXMATRIX View, Proj;
 
     D3DXMatrixPerspectiveFovLH(&Proj,
                                D3DXToRadian(45),
-                               640.0f / 480.0f,
+                               static_cast<float>(kRenderWidth) / static_cast<float>(kRenderHeight),
                                1.0f,
                                10000.0f);
 
-    D3DXVECTOR3 eye(10 * sinf(f), 5, -10 * cosf(f));
-    D3DXVECTOR3 at(0, 0, 0);
+    D3DXVECTOR3 forward(sinf(g_cameraYaw) * cosf(g_cameraPitch),
+                        sinf(g_cameraPitch),
+                        cosf(g_cameraYaw) * cosf(g_cameraPitch));
+    D3DXVECTOR3 eye = g_cameraPosition;
+    D3DXVECTOR3 at = eye + forward;
     D3DXVECTOR3 up(0, 1, 0);
     D3DXMatrixLookAtLH(&View, &eye, &at, &up);
     D3DXMatrixIdentity(&mat);
@@ -388,11 +496,6 @@ void RenderPass1()
     assert(hResult == S_OK);
 
     hResult = g_pd3dDevice->BeginScene(); assert(hResult == S_OK);
-
-    // タイトル
-    TCHAR msg[100];
-    _tcscpy_s(msg, 100, _T("SSAOに挑戦"));
-    TextDraw(g_pFont, msg, 0, 0);
 
     // === 変更: MRT 用テクニックを使用 ===
     hResult = g_pEffect1->SetTechnique("TechniqueMRT");
@@ -465,7 +568,7 @@ void RenderPass2()
     hResult = g_pEffect2->End();     assert(hResult == S_OK);
 
     // === 追加: 左上に RT1 を 1/2 スケールで表示（D3DXSPRITE） ===
-    if (g_pSprite)
+    if (g_bShowDebugSprite && g_pSprite)
     {
         hResult = g_pSprite->Begin(D3DXSPRITE_ALPHABLEND);  assert(hResult == S_OK);
 
@@ -482,6 +585,8 @@ void RenderPass2()
         hResult = g_pSprite->End(); assert(hResult == S_OK);
     }
 
+    DrawOverlayText();
+
     hResult = g_pd3dDevice->EndScene();  assert(hResult == S_OK);
     hResult = g_pd3dDevice->Present(NULL, NULL, NULL, NULL); assert(hResult == S_OK);
 
@@ -493,8 +598,8 @@ void DrawFullscreenQuad()
 {
     QuadVertex v[4] { };
 
-    float du = 0.5f / 640.f;
-    float dv = 0.5f / 480.f;
+    float du = 0.5f / static_cast<float>(kRenderWidth);
+    float dv = 0.5f / static_cast<float>(kRenderHeight);
 
     v[0].x = -1.0f; v[0].y = -1.0f; v[0].z = 0.0f; v[0].w = 1.0f; v[0].u = 0.0f + du; v[0].v = 1.0f - dv;
     v[1].x = -1.0f; v[1].y = 1.0f; v[1].z = 0.0f; v[1].w = 1.0f; v[1].u = 0.0f + du; v[1].v = 0.0f + dv;
