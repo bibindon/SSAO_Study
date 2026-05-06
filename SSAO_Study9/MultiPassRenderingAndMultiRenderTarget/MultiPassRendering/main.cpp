@@ -28,6 +28,7 @@ namespace
     constexpr int kCubeGridWidth = 11;
     constexpr int kCubeGridDepth = 11;
     constexpr float kCubeSpacing = 1.2f;
+    constexpr float kUserMeshPlacementDistance = 8.0f;
     constexpr int kToolDialogButtonId = 1001;
 }
 
@@ -79,6 +80,8 @@ float g_cameraPitch = -0.34f;
 D3DXVECTOR3 g_cameraPosition(2.0f, 1.0f, -3.0f);
 HWND g_hToolDialog = NULL;
 HWND g_hOpenMeshButton = NULL;
+D3DXVECTOR3 g_userMeshPosition(0.0f, 0.0f, 0.0f);
+float g_userMeshYaw = 0.0f;
 
 struct QuadVertex
 {
@@ -105,6 +108,7 @@ static void ReleaseMeshOnly(LPD3DXMESH* ppMesh,
 static void CreateToolDialog();
 static void ToggleToolDialog();
 static void OpenMeshFileDialog();
+static void PlaceUserMeshAtCurrentLookTarget();
 static void SetMouseCursorVisible(bool visible);
 static void UpdateInputAndCamera();
 static void DrawOverlayText();
@@ -537,6 +541,20 @@ void OpenMeshFileDialog()
 
     ReleaseMeshOnly(&g_pUserMesh, g_pUserMeshMaterials, g_pUserMeshTextures, &g_dwUserMeshNumMaterials);
     LoadMeshWithTextures(filePath, &g_pUserMesh, g_pUserMeshMaterials, g_pUserMeshTextures, &g_dwUserMeshNumMaterials);
+    PlaceUserMeshAtCurrentLookTarget();
+}
+
+void PlaceUserMeshAtCurrentLookTarget()
+{
+    D3DXVECTOR3 forward(sinf(g_cameraYaw) * cosf(g_cameraPitch),
+                        sinf(g_cameraPitch),
+                        cosf(g_cameraYaw) * cosf(g_cameraPitch));
+    D3DXVec3Normalize(&forward, &forward);
+
+    g_userMeshPosition = g_cameraPosition + forward * kUserMeshPlacementDistance;
+
+    D3DXVECTOR3 toCamera = g_cameraPosition - g_userMeshPosition;
+    g_userMeshYaw = atan2f(toCamera.x, toCamera.z);
 }
 
 void SetMouseCursorVisible(bool visible)
@@ -698,8 +716,8 @@ void RenderPass1()
     D3DXMatrixPerspectiveFovLH(&Proj,
                                D3DXToRadian(45),
                                static_cast<float>(kRenderWidth) / static_cast<float>(kRenderHeight),
-                               0.01f,
-                               100.0f);
+                               0.1f,
+                               50.0f);
 
     D3DXVECTOR3 forward(sinf(g_cameraYaw) * cosf(g_cameraPitch),
                         sinf(g_cameraPitch),
@@ -755,8 +773,12 @@ void RenderPass1()
     if (g_pUserMesh)
     {
         D3DXMATRIX userMeshWorld;
+        D3DXMATRIX userMeshRotation;
+        D3DXMATRIX userMeshTranslation;
         D3DXMATRIX userMeshWorldViewProj;
-        D3DXMatrixTranslation(&userMeshWorld, 0.0f, 0.0f, 0.0f);
+        D3DXMatrixRotationY(&userMeshRotation, g_userMeshYaw);
+        D3DXMatrixTranslation(&userMeshTranslation, g_userMeshPosition.x, g_userMeshPosition.y, g_userMeshPosition.z);
+        userMeshWorld = userMeshRotation * userMeshTranslation;
         userMeshWorldViewProj = userMeshWorld * View * Proj;
         hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &userMeshWorldViewProj); assert(hResult == S_OK);
         for (DWORD i = 0; i < g_dwUserMeshNumMaterials; i++)
