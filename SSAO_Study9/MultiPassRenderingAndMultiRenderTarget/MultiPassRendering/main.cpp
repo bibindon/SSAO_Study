@@ -20,8 +20,8 @@ namespace
 {
     constexpr int kRenderWidth = 1600;
     constexpr int kRenderHeight = 900;
-    constexpr float kCameraMoveSpeed = 12.0f;
-    constexpr float kMouseSensitivity = 0.005f;
+    constexpr float kCameraMoveSpeed = 6.0f;
+    constexpr float kMouseSensitivity = 0.0018f;
     constexpr float kMaxPitch = D3DX_PI * 0.45f;
 }
 
@@ -52,7 +52,9 @@ LPD3DXSPRITE g_pSprite = NULL;
 HWND g_hWnd = NULL;
 bool g_bShowDebugSprite = true;
 bool g_bPrevToggleKeyDown = false;
+bool g_bPrevCursorToggleKeyDown = false;
 bool g_bMouseLookInitialized = false;
+bool g_bMouseCursorVisible = true;
 POINT g_lastMouseClientPos = { 0, 0 };
 float g_cameraYaw = -D3DX_PI * 0.25f;
 float g_cameraPitch = -0.34f;
@@ -68,6 +70,7 @@ static void TextDraw(LPD3DXFONT pFont, TCHAR* text, int X, int Y);
 static void InitD3D(HWND hWnd);
 static void Cleanup();
 
+static void SetMouseCursorVisible(bool visible);
 static void UpdateInputAndCamera();
 static void DrawOverlayText();
 static void RenderPass1();
@@ -364,11 +367,36 @@ void Cleanup()
     SAFE_RELEASE(g_pD3D);
 }
 
+void SetMouseCursorVisible(bool visible)
+{
+    if (g_bMouseCursorVisible == visible)
+    {
+        return;
+    }
+
+    if (visible)
+    {
+        while (ShowCursor(TRUE) < 0)
+        {
+        }
+    }
+    else
+    {
+        while (ShowCursor(FALSE) >= 0)
+        {
+        }
+    }
+
+    g_bMouseCursorVisible = visible;
+    g_bMouseLookInitialized = false;
+}
+
 void UpdateInputAndCamera()
 {
     const float deltaTime = 1.0f / 60.0f;
     const bool isWindowActive = (GetForegroundWindow() == g_hWnd);
     const bool toggleKeyDown = (GetAsyncKeyState('1') & 0x8000) != 0;
+    const bool cursorToggleKeyDown = (GetAsyncKeyState('2') & 0x8000) != 0;
 
     if (toggleKeyDown && !g_bPrevToggleKeyDown)
     {
@@ -376,34 +404,47 @@ void UpdateInputAndCamera()
     }
     g_bPrevToggleKeyDown = toggleKeyDown;
 
+    if (cursorToggleKeyDown && !g_bPrevCursorToggleKeyDown)
+    {
+        SetMouseCursorVisible(!g_bMouseCursorVisible);
+    }
+    g_bPrevCursorToggleKeyDown = cursorToggleKeyDown;
+
     if (!isWindowActive)
     {
         g_bMouseLookInitialized = false;
         return;
     }
 
-    POINT mousePos;
-    if (GetCursorPos(&mousePos))
+    if (!g_bMouseCursorVisible)
     {
-        ScreenToClient(g_hWnd, &mousePos);
-
-        if (!g_bMouseLookInitialized)
+        POINT mousePos;
+        if (GetCursorPos(&mousePos))
         {
-            g_lastMouseClientPos = mousePos;
-            g_bMouseLookInitialized = true;
-        }
-        else
-        {
-            const LONG deltaX = mousePos.x - g_lastMouseClientPos.x;
-            const LONG deltaY = mousePos.y - g_lastMouseClientPos.y;
+            ScreenToClient(g_hWnd, &mousePos);
 
-            g_cameraYaw += static_cast<float>(deltaX) * kMouseSensitivity;
-            g_cameraPitch += static_cast<float>(deltaY) * kMouseSensitivity;
-            g_cameraPitch = (g_cameraPitch < -kMaxPitch) ? -kMaxPitch : g_cameraPitch;
-            g_cameraPitch = (g_cameraPitch > kMaxPitch) ? kMaxPitch : g_cameraPitch;
+            if (!g_bMouseLookInitialized)
+            {
+                g_lastMouseClientPos = mousePos;
+                g_bMouseLookInitialized = true;
+            }
+            else
+            {
+                const LONG deltaX = mousePos.x - g_lastMouseClientPos.x;
+                const LONG deltaY = mousePos.y - g_lastMouseClientPos.y;
 
-            g_lastMouseClientPos = mousePos;
+                g_cameraYaw += static_cast<float>(deltaX) * kMouseSensitivity;
+                g_cameraPitch -= static_cast<float>(deltaY) * kMouseSensitivity;
+                g_cameraPitch = (g_cameraPitch < -kMaxPitch) ? -kMaxPitch : g_cameraPitch;
+                g_cameraPitch = (g_cameraPitch > kMaxPitch) ? kMaxPitch : g_cameraPitch;
+
+                g_lastMouseClientPos = mousePos;
+            }
         }
+    }
+    else
+    {
+        g_bMouseLookInitialized = false;
     }
 
     D3DXVECTOR3 forward(sinf(g_cameraYaw) * cosf(g_cameraPitch),
@@ -440,6 +481,7 @@ void DrawOverlayText()
         _T("E / Q: move up / down"),
         _T("Mouse: look around"),
         _T("1: toggle debug sprite"),
+        _T("2: toggle mouse cursor"),
     };
 
     for (int i = 0; i < _countof(lines); ++i)
