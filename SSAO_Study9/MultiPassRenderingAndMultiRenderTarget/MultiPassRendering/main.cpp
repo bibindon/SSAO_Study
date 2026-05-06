@@ -698,8 +698,8 @@ void RenderPass1()
     D3DXMatrixPerspectiveFovLH(&Proj,
                                D3DXToRadian(45),
                                static_cast<float>(kRenderWidth) / static_cast<float>(kRenderHeight),
-                               1.0f,
-                               10000.0f);
+                               0.01f,
+                               100.0f);
 
     D3DXVECTOR3 forward(sinf(g_cameraYaw) * cosf(g_cameraPitch),
                         sinf(g_cameraPitch),
