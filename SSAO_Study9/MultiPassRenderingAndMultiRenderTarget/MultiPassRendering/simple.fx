@@ -3,6 +3,7 @@ float4 g_lightNormal = { 0.3f, 1.0f, 0.5f, 0.0f };
 float3 g_ambient = { 0.3f, 0.3f, 0.3f };
 
 bool g_bUseTexture = true;
+bool g_bUseLambert = true;
 
 texture texture1;
 sampler textureSampler = sampler_state
@@ -20,11 +21,13 @@ void VertexShader1(
     in float2 inTexCoord0 : TEXCOORD0,
     out float4 outPosition : POSITION0,
     out float2 outTexCoord0 : TEXCOORD0,
-    out float outDepth01 : TEXCOORD1)
+    out float outDepth01 : TEXCOORD1,
+    out float3 outNormal : TEXCOORD2)
 {
     float4 clipPosition = mul(inPosition, g_matWorldViewProj);
     outPosition = clipPosition;
     outTexCoord0 = inTexCoord0;
+    outNormal = normalize(inNormal);
 
     // 0..1（近=0, 遠=1）
     float depthNdc = clipPosition.z / clipPosition.w;
@@ -35,6 +38,7 @@ void VertexShader1(
 void PixelShaderMRT(
     in float2 inTexCoord0 : TEXCOORD0,
     in float inDepth01 : TEXCOORD1,
+    in float3 inNormal : TEXCOORD2,
     out float4 outColor0 : COLOR0,
     out float4 outColor1 : COLOR1)
 {
@@ -45,7 +49,16 @@ void PixelShaderMRT(
         baseColor = tex2D(textureSampler, inTexCoord0);
     }
 
-    outColor0 = baseColor;
+    float3 lighting = 1.0.xxx;
+    if (g_bUseLambert)
+    {
+        float3 normal = normalize(inNormal);
+        float3 lightDir = normalize(-g_lightNormal.xyz);
+        float lambert = saturate(dot(normal, lightDir));
+        lighting = saturate(g_ambient + lambert.xxx);
+    }
+
+    outColor0 = float4(baseColor.rgb * lighting, baseColor.a);
 
     // 近いほど黒、遠いほど白
     float d = inDepth01;

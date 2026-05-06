@@ -58,7 +58,9 @@ HWND g_hWnd = NULL;
 bool g_bShowDebugSprite = false;
 bool g_bPrevToggleKeyDown = false;
 bool g_bPrevCursorToggleKeyDown = false;
+bool g_bPrevLambertToggleKeyDown = false;
 bool g_bMouseCursorVisible = false;
+bool g_bUseLambertLighting = true;
 float g_cameraYaw = -D3DX_PI * 0.25f;
 float g_cameraPitch = -0.34f;
 D3DXVECTOR3 g_cameraPosition(10.0f, 5.0f, -10.0f);
@@ -413,6 +415,7 @@ void UpdateInputAndCamera()
     const bool isWindowActive = (GetForegroundWindow() == g_hWnd);
     const bool toggleKeyDown = (GetAsyncKeyState('1') & 0x8000) != 0;
     const bool cursorToggleKeyDown = (GetAsyncKeyState('2') & 0x8000) != 0;
+    const bool lambertToggleKeyDown = (GetAsyncKeyState('3') & 0x8000) != 0;
 
     if (toggleKeyDown && !g_bPrevToggleKeyDown)
     {
@@ -425,6 +428,12 @@ void UpdateInputAndCamera()
         SetMouseCursorVisible(!g_bMouseCursorVisible);
     }
     g_bPrevCursorToggleKeyDown = cursorToggleKeyDown;
+
+    if (lambertToggleKeyDown && !g_bPrevLambertToggleKeyDown)
+    {
+        g_bUseLambertLighting = !g_bUseLambertLighting;
+    }
+    g_bPrevLambertToggleKeyDown = lambertToggleKeyDown;
 
     if (!isWindowActive)
     {
@@ -495,6 +504,7 @@ void DrawOverlayText()
         _T("Mouse: look around"),
         _T("1: toggle debug sprite"),
         _T("2: toggle mouse cursor"),
+        _T("3: toggle lambert lighting"),
     };
 
     for (int i = 0; i < _countof(lines); ++i)
@@ -555,6 +565,7 @@ void RenderPass1()
 
     // 4x4 テクスチャの小さなキューブをたくさん配置
     hResult = g_pEffect1->SetBool("g_bUseTexture", TRUE); assert(hResult == S_OK);
+    hResult = g_pEffect1->SetBool("g_bUseLambert", g_bUseLambertLighting ? TRUE : FALSE); assert(hResult == S_OK);
 
     D3DXMATRIX largeCubeWorld;
     D3DXMATRIX largeCubeWorldViewProj;
