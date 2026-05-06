@@ -234,7 +234,7 @@ void InitD3D(HWND hWnd)
     d3dpp.MultiSampleType = D3DMULTISAMPLE_NONE;
     d3dpp.MultiSampleQuality = 0;
     d3dpp.EnableAutoDepthStencil = TRUE;
-    d3dpp.AutoDepthStencilFormat = D3DFMT_D16;
+    d3dpp.AutoDepthStencilFormat = D3DFMT_D24X8;
     d3dpp.hDeviceWindow = hWnd;
     d3dpp.Flags = 0;
     d3dpp.FullScreen_RefreshRateInHz = D3DPRESENT_RATE_DEFAULT;
@@ -716,7 +716,7 @@ void RenderPass1()
     D3DXMatrixPerspectiveFovLH(&Proj,
                                D3DXToRadian(45),
                                static_cast<float>(kRenderWidth) / static_cast<float>(kRenderHeight),
-                               0.1f,
+                               0.01f,
                                50.0f);
 
     D3DXVECTOR3 forward(sinf(g_cameraYaw) * cosf(g_cameraPitch),
