@@ -28,7 +28,7 @@ namespace
     constexpr int kCubeGridWidth = 11;
     constexpr int kCubeGridDepth = 11;
     constexpr float kCubeSpacing = 1.2f;
-    constexpr float kUserMeshPlacementDistance = 8.0f;
+    constexpr float kUserMeshPlacementDistance = 4.5f;
     constexpr int kToolDialogButtonId = 1001;
 }
 
@@ -38,7 +38,6 @@ LPD3DXFONT g_pFont = NULL;
 LPD3DXMESH g_pMesh = NULL;
 LPD3DXMESH g_pLargeCubeMesh = NULL;
 LPD3DXMESH g_pPlateMesh = NULL;
-LPD3DXMESH g_pUserMesh = NULL;
 
 std::vector<D3DMATERIAL9> g_pMaterials;
 std::vector<LPDIRECT3DTEXTURE9> g_pTextures;
@@ -49,9 +48,6 @@ DWORD g_dwLargeCubeNumMaterials = 0;
 std::vector<D3DMATERIAL9> g_pPlateMaterials;
 std::vector<LPDIRECT3DTEXTURE9> g_pPlateTextures;
 DWORD g_dwPlateNumMaterials = 0;
-std::vector<D3DMATERIAL9> g_pUserMeshMaterials;
-std::vector<LPDIRECT3DTEXTURE9> g_pUserMeshTextures;
-DWORD g_dwUserMeshNumMaterials = 0;
 std::map<std::wstring, LPDIRECT3DTEXTURE9> g_textureCache;
 LPD3DXEFFECT g_pEffect1 = NULL;
 LPD3DXEFFECT g_pEffect2 = NULL;
@@ -73,6 +69,7 @@ bool g_bPrevToggleKeyDown = false;
 bool g_bPrevCursorToggleKeyDown = false;
 bool g_bPrevLambertToggleKeyDown = false;
 bool g_bPrevDialogToggleKeyDown = false;
+bool g_bPrevEscapeToggleKeyDown = false;
 bool g_bMouseCursorVisible = false;
 bool g_bUseLambertLighting = true;
 float g_cameraYaw = -D3DX_PI * 0.25f;
@@ -80,8 +77,18 @@ float g_cameraPitch = -0.34f;
 D3DXVECTOR3 g_cameraPosition(2.0f, 1.0f, -3.0f);
 HWND g_hToolDialog = NULL;
 HWND g_hOpenMeshButton = NULL;
-D3DXVECTOR3 g_userMeshPosition(0.0f, 0.0f, 0.0f);
-float g_userMeshYaw = 0.0f;
+
+struct UserMeshInstance
+{
+    LPD3DXMESH mesh = NULL;
+    std::vector<D3DMATERIAL9> materials;
+    std::vector<LPDIRECT3DTEXTURE9> textures;
+    DWORD numMaterials = 0;
+    D3DXVECTOR3 position = D3DXVECTOR3(0.0f, 0.0f, 0.0f);
+    float yaw = 0.0f;
+};
+
+std::vector<UserMeshInstance> g_userMeshes;
 
 struct QuadVertex
 {
@@ -108,7 +115,7 @@ static void ReleaseMeshOnly(LPD3DXMESH* ppMesh,
 static void CreateToolDialog();
 static void ToggleToolDialog();
 static void OpenMeshFileDialog();
-static void PlaceUserMeshAtCurrentLookTarget();
+static void PlaceUserMeshAtCurrentLookTarget(UserMeshInstance& userMesh);
 static void SetMouseCursorVisible(bool visible);
 static void UpdateInputAndCamera();
 static void DrawOverlayText();
@@ -344,7 +351,11 @@ void Cleanup()
     SAFE_RELEASE(g_pMesh);
     SAFE_RELEASE(g_pLargeCubeMesh);
     SAFE_RELEASE(g_pPlateMesh);
-    SAFE_RELEASE(g_pUserMesh);
+    for (auto& userMesh : g_userMeshes)
+    {
+        SAFE_RELEASE(userMesh.mesh);
+    }
+    g_userMeshes.clear();
     SAFE_RELEASE(g_pEffect1);
     SAFE_RELEASE(g_pEffect2);
     SAFE_RELEASE(g_pFont);
@@ -539,22 +550,23 @@ void OpenMeshFileDialog()
         return;
     }
 
-    ReleaseMeshOnly(&g_pUserMesh, g_pUserMeshMaterials, g_pUserMeshTextures, &g_dwUserMeshNumMaterials);
-    LoadMeshWithTextures(filePath, &g_pUserMesh, g_pUserMeshMaterials, g_pUserMeshTextures, &g_dwUserMeshNumMaterials);
-    PlaceUserMeshAtCurrentLookTarget();
+    UserMeshInstance userMesh;
+    LoadMeshWithTextures(filePath, &userMesh.mesh, userMesh.materials, userMesh.textures, &userMesh.numMaterials);
+    PlaceUserMeshAtCurrentLookTarget(userMesh);
+    g_userMeshes.push_back(userMesh);
 }
 
-void PlaceUserMeshAtCurrentLookTarget()
+void PlaceUserMeshAtCurrentLookTarget(UserMeshInstance& userMesh)
 {
     D3DXVECTOR3 forward(sinf(g_cameraYaw) * cosf(g_cameraPitch),
                         sinf(g_cameraPitch),
                         cosf(g_cameraYaw) * cosf(g_cameraPitch));
     D3DXVec3Normalize(&forward, &forward);
 
-    g_userMeshPosition = g_cameraPosition + forward * kUserMeshPlacementDistance;
+    userMesh.position = g_cameraPosition + forward * kUserMeshPlacementDistance;
 
-    D3DXVECTOR3 toCamera = g_cameraPosition - g_userMeshPosition;
-    g_userMeshYaw = atan2f(toCamera.x, toCamera.z);
+    D3DXVECTOR3 toCamera = g_cameraPosition - userMesh.position;
+    userMesh.yaw = atan2f(toCamera.x, toCamera.z) + D3DX_PI;
 }
 
 void SetMouseCursorVisible(bool visible)
@@ -588,6 +600,7 @@ void UpdateInputAndCamera()
     const bool cursorToggleKeyDown = (GetAsyncKeyState('2') & 0x8000) != 0;
     const bool lambertToggleKeyDown = (GetAsyncKeyState('3') & 0x8000) != 0;
     const bool dialogToggleKeyDown = (GetAsyncKeyState('4') & 0x8000) != 0;
+    const bool escapeToggleKeyDown = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
 
     if (toggleKeyDown && !g_bPrevToggleKeyDown)
     {
@@ -600,6 +613,12 @@ void UpdateInputAndCamera()
         SetMouseCursorVisible(!g_bMouseCursorVisible);
     }
     g_bPrevCursorToggleKeyDown = cursorToggleKeyDown;
+
+    if (escapeToggleKeyDown && !g_bPrevEscapeToggleKeyDown)
+    {
+        SetMouseCursorVisible(!g_bMouseCursorVisible);
+    }
+    g_bPrevEscapeToggleKeyDown = escapeToggleKeyDown;
 
     if (lambertToggleKeyDown && !g_bPrevLambertToggleKeyDown)
     {
@@ -681,7 +700,7 @@ void DrawOverlayText()
         _T("E / Q: move up / down"),
         _T("Mouse: look around"),
         _T("1: toggle debug sprite"),
-        _T("2: toggle mouse cursor"),
+        _T("2 / Esc: toggle mouse cursor"),
         _T("3: toggle lambert lighting"),
         _T("4: toggle mesh dialog"),
     };
@@ -770,22 +789,22 @@ void RenderPass1()
         hResult = g_pPlateMesh->DrawSubset(i);                              assert(hResult == S_OK);
     }
 
-    if (g_pUserMesh)
+    for (const auto& userMesh : g_userMeshes)
     {
         D3DXMATRIX userMeshWorld;
         D3DXMATRIX userMeshRotation;
         D3DXMATRIX userMeshTranslation;
         D3DXMATRIX userMeshWorldViewProj;
-        D3DXMatrixRotationY(&userMeshRotation, g_userMeshYaw);
-        D3DXMatrixTranslation(&userMeshTranslation, g_userMeshPosition.x, g_userMeshPosition.y, g_userMeshPosition.z);
+        D3DXMatrixRotationY(&userMeshRotation, userMesh.yaw);
+        D3DXMatrixTranslation(&userMeshTranslation, userMesh.position.x, userMesh.position.y, userMesh.position.z);
         userMeshWorld = userMeshRotation * userMeshTranslation;
         userMeshWorldViewProj = userMeshWorld * View * Proj;
         hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &userMeshWorldViewProj); assert(hResult == S_OK);
-        for (DWORD i = 0; i < g_dwUserMeshNumMaterials; i++)
+        for (DWORD i = 0; i < userMesh.numMaterials; i++)
         {
-            hResult = g_pEffect1->SetTexture("texture1", g_pUserMeshTextures[i]); assert(hResult == S_OK);
-            hResult = g_pEffect1->CommitChanges();                                 assert(hResult == S_OK);
-            hResult = g_pUserMesh->DrawSubset(i);                                  assert(hResult == S_OK);
+            hResult = g_pEffect1->SetTexture("texture1", userMesh.textures[i]); assert(hResult == S_OK);
+            hResult = g_pEffect1->CommitChanges();                                assert(hResult == S_OK);
+            hResult = userMesh.mesh->DrawSubset(i);                               assert(hResult == S_OK);
         }
     }
 
