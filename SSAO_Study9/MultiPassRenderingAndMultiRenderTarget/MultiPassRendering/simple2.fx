@@ -72,7 +72,6 @@ void PixelShader1(in float4 inPosition    : POSITION,
     workColor = tex2D(textureSampler, shiftedTexCoord);
 
     float currentDepth = tex2D(depthSampler, shiftedTexCoord).r;
-    float currentThickness = tex2D(thicknessSampler, shiftedTexCoord).r;
     float3 currentNormal = tex2D(normalSampler, shiftedTexCoord).xyz * 2.0f - 1.0f;
     currentNormal = normalize(currentNormal);
 
@@ -87,14 +86,15 @@ void PixelShader1(in float4 inPosition    : POSITION,
                                          -sampleDirection.y * (g_simpleSsaoSamplePixels / g_screenSize.y));
             float2 sampleTexCoord = saturate(shiftedTexCoord + sampleOffset);
             float sampleDepth = tex2D(depthSampler, sampleTexCoord).r;
-            float frontDepthWithMargin = currentDepth - g_depthCompareThreshold;
-            float backDepthWithMargin = currentDepth + g_depthCompareThreshold;
+            float sampleThickness = tex2D(thicknessSampler, sampleTexCoord).r;
+            float frontDepthWithMargin = sampleDepth - g_depthCompareThreshold;
+            float backDepthWithMargin = sampleDepth + g_depthCompareThreshold;
             if (g_bUseThicknessForSsao)
             {
-                backDepthWithMargin += currentThickness * g_thicknessScale;
+                backDepthWithMargin += sampleThickness * g_thicknessScale;
             }
 
-            if (frontDepthWithMargin <= sampleDepth && sampleDepth <= backDepthWithMargin)
+            if (frontDepthWithMargin <= currentDepth && currentDepth <= backDepthWithMargin)
             {
                 workColor = float4(0.0f, 0.0f, 0.0f, workColor.a);
             }
