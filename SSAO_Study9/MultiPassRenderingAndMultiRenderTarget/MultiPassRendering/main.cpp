@@ -682,7 +682,9 @@ void SetMouseCursorVisible(bool visible)
 void UpdateInputAndCamera()
 {
     const float deltaTime = 1.0f / 60.0f;
-    const bool isWindowActive = (GetForegroundWindow() == g_hWnd);
+    const HWND foregroundWindow = GetForegroundWindow();
+    const bool isMainWindowActive = (foregroundWindow == g_hWnd);
+    const bool isToolDialogActive = (g_hToolDialog != NULL && foregroundWindow == g_hToolDialog);
     const bool depthInfoKeyDown = (GetAsyncKeyState(VK_F1) & 0x8000) != 0;
     const bool normalInfoKeyDown = (GetAsyncKeyState(VK_F2) & 0x8000) != 0;
     const bool cursorToggleKeyDown = (GetAsyncKeyState('2') & 0x8000) != 0;
@@ -690,6 +692,18 @@ void UpdateInputAndCamera()
     const bool dialogToggleKeyDown = (GetAsyncKeyState('4') & 0x8000) != 0;
     const bool simpleSsaoToggleKeyDown = (GetAsyncKeyState('5') & 0x8000) != 0;
     const bool escapeToggleKeyDown = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
+
+    if (isToolDialogActive)
+    {
+        g_bPrevDepthInfoKeyDown = depthInfoKeyDown;
+        g_bPrevNormalInfoKeyDown = normalInfoKeyDown;
+        g_bPrevCursorToggleKeyDown = cursorToggleKeyDown;
+        g_bPrevLambertToggleKeyDown = lambertToggleKeyDown;
+        g_bPrevDialogToggleKeyDown = dialogToggleKeyDown;
+        g_bPrevSimpleSsaoToggleKeyDown = simpleSsaoToggleKeyDown;
+        g_bPrevEscapeToggleKeyDown = escapeToggleKeyDown;
+        return;
+    }
 
     if (depthInfoKeyDown && !g_bPrevDepthInfoKeyDown)
     {
@@ -750,7 +764,7 @@ void UpdateInputAndCamera()
     }
     g_bPrevSimpleSsaoToggleKeyDown = simpleSsaoToggleKeyDown;
 
-    if (!isWindowActive)
+    if (!isMainWindowActive)
     {
         return;
     }
