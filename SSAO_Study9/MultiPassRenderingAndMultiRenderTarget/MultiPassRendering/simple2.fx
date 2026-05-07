@@ -3,6 +3,7 @@ float4 g_lightNormal = { -0.3f, -1.0f, -0.5f, 0.0f };
 float3 g_ambient = { 0.3f, 0.3f, 0.3f };
 
 bool g_bUseTexture = true;
+bool g_bSingleChannelInput = false;
 float2 g_screenSize = { 1600.0f, 900.0f };
 
 texture texture1;
@@ -69,6 +70,22 @@ void PixelShader1(in float4 inPosition    : POSITION,
     
 }
 
+void PixelShaderDebug(in float4 inPosition    : POSITION,
+                      in float2 inTexCood     : TEXCOORD0,
+
+                      out float4 outColor     : COLOR)
+{
+    float4 sampleColor = tex2D(textureSampler, inTexCood);
+    if (g_bSingleChannelInput)
+    {
+        outColor = float4(sampleColor.r, sampleColor.r, sampleColor.r, 1.0f);
+    }
+    else
+    {
+        outColor = sampleColor;
+    }
+}
+
 technique Technique1
 {
     pass Pass1
@@ -77,5 +94,16 @@ technique Technique1
 
         VertexShader = compile vs_3_0 VertexShader1();
         PixelShader = compile ps_3_0 PixelShader1();
+   }
+}
+
+technique TechniqueDebug
+{
+    pass Pass1
+    {
+        CullMode = NONE;
+
+        VertexShader = compile vs_3_0 VertexShader1();
+        PixelShader = compile ps_3_0 PixelShaderDebug();
    }
 }

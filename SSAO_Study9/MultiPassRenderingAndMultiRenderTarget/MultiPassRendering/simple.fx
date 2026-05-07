@@ -4,6 +4,7 @@ float3 g_ambient = { 0.3f, 0.3f, 0.3f };
 
 bool g_bUseTexture = true;
 bool g_bUseLambert = true;
+bool g_bShowNormalInfo = false;
 
 texture texture1;
 sampler textureSampler = sampler_state
@@ -40,7 +41,8 @@ void PixelShaderMRT(
     in float inDepth01 : TEXCOORD1,
     in float3 inNormal : TEXCOORD2,
     out float4 outColor0 : COLOR0,
-    out float4 outColor1 : COLOR1)
+    out float4 outDepth : COLOR1,
+    out float4 outColor2 : COLOR2)
 {
     float4 baseColor = float4(0.5, 0.5, 0.5, 1.0);
 
@@ -49,10 +51,10 @@ void PixelShaderMRT(
         baseColor = tex2D(textureSampler, inTexCoord0);
     }
 
+    float3 normal = normalize(inNormal);
     float3 lighting = 1.0.xxx;
     if (g_bUseLambert)
     {
-        float3 normal = normalize(inNormal);
         float3 lightDir = normalize(-g_lightNormal.xyz);
         float lambert = saturate(dot(normal, lightDir));
         lighting = saturate(g_ambient + lambert.xxx);
@@ -61,8 +63,8 @@ void PixelShaderMRT(
     outColor0 = float4(baseColor.rgb * lighting, baseColor.a);
 
     // 近いほど黒、遠いほど白
-    float d = inDepth01;
-    outColor1 = float4(d, d, d, 1.0);
+    outDepth = float4(inDepth01, 0.0f, 0.0f, 1.0f);
+    outColor2 = float4(normal * 0.5f + 0.5f, 1.0f);
 }
 
 // ==== 追加: MRT を使うテクニック ====

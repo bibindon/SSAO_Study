@@ -56,7 +56,8 @@ bool g_bClose = false;
 
 // === 変更: RT を 2 枚用意 ===
 LPDIRECT3DTEXTURE9 g_pRenderTarget = NULL;
-LPDIRECT3DTEXTURE9 g_pRenderTarget2 = NULL;
+LPDIRECT3DTEXTURE9 g_pDepthRenderTarget = NULL;
+LPDIRECT3DTEXTURE9 g_pNormalRenderTarget = NULL;
 
 // フルスクリーンクアッド用
 LPDIRECT3DVERTEXDECLARATION9 g_pQuadDecl = NULL;
@@ -65,13 +66,15 @@ LPDIRECT3DVERTEXDECLARATION9 g_pQuadDecl = NULL;
 LPD3DXSPRITE g_pSprite = NULL;
 HWND g_hWnd = NULL;
 bool g_bShowDebugSprite = false;
-bool g_bPrevToggleKeyDown = false;
+bool g_bPrevDepthInfoKeyDown = false;
+bool g_bPrevNormalInfoKeyDown = false;
 bool g_bPrevCursorToggleKeyDown = false;
 bool g_bPrevLambertToggleKeyDown = false;
 bool g_bPrevDialogToggleKeyDown = false;
 bool g_bPrevEscapeToggleKeyDown = false;
 bool g_bMouseCursorVisible = false;
 bool g_bUseLambertLighting = true;
+bool g_bShowNormalInfo = false;
 float g_cameraYaw = -D3DX_PI * 0.25f;
 float g_cameraPitch = -0.34f;
 D3DXVECTOR3 g_cameraPosition(2.0f, 1.0f, -3.0f);
@@ -324,9 +327,18 @@ void InitD3D(HWND hWnd)
                                 kRenderWidth, kRenderHeight,
                                 1,
                                 D3DUSAGE_RENDERTARGET,
+                                D3DFMT_R32F,
+                                D3DPOOL_DEFAULT,
+                                &g_pDepthRenderTarget);
+    assert(hResult == S_OK);
+
+    hResult = D3DXCreateTexture(g_pd3dDevice,
+                                kRenderWidth, kRenderHeight,
+                                1,
+                                D3DUSAGE_RENDERTARGET,
                                 D3DFMT_A8R8G8B8,
                                 D3DPOOL_DEFAULT,
-                                &g_pRenderTarget2);
+                                &g_pNormalRenderTarget);
     assert(hResult == S_OK);
 
     // フルスクリーンクアッドの頂宣言
@@ -375,7 +387,8 @@ void Cleanup()
 
     // 追加: 解放漏れ防止
     SAFE_RELEASE(g_pRenderTarget);
-    SAFE_RELEASE(g_pRenderTarget2);
+    SAFE_RELEASE(g_pDepthRenderTarget);
+    SAFE_RELEASE(g_pNormalRenderTarget);
     SAFE_RELEASE(g_pQuadDecl);
     SAFE_RELEASE(g_pSprite);
     if (g_hToolDialog)
@@ -618,17 +631,41 @@ void UpdateInputAndCamera()
 {
     const float deltaTime = 1.0f / 60.0f;
     const bool isWindowActive = (GetForegroundWindow() == g_hWnd);
-    const bool toggleKeyDown = (GetAsyncKeyState('1') & 0x8000) != 0;
+    const bool depthInfoKeyDown = (GetAsyncKeyState(VK_F1) & 0x8000) != 0;
+    const bool normalInfoKeyDown = (GetAsyncKeyState(VK_F2) & 0x8000) != 0;
     const bool cursorToggleKeyDown = (GetAsyncKeyState('2') & 0x8000) != 0;
     const bool lambertToggleKeyDown = (GetAsyncKeyState('3') & 0x8000) != 0;
     const bool dialogToggleKeyDown = (GetAsyncKeyState('4') & 0x8000) != 0;
     const bool escapeToggleKeyDown = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
 
-    if (toggleKeyDown && !g_bPrevToggleKeyDown)
+    if (depthInfoKeyDown && !g_bPrevDepthInfoKeyDown)
     {
-        g_bShowDebugSprite = !g_bShowDebugSprite;
+        if (g_bShowDebugSprite && !g_bShowNormalInfo)
+        {
+            g_bShowDebugSprite = false;
+        }
+        else
+        {
+            g_bShowDebugSprite = true;
+            g_bShowNormalInfo = false;
+        }
     }
-    g_bPrevToggleKeyDown = toggleKeyDown;
+    g_bPrevDepthInfoKeyDown = depthInfoKeyDown;
+
+    if (normalInfoKeyDown && !g_bPrevNormalInfoKeyDown)
+    {
+        if (g_bShowDebugSprite && g_bShowNormalInfo)
+        {
+            g_bShowDebugSprite = false;
+            g_bShowNormalInfo = false;
+        }
+        else
+        {
+            g_bShowDebugSprite = true;
+            g_bShowNormalInfo = true;
+        }
+    }
+    g_bPrevNormalInfoKeyDown = normalInfoKeyDown;
 
     if (cursorToggleKeyDown && !g_bPrevCursorToggleKeyDown)
     {
@@ -721,7 +758,8 @@ void DrawOverlayText()
         _T("W/A/S/D: move"),
         _T("E / Q: move up / down"),
         _T("Mouse: look around"),
-        _T("1: toggle debug sprite"),
+        _T("F1: show depth info"),
+        _T("F2: show normal info"),
         _T("2 / Esc: toggle mouse cursor"),
         _T("3: toggle lambert lighting"),
         _T("4: toggle mesh dialog"),
@@ -745,19 +783,22 @@ void RenderPass1()
     // 2 枚の RT サーフェスを取得
     LPDIRECT3DSURFACE9 pRT0 = NULL;
     LPDIRECT3DSURFACE9 pRT1 = NULL;
+    LPDIRECT3DSURFACE9 pRT2 = NULL;
     hResult = g_pRenderTarget->GetSurfaceLevel(0, &pRT0);  assert(hResult == S_OK);
-    hResult = g_pRenderTarget2->GetSurfaceLevel(0, &pRT1); assert(hResult == S_OK);
+    hResult = g_pDepthRenderTarget->GetSurfaceLevel(0, &pRT1); assert(hResult == S_OK);
+    hResult = g_pNormalRenderTarget->GetSurfaceLevel(0, &pRT2); assert(hResult == S_OK);
 
-    // MRT セット（スロット 0 と 1）
+    // MRT セット
     hResult = g_pd3dDevice->SetRenderTarget(0, pRT0); assert(hResult == S_OK);
     hResult = g_pd3dDevice->SetRenderTarget(1, pRT1); assert(hResult == S_OK);
+    hResult = g_pd3dDevice->SetRenderTarget(2, pRT2); assert(hResult == S_OK);
 
     D3DXMATRIX View, Proj;
 
     D3DXMatrixPerspectiveFovLH(&Proj,
                                D3DXToRadian(45),
                                static_cast<float>(kRenderWidth) / static_cast<float>(kRenderHeight),
-                               0.01f,
+                               0.1f,
                                50.0f);
 
     D3DXVECTOR3 forward(sinf(g_cameraYaw) * cosf(g_cameraPitch),
@@ -786,6 +827,7 @@ void RenderPass1()
     // 4x4 テクスチャの小さなキューブをたくさん配置
     hResult = g_pEffect1->SetBool("g_bUseTexture", TRUE); assert(hResult == S_OK);
     hResult = g_pEffect1->SetBool("g_bUseLambert", g_bUseLambertLighting ? TRUE : FALSE); assert(hResult == S_OK);
+    hResult = g_pEffect1->SetBool("g_bShowNormalInfo", g_bShowNormalInfo ? TRUE : FALSE); assert(hResult == S_OK);
 
     D3DXMATRIX largeCubeWorld;
     D3DXMATRIX largeCubeWorldViewProj;
@@ -880,11 +922,13 @@ void RenderPass1()
     hResult = g_pd3dDevice->EndScene(); assert(hResult == S_OK);
 
     // MRT を解除してバックバッファへ戻す
+    hResult = g_pd3dDevice->SetRenderTarget(2, NULL);   assert(hResult == S_OK);
     hResult = g_pd3dDevice->SetRenderTarget(1, NULL);   assert(hResult == S_OK);
     hResult = g_pd3dDevice->SetRenderTarget(0, pOldRT0); assert(hResult == S_OK);
 
     SAFE_RELEASE(pRT0);
     SAFE_RELEASE(pRT1);
+    SAFE_RELEASE(pRT2);
     SAFE_RELEASE(pOldRT0);
 }
 
@@ -919,22 +963,32 @@ void RenderPass2()
     hResult = g_pEffect2->EndPass(); assert(hResult == S_OK);
     hResult = g_pEffect2->End();     assert(hResult == S_OK);
 
-    // === 追加: 左上に RT1 を 1/2 スケールで表示（D3DXSPRITE） ===
-    if (g_bShowDebugSprite && g_pSprite)
+    if (g_bShowDebugSprite)
     {
-        hResult = g_pSprite->Begin(D3DXSPRITE_ALPHABLEND);  assert(hResult == S_OK);
+        D3DVIEWPORT9 oldViewport;
+        D3DVIEWPORT9 debugViewport;
+        hResult = g_pd3dDevice->GetViewport(&oldViewport); assert(hResult == S_OK);
+        debugViewport = oldViewport;
+        debugViewport.X = 0;
+        debugViewport.Y = 0;
+        debugViewport.Width = kRenderWidth / 2;
+        debugViewport.Height = kRenderHeight / 2;
+        hResult = g_pd3dDevice->SetViewport(&debugViewport); assert(hResult == S_OK);
 
-        D3DXMATRIX mat;
-        D3DXVECTOR2 scaling(0.5f, 0.5f);     // 半分
-        D3DXVECTOR2 trans(0.0f, 0.0f);       // 左上
-        D3DXMatrixTransformation2D(&mat, NULL, 0.0f, &scaling, NULL, 0.0f, &trans);
-        g_pSprite->SetTransform(&mat);
+        hResult = g_pEffect2->SetTechnique("TechniqueDebug"); assert(hResult == S_OK);
 
-        // そのまま (0,0) へ描画
-        hResult = g_pSprite->Draw(g_pRenderTarget2, NULL, NULL, NULL, 0xFFFFFFFF);
-        assert(hResult == S_OK);
+        UINT debugNumPass = 0;
+        hResult = g_pEffect2->Begin(&debugNumPass, 0); assert(hResult == S_OK);
+        hResult = g_pEffect2->BeginPass(0);            assert(hResult == S_OK);
 
-        hResult = g_pSprite->End(); assert(hResult == S_OK);
+        hResult = g_pEffect2->SetBool("g_bSingleChannelInput", g_bShowNormalInfo ? FALSE : TRUE); assert(hResult == S_OK);
+        hResult = g_pEffect2->SetTexture("texture1", g_bShowNormalInfo ? g_pNormalRenderTarget : g_pDepthRenderTarget); assert(hResult == S_OK);
+        hResult = g_pEffect2->CommitChanges(); assert(hResult == S_OK);
+        DrawFullscreenQuad();
+
+        hResult = g_pEffect2->EndPass(); assert(hResult == S_OK);
+        hResult = g_pEffect2->End();     assert(hResult == S_OK);
+        hResult = g_pd3dDevice->SetViewport(&oldViewport); assert(hResult == S_OK);
     }
 
     DrawOverlayText();
