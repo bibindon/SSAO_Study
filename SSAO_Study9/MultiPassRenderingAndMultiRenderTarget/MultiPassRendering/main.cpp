@@ -36,6 +36,7 @@ namespace
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
     constexpr int kDebugViewThickness = 3;
+    constexpr int kDebugViewBackDepth = 4;
 }
 
 LPDIRECT3D9 g_pD3D = NULL;
@@ -77,6 +78,7 @@ bool g_bShowDebugSprite = false;
 bool g_bPrevDepthInfoKeyDown = false;
 bool g_bPrevNormalInfoKeyDown = false;
 bool g_bPrevThicknessInfoKeyDown = false;
+bool g_bPrevBackDepthInfoKeyDown = false;
 bool g_bPrevCursorToggleKeyDown = false;
 bool g_bPrevLambertToggleKeyDown = false;
 bool g_bPrevDialogToggleKeyDown = false;
@@ -716,6 +718,7 @@ void UpdateInputAndCamera()
     const bool depthInfoKeyDown = (GetAsyncKeyState(VK_F1) & 0x8000) != 0;
     const bool normalInfoKeyDown = (GetAsyncKeyState(VK_F2) & 0x8000) != 0;
     const bool thicknessInfoKeyDown = (GetAsyncKeyState(VK_F3) & 0x8000) != 0;
+    const bool backDepthInfoKeyDown = (GetAsyncKeyState(VK_F4) & 0x8000) != 0;
     const bool cursorToggleKeyDown = (GetAsyncKeyState('2') & 0x8000) != 0;
     const bool lambertToggleKeyDown = (GetAsyncKeyState('3') & 0x8000) != 0;
     const bool dialogToggleKeyDown = (GetAsyncKeyState('4') & 0x8000) != 0;
@@ -727,6 +730,7 @@ void UpdateInputAndCamera()
         g_bPrevDepthInfoKeyDown = depthInfoKeyDown;
         g_bPrevNormalInfoKeyDown = normalInfoKeyDown;
         g_bPrevThicknessInfoKeyDown = thicknessInfoKeyDown;
+        g_bPrevBackDepthInfoKeyDown = backDepthInfoKeyDown;
         g_bPrevCursorToggleKeyDown = cursorToggleKeyDown;
         g_bPrevLambertToggleKeyDown = lambertToggleKeyDown;
         g_bPrevDialogToggleKeyDown = dialogToggleKeyDown;
@@ -779,6 +783,21 @@ void UpdateInputAndCamera()
         }
     }
     g_bPrevThicknessInfoKeyDown = thicknessInfoKeyDown;
+
+    if (backDepthInfoKeyDown && !g_bPrevBackDepthInfoKeyDown)
+    {
+        if (g_bShowDebugSprite && g_debugViewMode == kDebugViewBackDepth)
+        {
+            g_bShowDebugSprite = false;
+            g_debugViewMode = kDebugViewNone;
+        }
+        else
+        {
+            g_bShowDebugSprite = true;
+            g_debugViewMode = kDebugViewBackDepth;
+        }
+    }
+    g_bPrevBackDepthInfoKeyDown = backDepthInfoKeyDown;
 
     if (cursorToggleKeyDown && !g_bPrevCursorToggleKeyDown)
     {
@@ -880,6 +899,7 @@ void DrawOverlayText()
         _T("F1: show depth info"),
         _T("F2: show normal info"),
         _T("F3: show thickness info"),
+        _T("F4: show back depth info"),
         _T("2 / Esc: toggle mouse cursor"),
         _T("3: toggle lambert lighting"),
         _T("4: toggle mesh dialog"),
@@ -1197,6 +1217,10 @@ void RenderPass2()
         else if (g_debugViewMode == kDebugViewThickness)
         {
             pDebugTexture = g_pThicknessRenderTarget;
+        }
+        else if (g_debugViewMode == kDebugViewBackDepth)
+        {
+            pDebugTexture = g_pBackDepthRenderTarget;
         }
 
         hResult = g_pEffect2->SetBool("g_bSingleChannelInput", isSingleChannelDebug ? TRUE : FALSE); assert(hResult == S_OK);
