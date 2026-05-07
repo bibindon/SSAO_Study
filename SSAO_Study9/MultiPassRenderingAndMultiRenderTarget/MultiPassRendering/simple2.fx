@@ -62,14 +62,10 @@ void PixelShader1(in float4 inPosition    : POSITION,
         upperTexCoord = saturate(upperTexCoord);
         float upperDepth = tex2D(depthSampler, upperTexCoord).r;
 
-        /*
         if (abs(currentDepth - upperDepth) < g_depthCompareThreshold)
         {
             workColor = float4(0.0f, 0.0f, 0.0f, workColor.a);
         }
-        */
-        float diff = abs(currentDepth - upperDepth);
-        workColor = float4(diff, diff, diff, workColor.a);
     }
 
     //float average = (workColor.r + workColor.g + workColor.b) / 3;

@@ -22,23 +22,20 @@ void VertexShader1(
     in float2 inTexCoord0 : TEXCOORD0,
     out float4 outPosition : POSITION0,
     out float2 outTexCoord0 : TEXCOORD0,
-    out float outDepth01 : TEXCOORD1,
+    out float2 outClipDepth : TEXCOORD1,
     out float3 outNormal : TEXCOORD2)
 {
     float4 clipPosition = mul(inPosition, g_matWorldViewProj);
     outPosition = clipPosition;
     outTexCoord0 = inTexCoord0;
     outNormal = normalize(inNormal);
-
-    // 0..1（近=0, 遠=1）
-    float depthNdc = clipPosition.z / clipPosition.w;
-    outDepth01 = saturate(depthNdc);
+    outClipDepth = clipPosition.zw;
 }
 
 // ▼ ピクセルシェーダー：MRTのCOLOR1にグレースケールで深度を書き込む
 void PixelShaderMRT(
     in float2 inTexCoord0 : TEXCOORD0,
-    in float inDepth01 : TEXCOORD1,
+    in float2 inClipDepth : TEXCOORD1,
     in float3 inNormal : TEXCOORD2,
     out float4 outColor0 : COLOR0,
     out float4 outDepth : COLOR1,
@@ -63,7 +60,8 @@ void PixelShaderMRT(
     outColor0 = float4(baseColor.rgb * lighting, baseColor.a);
 
     // 近いほど黒、遠いほど白
-    outDepth = float4(inDepth01, 0.0f, 0.0f, 1.0f);
+    float depth01 = saturate(inClipDepth.x / inClipDepth.y);
+    outDepth = float4(depth01, 0.0f, 0.0f, 1.0f);
     outColor2 = float4(normal * 0.5f + 0.5f, 1.0f);
 }
 
