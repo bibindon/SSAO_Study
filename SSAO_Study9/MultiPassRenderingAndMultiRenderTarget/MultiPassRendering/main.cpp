@@ -89,6 +89,7 @@ struct UserMeshInstance
 };
 
 std::vector<UserMeshInstance> g_userMeshes;
+std::vector<UserMeshInstance> g_sceneMeshes;
 
 struct QuadVertex
 {
@@ -116,6 +117,7 @@ static void CreateToolDialog();
 static void ToggleToolDialog();
 static void OpenMeshFileDialog();
 static void PlaceUserMeshAtCurrentLookTarget(UserMeshInstance& userMesh);
+static void LoadSceneMeshInstance(const TCHAR* meshPath, const D3DXVECTOR3& position, float yaw);
 static void SetMouseCursorVisible(bool visible);
 static void UpdateInputAndCamera();
 static void DrawOverlayText();
@@ -282,6 +284,12 @@ void InitD3D(HWND hWnd)
     LoadMeshWithTextures(_T("resource\\small_cube.x"), &g_pMesh, g_pMaterials, g_pTextures, &g_dwNumMaterials);
     LoadMeshWithTextures(_T("resource\\large_cube_inside.x"), &g_pLargeCubeMesh, g_pLargeCubeMaterials, g_pLargeCubeTextures, &g_dwLargeCubeNumMaterials);
     LoadMeshWithTextures(_T("resource\\plate.x"), &g_pPlateMesh, g_pPlateMaterials, g_pPlateTextures, &g_dwPlateNumMaterials);
+    LoadSceneMeshInstance(_T("resource\\cube_red.x"), D3DXVECTOR3(-8.0f, 0.5f, -6.0f), 0.2f);
+    LoadSceneMeshInstance(_T("resource\\cube_green.x"), D3DXVECTOR3(-3.5f, 0.5f, -7.5f), 0.8f);
+    LoadSceneMeshInstance(_T("resource\\cube_blue.x"), D3DXVECTOR3(2.5f, 0.5f, -6.5f), -0.4f);
+    LoadSceneMeshInstance(_T("resource\\sphere_orange.x"), D3DXVECTOR3(-6.5f, 1.2f, 3.0f), 0.0f);
+    LoadSceneMeshInstance(_T("resource\\sphere_pink.x"), D3DXVECTOR3(-1.5f, 1.2f, 5.0f), 0.0f);
+    LoadSceneMeshInstance(_T("resource\\sphere_yellowgreen.x"), D3DXVECTOR3(4.5f, 1.2f, 4.0f), 0.0f);
 
     hResult = D3DXCreateEffectFromFile(g_pd3dDevice,
                                        _T("simple.fx"),
@@ -356,6 +364,11 @@ void Cleanup()
         SAFE_RELEASE(userMesh.mesh);
     }
     g_userMeshes.clear();
+    for (auto& sceneMesh : g_sceneMeshes)
+    {
+        SAFE_RELEASE(sceneMesh.mesh);
+    }
+    g_sceneMeshes.clear();
     SAFE_RELEASE(g_pEffect1);
     SAFE_RELEASE(g_pEffect2);
     SAFE_RELEASE(g_pFont);
@@ -567,6 +580,15 @@ void PlaceUserMeshAtCurrentLookTarget(UserMeshInstance& userMesh)
 
     D3DXVECTOR3 toCamera = g_cameraPosition - userMesh.position;
     userMesh.yaw = atan2f(toCamera.x, toCamera.z) + D3DX_PI;
+}
+
+void LoadSceneMeshInstance(const TCHAR* meshPath, const D3DXVECTOR3& position, float yaw)
+{
+    UserMeshInstance sceneMesh;
+    LoadMeshWithTextures(meshPath, &sceneMesh.mesh, sceneMesh.materials, sceneMesh.textures, &sceneMesh.numMaterials);
+    sceneMesh.position = position;
+    sceneMesh.yaw = yaw;
+    g_sceneMeshes.push_back(sceneMesh);
 }
 
 void SetMouseCursorVisible(bool visible)
@@ -787,6 +809,25 @@ void RenderPass1()
         hResult = g_pEffect1->SetTexture("texture1", g_pPlateTextures[i]); assert(hResult == S_OK);
         hResult = g_pEffect1->CommitChanges();                              assert(hResult == S_OK);
         hResult = g_pPlateMesh->DrawSubset(i);                              assert(hResult == S_OK);
+    }
+
+    for (const auto& sceneMesh : g_sceneMeshes)
+    {
+        D3DXMATRIX sceneMeshWorld;
+        D3DXMATRIX sceneMeshRotation;
+        D3DXMATRIX sceneMeshTranslation;
+        D3DXMATRIX sceneMeshWorldViewProj;
+        D3DXMatrixRotationY(&sceneMeshRotation, sceneMesh.yaw);
+        D3DXMatrixTranslation(&sceneMeshTranslation, sceneMesh.position.x, sceneMesh.position.y, sceneMesh.position.z);
+        sceneMeshWorld = sceneMeshRotation * sceneMeshTranslation;
+        sceneMeshWorldViewProj = sceneMeshWorld * View * Proj;
+        hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &sceneMeshWorldViewProj); assert(hResult == S_OK);
+        for (DWORD i = 0; i < sceneMesh.numMaterials; i++)
+        {
+            hResult = g_pEffect1->SetTexture("texture1", sceneMesh.textures[i]); assert(hResult == S_OK);
+            hResult = g_pEffect1->CommitChanges();                                assert(hResult == S_OK);
+            hResult = sceneMesh.mesh->DrawSubset(i);                              assert(hResult == S_OK);
+        }
     }
 
     for (const auto& userMesh : g_userMeshes)
