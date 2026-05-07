@@ -30,6 +30,8 @@ namespace
     constexpr float kCubeSpacing = 1.2f;
     constexpr float kUserMeshPlacementDistance = 4.5f;
     constexpr int kToolDialogButtonId = 1001;
+    constexpr int kToolDialogSsaoSampleEditId = 1002;
+    constexpr int kToolDialogApplySsaoButtonId = 1003;
 }
 
 LPDIRECT3D9 g_pD3D = NULL;
@@ -77,11 +79,14 @@ bool g_bMouseCursorVisible = false;
 bool g_bUseLambertLighting = true;
 bool g_bEnableSimpleSsao = true;
 bool g_bShowNormalInfo = false;
+float g_simpleSsaoSamplePixels = 20.0f;
 float g_cameraYaw = -D3DX_PI * 0.25f;
 float g_cameraPitch = -0.34f;
 D3DXVECTOR3 g_cameraPosition(2.0f, 1.0f, -3.0f);
 HWND g_hToolDialog = NULL;
 HWND g_hOpenMeshButton = NULL;
+HWND g_hSsaoSampleEdit = NULL;
+HWND g_hApplySsaoButton = NULL;
 
 struct UserMeshInstance
 {
@@ -193,6 +198,7 @@ int WINAPI _tWinMain(_In_ HINSTANCE hInstance,
     {
         if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
         {
+            TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
         else
@@ -531,8 +537,8 @@ void CreateToolDialog()
                                    WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,
-                                   260,
-                                   120,
+                                   320,
+                                   180,
                                    g_hWnd,
                                    NULL,
                                    wc.hInstance,
@@ -551,6 +557,44 @@ void CreateToolDialog()
                                      wc.hInstance,
                                      NULL);
     assert(g_hOpenMeshButton != NULL);
+
+    CreateWindow(_T("STATIC"),
+                 _T("SSAO sample pixels:"),
+                 WS_CHILD | WS_VISIBLE,
+                 20,
+                 72,
+                 130,
+                 20,
+                 g_hToolDialog,
+                 NULL,
+                 wc.hInstance,
+                 NULL);
+
+    g_hSsaoSampleEdit = CreateWindow(_T("EDIT"),
+                                     _T("20.0"),
+                                     WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                                     160,
+                                     68,
+                                     60,
+                                     24,
+                                     g_hToolDialog,
+                                     reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogSsaoSampleEditId)),
+                                     wc.hInstance,
+                                     NULL);
+    assert(g_hSsaoSampleEdit != NULL);
+
+    g_hApplySsaoButton = CreateWindow(_T("BUTTON"),
+                                      _T("Apply"),
+                                      WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                      230,
+                                      66,
+                                      60,
+                                      28,
+                                      g_hToolDialog,
+                                      reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogApplySsaoButtonId)),
+                                      wc.hInstance,
+                                      NULL);
+    assert(g_hApplySsaoButton != NULL);
 }
 
 void ToggleToolDialog()
@@ -846,9 +890,12 @@ void RenderPass1()
     hResult = g_pEffect1->SetBool("g_bShowNormalInfo", g_bShowNormalInfo ? TRUE : FALSE); assert(hResult == S_OK);
 
     D3DXMATRIX largeCubeWorld;
+    D3DXMATRIX largeCubeWorldView;
     D3DXMATRIX largeCubeWorldViewProj;
     D3DXMatrixTranslation(&largeCubeWorld, 0.0f, 0.0f, 0.0f);
+    largeCubeWorldView = largeCubeWorld * View;
     largeCubeWorldViewProj = largeCubeWorld * View * Proj;
+    hResult = g_pEffect1->SetMatrix("g_matWorldView", &largeCubeWorldView); assert(hResult == S_OK);
     hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &largeCubeWorldViewProj); assert(hResult == S_OK);
     for (DWORD i = 0; i < g_dwLargeCubeNumMaterials; i++)
     {
@@ -858,9 +905,12 @@ void RenderPass1()
     }
 
     D3DXMATRIX plateWorld;
+    D3DXMATRIX plateWorldView;
     D3DXMATRIX plateWorldViewProj;
     D3DXMatrixTranslation(&plateWorld, 0.0f, 0.0f, 0.0f);
+    plateWorldView = plateWorld * View;
     plateWorldViewProj = plateWorld * View * Proj;
+    hResult = g_pEffect1->SetMatrix("g_matWorldView", &plateWorldView); assert(hResult == S_OK);
     hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &plateWorldViewProj); assert(hResult == S_OK);
     for (DWORD i = 0; i < g_dwPlateNumMaterials; i++)
     {
@@ -874,11 +924,14 @@ void RenderPass1()
         D3DXMATRIX sceneMeshWorld;
         D3DXMATRIX sceneMeshRotation;
         D3DXMATRIX sceneMeshTranslation;
+        D3DXMATRIX sceneMeshWorldView;
         D3DXMATRIX sceneMeshWorldViewProj;
         D3DXMatrixRotationY(&sceneMeshRotation, sceneMesh.yaw);
         D3DXMatrixTranslation(&sceneMeshTranslation, sceneMesh.position.x, sceneMesh.position.y, sceneMesh.position.z);
         sceneMeshWorld = sceneMeshRotation * sceneMeshTranslation;
+        sceneMeshWorldView = sceneMeshWorld * View;
         sceneMeshWorldViewProj = sceneMeshWorld * View * Proj;
+        hResult = g_pEffect1->SetMatrix("g_matWorldView", &sceneMeshWorldView); assert(hResult == S_OK);
         hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &sceneMeshWorldViewProj); assert(hResult == S_OK);
         for (DWORD i = 0; i < sceneMesh.numMaterials; i++)
         {
@@ -893,11 +946,14 @@ void RenderPass1()
         D3DXMATRIX userMeshWorld;
         D3DXMATRIX userMeshRotation;
         D3DXMATRIX userMeshTranslation;
+        D3DXMATRIX userMeshWorldView;
         D3DXMATRIX userMeshWorldViewProj;
         D3DXMatrixRotationY(&userMeshRotation, userMesh.yaw);
         D3DXMatrixTranslation(&userMeshTranslation, userMesh.position.x, userMesh.position.y, userMesh.position.z);
         userMeshWorld = userMeshRotation * userMeshTranslation;
+        userMeshWorldView = userMeshWorld * View;
         userMeshWorldViewProj = userMeshWorld * View * Proj;
+        hResult = g_pEffect1->SetMatrix("g_matWorldView", &userMeshWorldView); assert(hResult == S_OK);
         hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &userMeshWorldViewProj); assert(hResult == S_OK);
         for (DWORD i = 0; i < userMesh.numMaterials; i++)
         {
@@ -912,6 +968,7 @@ void RenderPass1()
         for (int x = 0; x < kCubeGridWidth; ++x)
         {
             D3DXMATRIX world;
+            D3DXMATRIX worldView;
             D3DXMATRIX worldViewProj;
 
             const float offsetX = (x - (kCubeGridWidth - 1) * 0.5f) * kCubeSpacing;
@@ -919,8 +976,10 @@ void RenderPass1()
             const float offsetY = 0.15f * sinf(static_cast<float>(x) * 0.9f) + 0.15f * cosf(static_cast<float>(z) * 0.8f);
 
             D3DXMatrixTranslation(&world, offsetX, offsetY, offsetZ);
+            worldView = world * View;
             worldViewProj = world * View * Proj;
 
+            hResult = g_pEffect1->SetMatrix("g_matWorldView", &worldView); assert(hResult == S_OK);
             hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &worldViewProj); assert(hResult == S_OK);
 
             for (DWORD i = 0; i < g_dwNumMaterials; i++)
@@ -972,6 +1031,7 @@ void RenderPass2()
     hResult = g_pEffect2->BeginPass(0);                     assert(hResult == S_OK);
 
     hResult = g_pEffect2->SetBool("g_bEnableSimpleSsao", g_bEnableSimpleSsao ? TRUE : FALSE); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloat("g_simpleSsaoSamplePixels", g_simpleSsaoSamplePixels); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("depthTexture", g_pDepthRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("normalTexture", g_pNormalRenderTarget); assert(hResult == S_OK);
@@ -1058,6 +1118,25 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (LOWORD(wParam) == kToolDialogButtonId)
         {
             OpenMeshFileDialog();
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogApplySsaoButtonId)
+        {
+            TCHAR buffer[64] = { };
+            GetWindowText(g_hSsaoSampleEdit, buffer, _countof(buffer));
+            float samplePixels = g_simpleSsaoSamplePixels;
+            if (_stscanf_s(buffer, _T("%f"), &samplePixels) == 1)
+            {
+                if (samplePixels < 1.0f)
+                {
+                    samplePixels = 1.0f;
+                }
+                g_simpleSsaoSamplePixels = samplePixels;
+
+                TCHAR normalizedText[64] = { };
+                _stprintf_s(normalizedText, _T("%.1f"), g_simpleSsaoSamplePixels);
+                SetWindowText(g_hSsaoSampleEdit, normalizedText);
+            }
             return 0;
         }
         break;

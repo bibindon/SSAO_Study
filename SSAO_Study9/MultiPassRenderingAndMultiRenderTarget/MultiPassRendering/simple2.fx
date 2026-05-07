@@ -6,6 +6,7 @@ bool g_bUseTexture = true;
 bool g_bSingleChannelInput = false;
 bool g_bEnableSimpleSsao = true;
 float2 g_screenSize = { 1600.0f, 900.0f };
+float g_simpleSsaoSamplePixels = 20.0f;
 float g_depthCompareThreshold = 0.002f;
 
 texture texture1;
@@ -63,8 +64,8 @@ void PixelShader1(in float4 inPosition    : POSITION,
         if (directionLength > 0.1f)
         {
             sampleDirection /= directionLength;
-            float2 sampleOffset = float2(sampleDirection.x * (20.0f / g_screenSize.x),
-                                         -sampleDirection.y * (20.0f / g_screenSize.y));
+            float2 sampleOffset = float2(sampleDirection.x * (g_simpleSsaoSamplePixels / g_screenSize.x),
+                                         -sampleDirection.y * (g_simpleSsaoSamplePixels / g_screenSize.y));
             float2 sampleTexCoord = saturate(shiftedTexCoord + sampleOffset);
             float sampleDepth = tex2D(depthSampler, sampleTexCoord).r;
 
