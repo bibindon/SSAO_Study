@@ -70,6 +70,20 @@ void PixelShaderMRT(
     outColor2 = float4(viewNormal * 0.5f + 0.5f, 1.0f);
 }
 
+void PixelShaderBackDepth(
+    in float2 inClipDepth : TEXCOORD1,
+    in float faceSign : VFACE,
+    out float4 outDepth : COLOR0)
+{
+    if (faceSign > 0.0f)
+    {
+        clip(-1.0f);
+    }
+
+    float depth01 = saturate(inClipDepth.x / inClipDepth.y);
+    outDepth = float4(depth01, 0.0f, 0.0f, 1.0f);
+}
+
 // ==== 追加: MRT を使うテクニック ====
 technique TechniqueMRT
 {
@@ -78,5 +92,15 @@ technique TechniqueMRT
         CullMode = NONE;
         VertexShader = compile vs_3_0 VertexShader1();
         PixelShader = compile ps_3_0 PixelShaderMRT();
+    }
+}
+
+technique TechniqueBackDepth
+{
+    pass P0
+    {
+        CullMode = NONE;
+        VertexShader = compile vs_3_0 VertexShader1();
+        PixelShader = compile ps_3_0 PixelShaderBackDepth();
     }
 }

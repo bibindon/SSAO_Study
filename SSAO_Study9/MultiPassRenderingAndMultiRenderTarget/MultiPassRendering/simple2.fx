@@ -25,6 +25,14 @@ sampler depthSampler = sampler_state {
     MagFilter = POINT;
 };
 
+texture backDepthTexture;
+sampler backDepthSampler = sampler_state {
+    Texture = (backDepthTexture);
+    MipFilter = NONE;
+    MinFilter = POINT;
+    MagFilter = POINT;
+};
+
 texture normalTexture;
 sampler normalSampler = sampler_state {
     Texture = (normalTexture);
@@ -108,6 +116,25 @@ void PixelShaderDebug(in float4 inPosition    : POSITION,
     }
 }
 
+void PixelShaderThickness(in float4 inPosition : POSITION,
+                          in float2 inTexCood  : TEXCOORD0,
+
+                          out float4 outColor  : COLOR)
+{
+    float2 halfPixelOffset = 0.5f / g_screenSize;
+    float2 shiftedTexCoord = inTexCood + halfPixelOffset;
+    float frontDepth = tex2D(depthSampler, shiftedTexCoord).r;
+    float backDepth = tex2D(backDepthSampler, shiftedTexCoord).r;
+
+    float thickness = 0.0f;
+    if (backDepth < 0.999f)
+    {
+        thickness = saturate(backDepth - frontDepth);
+    }
+
+    outColor = float4(thickness, 0.0f, 0.0f, 1.0f);
+}
+
 technique Technique1
 {
     pass Pass1
@@ -127,5 +154,16 @@ technique TechniqueDebug
 
         VertexShader = compile vs_3_0 VertexShader1();
         PixelShader = compile ps_3_0 PixelShaderDebug();
+   }
+}
+
+technique TechniqueThickness
+{
+    pass Pass1
+    {
+        CullMode = NONE;
+
+        VertexShader = compile vs_3_0 VertexShader1();
+        PixelShader = compile ps_3_0 PixelShaderThickness();
    }
 }
