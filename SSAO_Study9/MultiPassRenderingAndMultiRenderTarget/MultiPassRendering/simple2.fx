@@ -5,6 +5,7 @@ float3 g_ambient = { 0.3f, 0.3f, 0.3f };
 bool g_bUseTexture = true;
 bool g_bSingleChannelInput = false;
 bool g_bEnableSimpleSsao = true;
+bool g_bUseThicknessForSsao = true;
 float2 g_screenSize = { 1600.0f, 900.0f };
 float g_simpleSsaoSamplePixels = 20.0f;
 float g_depthCompareThreshold = 0.002f;
@@ -86,7 +87,11 @@ void PixelShader1(in float4 inPosition    : POSITION,
             float2 sampleTexCoord = saturate(shiftedTexCoord + sampleOffset);
             float sampleDepth = tex2D(depthSampler, sampleTexCoord).r;
             float frontDepthWithMargin = currentDepth - g_depthCompareThreshold;
-            float backDepthWithMargin = currentDepth + currentThickness + g_depthCompareThreshold;
+            float backDepthWithMargin = currentDepth + g_depthCompareThreshold;
+            if (g_bUseThicknessForSsao)
+            {
+                backDepthWithMargin += currentThickness;
+            }
 
             if (sampleDepth >= frontDepthWithMargin && sampleDepth <= backDepthWithMargin)
             {
