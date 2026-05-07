@@ -33,6 +33,8 @@ namespace
     constexpr int kToolDialogSsaoSampleEditId = 1002;
     constexpr int kToolDialogApplySsaoButtonId = 1003;
     constexpr int kToolDialogUseThicknessCheckboxId = 1004;
+    constexpr int kToolDialogThicknessScaleEditId = 1005;
+    constexpr int kToolDialogApplyThicknessScaleButtonId = 1006;
     constexpr int kDebugViewNone = 0;
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
@@ -91,6 +93,7 @@ bool g_bEnableSimpleSsao = true;
 bool g_bUseThicknessForSsao = true;
 int g_debugViewMode = kDebugViewNone;
 float g_simpleSsaoSamplePixels = 20.0f;
+float g_thicknessScale = 1.0f;
 float g_cameraYaw = -D3DX_PI * 0.25f;
 float g_cameraPitch = -0.34f;
 D3DXVECTOR3 g_cameraPosition(2.0f, 1.0f, -3.0f);
@@ -99,6 +102,8 @@ HWND g_hOpenMeshButton = NULL;
 HWND g_hSsaoSampleEdit = NULL;
 HWND g_hApplySsaoButton = NULL;
 HWND g_hUseThicknessCheckbox = NULL;
+HWND g_hThicknessScaleEdit = NULL;
+HWND g_hApplyThicknessScaleButton = NULL;
 
 struct UserMeshInstance
 {
@@ -570,8 +575,8 @@ void CreateToolDialog()
                                    WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,
-                                   320,
-                                   180,
+                                   340,
+                                   230,
                                    g_hWnd,
                                    NULL,
                                    wc.hInstance,
@@ -642,6 +647,44 @@ void CreateToolDialog()
                                            NULL);
     assert(g_hUseThicknessCheckbox != NULL);
     SendMessage(g_hUseThicknessCheckbox, BM_SETCHECK, g_bUseThicknessForSsao ? BST_CHECKED : BST_UNCHECKED, 0);
+
+    CreateWindow(_T("STATIC"),
+                 _T("Thickness scale:"),
+                 WS_CHILD | WS_VISIBLE,
+                 20,
+                 138,
+                 130,
+                 20,
+                 g_hToolDialog,
+                 NULL,
+                 wc.hInstance,
+                 NULL);
+
+    g_hThicknessScaleEdit = CreateWindow(_T("EDIT"),
+                                         _T("1.0"),
+                                         WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                                         160,
+                                         134,
+                                         60,
+                                         24,
+                                         g_hToolDialog,
+                                         reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogThicknessScaleEditId)),
+                                         wc.hInstance,
+                                         NULL);
+    assert(g_hThicknessScaleEdit != NULL);
+
+    g_hApplyThicknessScaleButton = CreateWindow(_T("BUTTON"),
+                                                _T("Apply"),
+                                                WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                                230,
+                                                132,
+                                                60,
+                                                28,
+                                                g_hToolDialog,
+                                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogApplyThicknessScaleButtonId)),
+                                                wc.hInstance,
+                                                NULL);
+    assert(g_hApplyThicknessScaleButton != NULL);
 }
 
 void ToggleToolDialog()
@@ -1198,6 +1241,7 @@ void RenderPass2()
     hResult = g_pEffect2->SetBool("g_bEnableSimpleSsao", g_bEnableSimpleSsao ? TRUE : FALSE); assert(hResult == S_OK);
     hResult = g_pEffect2->SetBool("g_bUseThicknessForSsao", g_bUseThicknessForSsao ? TRUE : FALSE); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_simpleSsaoSamplePixels", g_simpleSsaoSamplePixels); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloat("g_thicknessScale", g_thicknessScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("depthTexture", g_pDepthRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("thicknessTexture", g_pThicknessRenderTarget); assert(hResult == S_OK);
@@ -1324,6 +1368,25 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (LOWORD(wParam) == kToolDialogUseThicknessCheckboxId)
         {
             g_bUseThicknessForSsao = (SendMessage(g_hUseThicknessCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogApplyThicknessScaleButtonId)
+        {
+            TCHAR buffer[64] = { };
+            GetWindowText(g_hThicknessScaleEdit, buffer, _countof(buffer));
+            float thicknessScale = g_thicknessScale;
+            if (_stscanf_s(buffer, _T("%f"), &thicknessScale) == 1)
+            {
+                if (thicknessScale < 0.0f)
+                {
+                    thicknessScale = 0.0f;
+                }
+                g_thicknessScale = thicknessScale;
+
+                TCHAR normalizedText[64] = { };
+                _stprintf_s(normalizedText, _T("%.2f"), g_thicknessScale);
+                SetWindowText(g_hThicknessScaleEdit, normalizedText);
+            }
             return 0;
         }
         break;

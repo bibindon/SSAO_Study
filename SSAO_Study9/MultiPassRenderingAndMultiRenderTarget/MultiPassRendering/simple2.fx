@@ -8,6 +8,7 @@ bool g_bEnableSimpleSsao = true;
 bool g_bUseThicknessForSsao = true;
 float2 g_screenSize = { 1600.0f, 900.0f };
 float g_simpleSsaoSamplePixels = 20.0f;
+float g_thicknessScale = 1.0f;
 float g_depthCompareThreshold = 0.002f;
 
 texture texture1;
@@ -90,10 +91,10 @@ void PixelShader1(in float4 inPosition    : POSITION,
             float backDepthWithMargin = currentDepth + g_depthCompareThreshold;
             if (g_bUseThicknessForSsao)
             {
-                backDepthWithMargin += currentThickness;
+                backDepthWithMargin += currentThickness * g_thicknessScale;
             }
 
-            if (sampleDepth >= frontDepthWithMargin && sampleDepth <= backDepthWithMargin)
+            if (frontDepthWithMargin <= sampleDepth && sampleDepth <= backDepthWithMargin)
             {
                 workColor = float4(0.0f, 0.0f, 0.0f, workColor.a);
             }
