@@ -56,15 +56,22 @@ void PixelShader1(in float4 inPosition    : POSITION,
     float3 currentNormal = tex2D(normalSampler, shiftedTexCoord).xyz * 2.0f - 1.0f;
     currentNormal = normalize(currentNormal);
 
-    if (g_bEnableSimpleSsao && currentNormal.y > 0.8f)
+    if (g_bEnableSimpleSsao)
     {
-        float2 upperTexCoord = shiftedTexCoord + float2(0.0f, -20.0f / g_screenSize.y);
-        upperTexCoord = saturate(upperTexCoord);
-        float upperDepth = tex2D(depthSampler, upperTexCoord).r;
-
-        if (abs(currentDepth - upperDepth) < g_depthCompareThreshold)
+        float2 sampleDirection = currentNormal.xy;
+        float directionLength = length(sampleDirection);
+        if (directionLength > 0.1f)
         {
-            workColor = float4(0.0f, 0.0f, 0.0f, workColor.a);
+            sampleDirection /= directionLength;
+            float2 sampleOffset = float2(sampleDirection.x * (20.0f / g_screenSize.x),
+                                         -sampleDirection.y * (20.0f / g_screenSize.y));
+            float2 sampleTexCoord = saturate(shiftedTexCoord + sampleOffset);
+            float sampleDepth = tex2D(depthSampler, sampleTexCoord).r;
+
+            if (abs(currentDepth - sampleDepth) < g_depthCompareThreshold)
+            {
+                workColor = float4(0.0f, 0.0f, 0.0f, workColor.a);
+            }
         }
     }
 
