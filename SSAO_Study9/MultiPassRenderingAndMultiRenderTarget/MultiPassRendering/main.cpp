@@ -71,9 +71,11 @@ bool g_bPrevNormalInfoKeyDown = false;
 bool g_bPrevCursorToggleKeyDown = false;
 bool g_bPrevLambertToggleKeyDown = false;
 bool g_bPrevDialogToggleKeyDown = false;
+bool g_bPrevSimpleSsaoToggleKeyDown = false;
 bool g_bPrevEscapeToggleKeyDown = false;
 bool g_bMouseCursorVisible = false;
 bool g_bUseLambertLighting = true;
+bool g_bEnableSimpleSsao = true;
 bool g_bShowNormalInfo = false;
 float g_cameraYaw = -D3DX_PI * 0.25f;
 float g_cameraPitch = -0.34f;
@@ -636,6 +638,7 @@ void UpdateInputAndCamera()
     const bool cursorToggleKeyDown = (GetAsyncKeyState('2') & 0x8000) != 0;
     const bool lambertToggleKeyDown = (GetAsyncKeyState('3') & 0x8000) != 0;
     const bool dialogToggleKeyDown = (GetAsyncKeyState('4') & 0x8000) != 0;
+    const bool simpleSsaoToggleKeyDown = (GetAsyncKeyState('5') & 0x8000) != 0;
     const bool escapeToggleKeyDown = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
 
     if (depthInfoKeyDown && !g_bPrevDepthInfoKeyDown)
@@ -690,6 +693,12 @@ void UpdateInputAndCamera()
         ToggleToolDialog();
     }
     g_bPrevDialogToggleKeyDown = dialogToggleKeyDown;
+
+    if (simpleSsaoToggleKeyDown && !g_bPrevSimpleSsaoToggleKeyDown)
+    {
+        g_bEnableSimpleSsao = !g_bEnableSimpleSsao;
+    }
+    g_bPrevSimpleSsaoToggleKeyDown = simpleSsaoToggleKeyDown;
 
     if (!isWindowActive)
     {
@@ -763,6 +772,7 @@ void DrawOverlayText()
         _T("2 / Esc: toggle mouse cursor"),
         _T("3: toggle lambert lighting"),
         _T("4: toggle mesh dialog"),
+        _T("5: toggle simple SSAO"),
     };
 
     for (int i = 0; i < _countof(lines); ++i)
@@ -955,7 +965,10 @@ void RenderPass2()
     hResult = g_pEffect2->Begin(&numPass, 0);               assert(hResult == S_OK);
     hResult = g_pEffect2->BeginPass(0);                     assert(hResult == S_OK);
 
+    hResult = g_pEffect2->SetBool("g_bEnableSimpleSsao", g_bEnableSimpleSsao ? TRUE : FALSE); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetTexture("depthTexture", g_pDepthRenderTarget); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetTexture("normalTexture", g_pNormalRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->CommitChanges();                          assert(hResult == S_OK);
 
     DrawFullscreenQuad();
