@@ -33,6 +33,14 @@ sampler backDepthSampler = sampler_state {
     MagFilter = POINT;
 };
 
+texture thicknessTexture;
+sampler thicknessSampler = sampler_state {
+    Texture = (thicknessTexture);
+    MipFilter = NONE;
+    MinFilter = POINT;
+    MagFilter = POINT;
+};
+
 texture normalTexture;
 sampler normalSampler = sampler_state {
     Texture = (normalTexture);
@@ -62,6 +70,7 @@ void PixelShader1(in float4 inPosition    : POSITION,
     workColor = tex2D(textureSampler, shiftedTexCoord);
 
     float currentDepth = tex2D(depthSampler, shiftedTexCoord).r;
+    float currentThickness = tex2D(thicknessSampler, shiftedTexCoord).r;
     float3 currentNormal = tex2D(normalSampler, shiftedTexCoord).xyz * 2.0f - 1.0f;
     currentNormal = normalize(currentNormal);
 
@@ -76,8 +85,10 @@ void PixelShader1(in float4 inPosition    : POSITION,
                                          -sampleDirection.y * (g_simpleSsaoSamplePixels / g_screenSize.y));
             float2 sampleTexCoord = saturate(shiftedTexCoord + sampleOffset);
             float sampleDepth = tex2D(depthSampler, sampleTexCoord).r;
+            float frontDepthWithMargin = currentDepth - g_depthCompareThreshold;
+            float backDepthWithMargin = currentDepth + currentThickness + g_depthCompareThreshold;
 
-            if (abs(currentDepth - sampleDepth) < g_depthCompareThreshold)
+            if (sampleDepth >= frontDepthWithMargin && sampleDepth <= backDepthWithMargin)
             {
                 workColor = float4(0.0f, 0.0f, 0.0f, workColor.a);
             }

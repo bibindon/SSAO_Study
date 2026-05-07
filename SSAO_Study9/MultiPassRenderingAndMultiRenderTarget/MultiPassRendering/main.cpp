@@ -1182,6 +1182,7 @@ void RenderPass2()
     hResult = g_pEffect2->SetFloat("g_simpleSsaoSamplePixels", g_simpleSsaoSamplePixels); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("depthTexture", g_pDepthRenderTarget); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetTexture("thicknessTexture", g_pThicknessRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("normalTexture", g_pNormalRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->CommitChanges();                          assert(hResult == S_OK);
 
