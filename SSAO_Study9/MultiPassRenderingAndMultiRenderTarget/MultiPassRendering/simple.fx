@@ -25,15 +25,13 @@ void VertexShader1(
     out float4 outPosition : POSITION0,
     out float2 outTexCoord0 : TEXCOORD0,
     out float3 outViewPosition : TEXCOORD1,
-    out float3 outNormal : TEXCOORD2,
-    out float3 outViewNormal : TEXCOORD3)
+    out float3 outNormal : TEXCOORD2)
 {
     float4 clipPosition = mul(inPosition, g_matWorldViewProj);
     float4 viewPosition = mul(inPosition, g_matWorldView);
     outPosition = clipPosition;
     outTexCoord0 = inTexCoord0;
     outNormal = normalize(inNormal);
-    outViewNormal = normalize(mul(float4(inNormal, 0.0f), g_matWorldView).xyz);
     outViewPosition = viewPosition.xyz;
 }
 
@@ -42,7 +40,6 @@ void PixelShaderMRT(
     in float2 inTexCoord0 : TEXCOORD0,
     in float3 inViewPosition : TEXCOORD1,
     in float3 inNormal : TEXCOORD2,
-    in float3 inViewNormal : TEXCOORD3,
     out float4 outColor0 : COLOR0,
     out float4 outDepth : COLOR1,
     out float4 outColor2 : COLOR2)
@@ -68,7 +65,7 @@ void PixelShaderMRT(
     // 近いほど黒、遠いほど白
     float viewDepth = max(0.0f, inViewPosition.z);
     float depth01 = saturate(viewDepth / g_ssaoDepthRange);
-    float3 viewNormal = normalize(inViewNormal);
+    float3 viewNormal = normalize(mul(float4(normal, 0.0f), g_matWorldView).xyz);
     outDepth = float4(depth01, 0.0f, 0.0f, 1.0f);
     outColor2 = float4(viewNormal * 0.5f + 0.5f, 1.0f);
 }
