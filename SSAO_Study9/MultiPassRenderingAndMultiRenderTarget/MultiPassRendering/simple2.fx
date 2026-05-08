@@ -119,6 +119,7 @@ float2 ComputeOcclusionSample(float2 shiftedTexCoord,
     }
 
     float expectedSampleDepth = saturate(sampleViewPosition.z / g_ssaoDepthRange);
+    expectedSampleDepth *= 0.5f;
     float targetNormalDepthBiasFactor = saturate(abs(currentNormal.z)) * g_targetNormalBiasScale;
     float sampleDepthBias = (currentDepth - expectedSampleDepth) * targetNormalDepthBiasFactor * (currentDepth * g_targetDepthBiasScale);
     float adjustedSampleDepth = max(0.0f, sampleDepth + sampleDepthBias);
@@ -135,7 +136,11 @@ float2 ComputeOcclusionSample(float2 shiftedTexCoord,
         backDepthWithMargin += fallbackThickness * g_thicknessScale;
     }
 
-    float occluded = (frontDepthWithMargin <= currentDepth && currentDepth <= backDepthWithMargin) ? 1.0f : 0.0f;
+    float occluded = 0.0f;
+    if (frontDepthWithMargin <= currentDepth && currentDepth <= backDepthWithMargin)
+    {
+        occluded = 1.0f;
+    }
     return float2(occluded, 1.0f);
 }
 
@@ -270,7 +275,11 @@ void PixelShaderSsaoBlur5x5(in float4 inPosition    : POSITION,
         }
     }
 
-    float ssaoFactor = (weightSum > 0.0f) ? (blurredValue / weightSum) : 1.0f;
+    float ssaoFactor = 1.0f;
+    if (weightSum > 0.0f)
+    {
+        ssaoFactor = blurredValue / weightSum;
+    }
     outColor = float4(ssaoFactor, ssaoFactor, ssaoFactor, 1.0f);
 }
 
@@ -300,7 +309,11 @@ void PixelShaderSsaoBlur11x11(in float4 inPosition    : POSITION,
         }
     }
 
-    float ssaoFactor = (weightSum > 0.0f) ? (blurredValue / weightSum) : 1.0f;
+    float ssaoFactor = 1.0f;
+    if (weightSum > 0.0f)
+    {
+        ssaoFactor = blurredValue / weightSum;
+    }
     outColor = float4(ssaoFactor, ssaoFactor, ssaoFactor, 1.0f);
 }
 

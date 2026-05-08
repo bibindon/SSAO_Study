@@ -739,7 +739,14 @@ void CreateToolDialog()
             }
             else
             {
-                logFont.lfHeight = (logFont.lfHeight > 10) ? (logFont.lfHeight - 2) : 8;
+                if (logFont.lfHeight > 10)
+                {
+                    logFont.lfHeight = logFont.lfHeight - 2;
+                }
+                else
+                {
+                    logFont.lfHeight = 8;
+                }
             }
             g_hToolDialogFont = CreateFontIndirect(&logFont);
         }
@@ -895,7 +902,14 @@ void CreateToolDialog()
                                            NULL);
     assert(g_hUseThicknessCheckbox != NULL);
     ApplyToolDialogFont(g_hUseThicknessCheckbox);
-    SendMessage(g_hUseThicknessCheckbox, BM_SETCHECK, g_bUseThicknessForSsao ? BST_CHECKED : BST_UNCHECKED, 0);
+    if (g_bUseThicknessForSsao)
+    {
+        SendMessage(g_hUseThicknessCheckbox, BM_SETCHECK, BST_CHECKED, 0);
+    }
+    else
+    {
+        SendMessage(g_hUseThicknessCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
+    }
 
     HWND hThicknessScaleLabel = CreateWindow(_T("STATIC"),
                                              _T("Thickness scale:"),
@@ -951,7 +965,14 @@ void CreateToolDialog()
                                             NULL);
     assert(g_hRemoteDesktopCheckbox != NULL);
     ApplyToolDialogFont(g_hRemoteDesktopCheckbox);
-    SendMessage(g_hRemoteDesktopCheckbox, BM_SETCHECK, g_bRemoteDesktopCameraMode ? BST_CHECKED : BST_UNCHECKED, 0);
+    if (g_bRemoteDesktopCameraMode)
+    {
+        SendMessage(g_hRemoteDesktopCheckbox, BM_SETCHECK, BST_CHECKED, 0);
+    }
+    else
+    {
+        SendMessage(g_hRemoteDesktopCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
+    }
 
     HWND hNormalBiasScaleLabel = CreateWindow(_T("STATIC"),
                                               _T("Normal bias scale:"),
@@ -1089,7 +1110,14 @@ void CreateToolDialog()
                                                   NULL);
     assert(g_hAllowStraightUpDownCheckbox != NULL);
     ApplyToolDialogFont(g_hAllowStraightUpDownCheckbox);
-    SendMessage(g_hAllowStraightUpDownCheckbox, BM_SETCHECK, g_bAllowStraightUpDown ? BST_CHECKED : BST_UNCHECKED, 0);
+    if (g_bAllowStraightUpDown)
+    {
+        SendMessage(g_hAllowStraightUpDownCheckbox, BM_SETCHECK, BST_CHECKED, 0);
+    }
+    else
+    {
+        SendMessage(g_hAllowStraightUpDownCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
+    }
 
     HWND hDepthBiasDistanceLabel = CreateWindow(_T("STATIC"),
                                                 _T("Depth bias dist:"),
@@ -1145,7 +1173,14 @@ void CreateToolDialog()
                                                         NULL);
     assert(g_hDepthScaledSampleDistanceCheckbox != NULL);
     ApplyToolDialogFont(g_hDepthScaledSampleDistanceCheckbox);
-    SendMessage(g_hDepthScaledSampleDistanceCheckbox, BM_SETCHECK, g_bDepthScaledSampleDistance ? BST_CHECKED : BST_UNCHECKED, 0);
+    if (g_bDepthScaledSampleDistance)
+    {
+        SendMessage(g_hDepthScaledSampleDistanceCheckbox, BM_SETCHECK, BST_CHECKED, 0);
+    }
+    else
+    {
+        SendMessage(g_hDepthScaledSampleDistanceCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
+    }
 
     g_hAutoScaleSsaoByCenterCheckbox = CreateWindow(_T("BUTTON"),
                                                     _T("Auto scale SSAO by center depth"),
@@ -1160,7 +1195,14 @@ void CreateToolDialog()
                                                     NULL);
     assert(g_hAutoScaleSsaoByCenterCheckbox != NULL);
     ApplyToolDialogFont(g_hAutoScaleSsaoByCenterCheckbox);
-    SendMessage(g_hAutoScaleSsaoByCenterCheckbox, BM_SETCHECK, g_bAutoScaleSsaoByCenterDepth ? BST_CHECKED : BST_UNCHECKED, 0);
+    if (g_bAutoScaleSsaoByCenterDepth)
+    {
+        SendMessage(g_hAutoScaleSsaoByCenterCheckbox, BM_SETCHECK, BST_CHECKED, 0);
+    }
+    else
+    {
+        SendMessage(g_hAutoScaleSsaoByCenterCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
+    }
 
     g_hSmoothAutoSsaoCheckbox = CreateWindow(_T("BUTTON"),
                                              _T("Smooth auto SSAO change (0.5s)"),
@@ -1175,7 +1217,14 @@ void CreateToolDialog()
                                              NULL);
     assert(g_hSmoothAutoSsaoCheckbox != NULL);
     ApplyToolDialogFont(g_hSmoothAutoSsaoCheckbox);
-    SendMessage(g_hSmoothAutoSsaoCheckbox, BM_SETCHECK, g_bSmoothAutoSsaoByCenterDepth ? BST_CHECKED : BST_UNCHECKED, 0);
+    if (g_bSmoothAutoSsaoByCenterDepth)
+    {
+        SendMessage(g_hSmoothAutoSsaoCheckbox, BM_SETCHECK, BST_CHECKED, 0);
+    }
+    else
+    {
+        SendMessage(g_hSmoothAutoSsaoCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
+    }
 
     g_hEnableSsaoBlurCheckbox = CreateWindow(_T("BUTTON"),
                                              _T("Enable SSAO blur"),
@@ -1190,7 +1239,14 @@ void CreateToolDialog()
                                              NULL);
     assert(g_hEnableSsaoBlurCheckbox != NULL);
     ApplyToolDialogFont(g_hEnableSsaoBlurCheckbox);
-    SendMessage(g_hEnableSsaoBlurCheckbox, BM_SETCHECK, g_bEnableSsaoBlur ? BST_CHECKED : BST_UNCHECKED, 0);
+    if (g_bEnableSsaoBlur)
+    {
+        SendMessage(g_hEnableSsaoBlurCheckbox, BM_SETCHECK, BST_CHECKED, 0);
+    }
+    else
+    {
+        SendMessage(g_hEnableSsaoBlurCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
+    }
 
     g_hSsaoBlur5x5Radio = CreateWindow(_T("BUTTON"),
                                        _T("5x5 blur"),
@@ -1219,8 +1275,16 @@ void CreateToolDialog()
                                          NULL);
     assert(g_hSsaoBlur11x11Radio != NULL);
     ApplyToolDialogFont(g_hSsaoBlur11x11Radio);
-    SendMessage(g_hSsaoBlur5x5Radio, BM_SETCHECK, g_bUseLargeSsaoBlur ? BST_UNCHECKED : BST_CHECKED, 0);
-    SendMessage(g_hSsaoBlur11x11Radio, BM_SETCHECK, g_bUseLargeSsaoBlur ? BST_CHECKED : BST_UNCHECKED, 0);
+    if (g_bUseLargeSsaoBlur)
+    {
+        SendMessage(g_hSsaoBlur5x5Radio, BM_SETCHECK, BST_UNCHECKED, 0);
+        SendMessage(g_hSsaoBlur11x11Radio, BM_SETCHECK, BST_CHECKED, 0);
+    }
+    else
+    {
+        SendMessage(g_hSsaoBlur5x5Radio, BM_SETCHECK, BST_CHECKED, 0);
+        SendMessage(g_hSsaoBlur11x11Radio, BM_SETCHECK, BST_UNCHECKED, 0);
+    }
 
     g_hEnableThicknessCapCheckbox = CreateWindow(_T("BUTTON"),
                                                  _T("Enable thickness cap"),
@@ -1235,7 +1299,14 @@ void CreateToolDialog()
                                                  NULL);
     assert(g_hEnableThicknessCapCheckbox != NULL);
     ApplyToolDialogFont(g_hEnableThicknessCapCheckbox);
-    SendMessage(g_hEnableThicknessCapCheckbox, BM_SETCHECK, g_bEnableThicknessCap ? BST_CHECKED : BST_UNCHECKED, 0);
+    if (g_bEnableThicknessCap)
+    {
+        SendMessage(g_hEnableThicknessCapCheckbox, BM_SETCHECK, BST_CHECKED, 0);
+    }
+    else
+    {
+        SendMessage(g_hEnableThicknessCapCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
+    }
 
     HWND hThicknessCapLabel = CreateWindow(_T("STATIC"),
                                            _T("Thickness cap (m):"),
@@ -1316,7 +1387,14 @@ void ToggleToolDialog()
     CreateToolDialog();
 
     const bool showDialog = !IsWindowVisible(g_hToolDialog);
-    ShowWindow(g_hToolDialog, showDialog ? SW_SHOW : SW_HIDE);
+    if (showDialog)
+    {
+        ShowWindow(g_hToolDialog, SW_SHOW);
+    }
+    else
+    {
+        ShowWindow(g_hToolDialog, SW_HIDE);
+    }
     if (showDialog)
     {
         SetMouseCursorVisible(true);
@@ -1330,7 +1408,14 @@ void OpenMeshFileDialog()
     TCHAR filePath[MAX_PATH] = { };
 
     ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = g_hToolDialog ? g_hToolDialog : g_hWnd;
+    if (g_hToolDialog != NULL)
+    {
+        ofn.hwndOwner = g_hToolDialog;
+    }
+    else
+    {
+        ofn.hwndOwner = g_hWnd;
+    }
     ofn.lpstrFilter = _T("X Files (*.x)\0*.x\0All Files (*.*)\0*.*\0");
     ofn.lpstrFile = filePath;
     ofn.nMaxFile = _countof(filePath);
@@ -1404,7 +1489,11 @@ void SetMouseCursorVisible(bool visible)
 void UpdateInputAndCamera()
 {
     const float deltaTime = 1.0f / 60.0f;
-    const float maxPitch = g_bAllowStraightUpDown ? kExtendedMaxPitch : kMaxPitch;
+    float maxPitch = kMaxPitch;
+    if (g_bAllowStraightUpDown)
+    {
+        maxPitch = kExtendedMaxPitch;
+    }
     const HWND foregroundWindow = GetForegroundWindow();
     const bool isMainWindowActive = (foregroundWindow == g_hWnd);
     const bool isToolDialogActive = (g_hToolDialog != NULL && foregroundWindow == g_hToolDialog);
@@ -1543,8 +1632,14 @@ void UpdateInputAndCamera()
 
                     g_cameraYaw += static_cast<float>(deltaX) * kMouseSensitivity * kRemoteDesktopMouseSensitivityScale;
                     g_cameraPitch -= static_cast<float>(deltaY) * kMouseSensitivity * kRemoteDesktopMouseSensitivityScale;
-                    g_cameraPitch = (g_cameraPitch < -maxPitch) ? -maxPitch : g_cameraPitch;
-                    g_cameraPitch = (g_cameraPitch > maxPitch) ? maxPitch : g_cameraPitch;
+                    if (g_cameraPitch < -maxPitch)
+                    {
+                        g_cameraPitch = -maxPitch;
+                    }
+                    if (g_cameraPitch > maxPitch)
+                    {
+                        g_cameraPitch = maxPitch;
+                    }
                 }
 
                 g_previousMousePosition = mousePos;
@@ -1568,8 +1663,14 @@ void UpdateInputAndCamera()
 
                     g_cameraYaw += static_cast<float>(deltaX) * kMouseSensitivity;
                     g_cameraPitch -= static_cast<float>(deltaY) * kMouseSensitivity;
-                    g_cameraPitch = (g_cameraPitch < -maxPitch) ? -maxPitch : g_cameraPitch;
-                    g_cameraPitch = (g_cameraPitch > maxPitch) ? maxPitch : g_cameraPitch;
+                    if (g_cameraPitch < -maxPitch)
+                    {
+                        g_cameraPitch = -maxPitch;
+                    }
+                    if (g_cameraPitch > maxPitch)
+                    {
+                        g_cameraPitch = maxPitch;
+                    }
 
                     SetCursorPos(screenCenter.x, screenCenter.y);
                     ResetMouseLookTracking();
@@ -1604,7 +1705,11 @@ void UpdateInputAndCamera()
             ((GetAsyncKeyState('A') & 0x8000) != 0) ||
             ((GetAsyncKeyState('S') & 0x8000) != 0) ||
             ((GetAsyncKeyState('D') & 0x8000) != 0);
-        const float moveSpeedScale = (isShiftHeld && isHorizontalMoveHeld) ? kCameraSlowMoveScale : 1.0f;
+        float moveSpeedScale = 1.0f;
+        if (isShiftHeld && isHorizontalMoveHeld)
+        {
+            moveSpeedScale = kCameraSlowMoveScale;
+        }
 
         D3DXVec3Normalize(&move, &move);
         g_cameraPosition += move * (kCameraMoveSpeed * moveSpeedScale * deltaTime);
@@ -1638,7 +1743,12 @@ void DrawOverlayText()
     _stprintf_s(lines[1], _T("FPS: %.1f"), fps);
     _stprintf_s(lines[13], _T("SSAO depth range: %.1f m"), activeDepthRange);
     _stprintf_s(lines[14], _T("SSAO sample dist: %.2f m"), activeSampleDistanceMeters);
-    _stprintf_s(lines[15], _T("Remote Desktop camera: %s"), g_bRemoteDesktopCameraMode ? _T("ON") : _T("OFF"));
+    const TCHAR* remoteDesktopCameraText = _T("OFF");
+    if (g_bRemoteDesktopCameraMode)
+    {
+        remoteDesktopCameraText = _T("ON");
+    }
+    _stprintf_s(lines[15], _T("Remote Desktop camera: %s"), remoteDesktopCameraText);
 
     for (int i = 0; i < _countof(lines); ++i)
     {
@@ -1837,7 +1947,11 @@ void UpdateAutoSsaoParametersFromCenterDepth()
     }
 
     const float centerDepthMeters = nearestDepthMeters;
-    const float clampedCenterDepthMeters = (centerDepthMeters > 15.0f) ? 15.0f : centerDepthMeters;
+    float clampedCenterDepthMeters = centerDepthMeters;
+    if (centerDepthMeters > 15.0f)
+    {
+        clampedCenterDepthMeters = 15.0f;
+    }
     float newTargetAutoSsaoDepthRange = clampedCenterDepthMeters * 2.0f;
     float newTargetAutoSsaoSampleDistanceMeters = clampedCenterDepthMeters * 0.25f;
 
@@ -1969,7 +2083,14 @@ void RenderPass1()
     hResult = g_pEffect1->BeginPass(0);       assert(hResult == S_OK);
 
     hResult = g_pEffect1->SetBool("g_bUseTexture", TRUE); assert(hResult == S_OK);
-    hResult = g_pEffect1->SetBool("g_bUseLambert", g_bUseLambertLighting ? TRUE : FALSE); assert(hResult == S_OK);
+    if (g_bUseLambertLighting)
+    {
+        hResult = g_pEffect1->SetBool("g_bUseLambert", TRUE); assert(hResult == S_OK);
+    }
+    else
+    {
+        hResult = g_pEffect1->SetBool("g_bUseLambert", FALSE); assert(hResult == S_OK);
+    }
     hResult = g_pEffect1->SetFloat("g_ssaoDepthRange", activeSsaoDepthRange); assert(hResult == S_OK);
     DrawSceneGeometry(View, Proj);
 
@@ -2047,7 +2168,14 @@ void RenderPass2()
     hResult = g_pEffect2->Begin(&thicknessNumPass, 0); assert(hResult == S_OK);
     hResult = g_pEffect2->BeginPass(0);                assert(hResult == S_OK);
 
-    hResult = g_pEffect2->SetBool("g_bEnableThicknessCap", g_bEnableThicknessCap ? TRUE : FALSE); assert(hResult == S_OK);
+    if (g_bEnableThicknessCap)
+    {
+        hResult = g_pEffect2->SetBool("g_bEnableThicknessCap", TRUE); assert(hResult == S_OK);
+    }
+    else
+    {
+        hResult = g_pEffect2->SetBool("g_bEnableThicknessCap", FALSE); assert(hResult == S_OK);
+    }
     hResult = g_pEffect2->SetFloat("g_thicknessCap", g_thicknessCapMeters / activeSsaoDepthRange); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("depthTexture", g_pDepthRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("backDepthTexture", g_pBackDepthRenderTarget); assert(hResult == S_OK);
@@ -2078,9 +2206,30 @@ void RenderPass2()
     hResult = g_pEffect2->Begin(&ssaoNumPass, 0); assert(hResult == S_OK);
     hResult = g_pEffect2->BeginPass(0);           assert(hResult == S_OK);
 
-    hResult = g_pEffect2->SetBool("g_bEnableSimpleSsao", g_bEnableSimpleSsao ? TRUE : FALSE); assert(hResult == S_OK);
-    hResult = g_pEffect2->SetBool("g_bUseThicknessForSsao", g_bUseThicknessForSsao ? TRUE : FALSE); assert(hResult == S_OK);
-    hResult = g_pEffect2->SetBool("g_bDepthScaledSampleDistance", g_bDepthScaledSampleDistance ? TRUE : FALSE); assert(hResult == S_OK);
+    if (g_bEnableSimpleSsao)
+    {
+        hResult = g_pEffect2->SetBool("g_bEnableSimpleSsao", TRUE); assert(hResult == S_OK);
+    }
+    else
+    {
+        hResult = g_pEffect2->SetBool("g_bEnableSimpleSsao", FALSE); assert(hResult == S_OK);
+    }
+    if (g_bUseThicknessForSsao)
+    {
+        hResult = g_pEffect2->SetBool("g_bUseThicknessForSsao", TRUE); assert(hResult == S_OK);
+    }
+    else
+    {
+        hResult = g_pEffect2->SetBool("g_bUseThicknessForSsao", FALSE); assert(hResult == S_OK);
+    }
+    if (g_bDepthScaledSampleDistance)
+    {
+        hResult = g_pEffect2->SetBool("g_bDepthScaledSampleDistance", TRUE); assert(hResult == S_OK);
+    }
+    else
+    {
+        hResult = g_pEffect2->SetBool("g_bDepthScaledSampleDistance", FALSE); assert(hResult == S_OK);
+    }
     const float verticalFovRadians = D3DXToRadian(45.0f);
     const float projectionScaleY = 1.0f / tanf(verticalFovRadians * 0.5f);
     const float projectionScaleX = projectionScaleY / (static_cast<float>(kRenderWidth) / static_cast<float>(kRenderHeight));
@@ -2117,7 +2266,14 @@ void RenderPass2()
 
         hResult = g_pd3dDevice->BeginScene(); assert(hResult == S_OK);
 
-        hResult = g_pEffect2->SetTechnique(g_bUseLargeSsaoBlur ? "TechniqueSsaoBlurLarge" : "TechniqueSsaoBlur"); assert(hResult == S_OK);
+        if (g_bUseLargeSsaoBlur)
+        {
+            hResult = g_pEffect2->SetTechnique("TechniqueSsaoBlurLarge"); assert(hResult == S_OK);
+        }
+        else
+        {
+            hResult = g_pEffect2->SetTechnique("TechniqueSsaoBlur"); assert(hResult == S_OK);
+        }
 
     UINT blurNumPass = 0;
     hResult = g_pEffect2->Begin(&blurNumPass, 0); assert(hResult == S_OK);
@@ -2155,7 +2311,14 @@ void RenderPass2()
     hResult = g_pEffect2->BeginPass(0);                     assert(hResult == S_OK);
 
     hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget); assert(hResult == S_OK);
-    hResult = g_pEffect2->SetTexture("ssaoTexture", g_bEnableSsaoBlur ? g_pSsaoBlurRenderTarget : g_pSsaoRenderTarget); assert(hResult == S_OK);
+    if (g_bEnableSsaoBlur)
+    {
+        hResult = g_pEffect2->SetTexture("ssaoTexture", g_pSsaoBlurRenderTarget); assert(hResult == S_OK);
+    }
+    else
+    {
+        hResult = g_pEffect2->SetTexture("ssaoTexture", g_pSsaoRenderTarget); assert(hResult == S_OK);
+    }
     hResult = g_pEffect2->CommitChanges();                          assert(hResult == S_OK);
 
     DrawFullscreenQuad();
@@ -2196,7 +2359,14 @@ void RenderPass2()
             pDebugTexture = g_pBackDepthRenderTarget;
         }
 
-        hResult = g_pEffect2->SetBool("g_bSingleChannelInput", isSingleChannelDebug ? TRUE : FALSE); assert(hResult == S_OK);
+        if (isSingleChannelDebug)
+        {
+            hResult = g_pEffect2->SetBool("g_bSingleChannelInput", TRUE); assert(hResult == S_OK);
+        }
+        else
+        {
+            hResult = g_pEffect2->SetBool("g_bSingleChannelInput", FALSE); assert(hResult == S_OK);
+        }
         hResult = g_pEffect2->SetTexture("texture1", pDebugTexture); assert(hResult == S_OK);
         hResult = g_pEffect2->CommitChanges(); assert(hResult == S_OK);
         DrawFullscreenQuad();
