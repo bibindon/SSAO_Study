@@ -6,6 +6,7 @@ bool g_bUseTexture = true;
 bool g_bSingleChannelInput = false;
 bool g_bEnableSimpleSsao = true;
 bool g_bUseThicknessForSsao = true;
+int g_simpleSsaoSampleCount = 1;
 float2 g_screenSize = { 1600.0f, 900.0f };
 float g_simpleSsaoSamplePixels = 100.0f;
 float g_thicknessScale = 1.0f;
@@ -55,6 +56,42 @@ sampler normalSampler = sampler_state {
     MagFilter = POINT;
 };
 
+float Random01(float2 seed)
+{
+    return frac(sin(dot(seed, float2(12.9898f, 78.233f))) * 43758.5453f);
+}
+
+float ComputeOcclusionSample(float2 shiftedTexCoord,
+                             float currentDepth,
+                             float3 currentNormal,
+                             float samplePixelDistance,
+                             float2 sampleDirectionNormalized,
+                             float distanceScale)
+{
+    float2 sampleOffset = float2(sampleDirectionNormalized.x * ((samplePixelDistance * distanceScale) / g_screenSize.x),
+                                 -sampleDirectionNormalized.y * ((samplePixelDistance * distanceScale) / g_screenSize.y));
+    float2 sampleTexCoord = saturate(shiftedTexCoord + sampleOffset);
+    float4 sampleTexCoordLod = float4(sampleTexCoord, 0.0f, 0.0f);
+    float sampleDepth = tex2Dlod(depthSampler, sampleTexCoordLod).r;
+    if (sampleDepth >= 0.999f)
+    {
+        return 0.0f;
+    }
+
+    float targetNormalDepthBiasFactor = saturate(length(currentNormal.xy)) * g_targetNormalBiasScale;
+    float sampleDepthBias = g_sampleDepthBiasThreshold * targetNormalDepthBiasFactor * (currentDepth * g_targetDepthBiasScale);
+    float adjustedSampleDepth = max(0.0f, sampleDepth + sampleDepthBias);
+    float sampleThickness = tex2Dlod(thicknessSampler, sampleTexCoordLod).r;
+    float frontDepthWithMargin = adjustedSampleDepth - g_depthCompareThreshold;
+    float backDepthWithMargin = adjustedSampleDepth + g_depthCompareThreshold;
+    if (g_bUseThicknessForSsao)
+    {
+        backDepthWithMargin += sampleThickness * g_thicknessScale;
+    }
+
+    return (frontDepthWithMargin <= currentDepth && currentDepth <= backDepthWithMargin) ? 1.0f : 0.0f;
+}
+
 void VertexShader1(in  float4 inPosition  : POSITION,
                    in  float2 inTexCood   : TEXCOORD0,
 
@@ -87,27 +124,42 @@ void PixelShader1(in float4 inPosition    : POSITION,
         {
             float2 sampleDirectionNormalized = (directionLength > 0.0001f) ? (sampleDirection / directionLength) : float2(0.0f, 0.0f);
             float samplePixelDistance = g_simpleSsaoSamplePixels * saturate(directionLength);
-            float2 sampleOffset = float2(sampleDirectionNormalized.x * (samplePixelDistance / g_screenSize.x),
-                                         -sampleDirectionNormalized.y * (samplePixelDistance / g_screenSize.y));
-            float2 sampleTexCoord = saturate(shiftedTexCoord + sampleOffset);
-            float sampleDepth = tex2D(depthSampler, sampleTexCoord).r;
-            if (sampleDepth < 0.999f)
+            if (g_simpleSsaoSampleCount <= 1)
             {
-                float targetNormalDepthBiasFactor = saturate(length(currentNormal.xy)) * g_targetNormalBiasScale;
-                float sampleDepthBias = g_sampleDepthBiasThreshold * targetNormalDepthBiasFactor * (currentDepth * g_targetDepthBiasScale);
-                float adjustedSampleDepth = max(0.0f, sampleDepth + sampleDepthBias);
-                float sampleThickness = tex2D(thicknessSampler, sampleTexCoord).r;
-                float frontDepthWithMargin = adjustedSampleDepth - g_depthCompareThreshold;
-                float backDepthWithMargin = adjustedSampleDepth + g_depthCompareThreshold;
-                if (g_bUseThicknessForSsao)
-                {
-                    backDepthWithMargin += sampleThickness * g_thicknessScale;
-                }
-
-                if (frontDepthWithMargin <= currentDepth && currentDepth <= backDepthWithMargin)
+                float occluded = ComputeOcclusionSample(shiftedTexCoord,
+                                                        currentDepth,
+                                                        currentNormal,
+                                                        samplePixelDistance,
+                                                        sampleDirectionNormalized,
+                                                        1.0f);
+                if (occluded > 0.5f)
                 {
                     workColor = float4(0.0f, 0.0f, 0.0f, workColor.a);
                 }
+            }
+            else
+            {
+                float occlusionCount = 0.0f;
+                [loop]
+                for (int sampleIndex = 0; sampleIndex < 128; ++sampleIndex)
+                {
+                    if (sampleIndex < g_simpleSsaoSampleCount)
+                    {
+                        float sampleIndexFloat = (float)sampleIndex;
+                        float randomValue = Random01(shiftedTexCoord * g_screenSize + float2(sampleIndexFloat * 13.37f,
+                                                                                             sampleIndexFloat * 7.91f));
+                        float distanceScale = randomValue * randomValue;
+                        occlusionCount += ComputeOcclusionSample(shiftedTexCoord,
+                                                                 currentDepth,
+                                                                 currentNormal,
+                                                                 samplePixelDistance,
+                                                                 sampleDirectionNormalized,
+                                                                 distanceScale);
+                    }
+                }
+
+                float occlusionRate = occlusionCount / (float)g_simpleSsaoSampleCount;
+                workColor.rgb *= (1.0f - occlusionRate);
             }
         }
     }

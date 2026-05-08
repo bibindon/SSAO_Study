@@ -49,6 +49,8 @@ namespace
     constexpr int kToolDialogAllowStraightUpDownCheckboxId = 1016;
     constexpr int kToolDialogDepthBiasDistanceEditId = 1017;
     constexpr int kToolDialogApplyDepthBiasDistanceButtonId = 1018;
+    constexpr int kToolDialogSampleCountEditId = 1019;
+    constexpr int kToolDialogApplySampleCountButtonId = 1020;
     constexpr int kDebugViewNone = 0;
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
@@ -115,6 +117,7 @@ bool g_bAllowStraightUpDown = false;
 bool g_bHasPreviousMousePosition = false;
 int g_debugViewMode = kDebugViewNone;
 float g_simpleSsaoSamplePixels = 100.0f;
+int g_simpleSsaoSampleCount = 1;
 float g_thicknessScale = 1.0f;
 float g_ssaoDepthRange = kDefaultSsaoDepthRange;
 float g_targetNormalBiasScale = 2.0f;
@@ -129,6 +132,8 @@ HWND g_hToolDialog = NULL;
 HWND g_hOpenMeshButton = NULL;
 HWND g_hSsaoSampleEdit = NULL;
 HWND g_hApplySsaoButton = NULL;
+HWND g_hSampleCountEdit = NULL;
+HWND g_hApplySampleCountButton = NULL;
 HWND g_hUseThicknessCheckbox = NULL;
 HWND g_hThicknessScaleEdit = NULL;
 HWND g_hApplyThicknessScaleButton = NULL;
@@ -624,7 +629,7 @@ void CreateToolDialog()
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,
                                    340,
-                                   492,
+                                   528,
                                    g_hWnd,
                                    NULL,
                                    wc.hInstance,
@@ -705,11 +710,52 @@ void CreateToolDialog()
     assert(g_hApplySsaoButton != NULL);
     ApplyToolDialogFont(g_hApplySsaoButton);
 
+    HWND hSampleCountLabel = CreateWindow(_T("STATIC"),
+                                          _T("SSAO sample count:"),
+                                          WS_CHILD | WS_VISIBLE,
+                                          20,
+                                          104,
+                                          130,
+                                          20,
+                                          g_hToolDialog,
+                                          NULL,
+                                          wc.hInstance,
+                                          NULL);
+    ApplyToolDialogFont(hSampleCountLabel);
+
+    g_hSampleCountEdit = CreateWindow(_T("EDIT"),
+                                      _T("1"),
+                                      WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                                      160,
+                                      100,
+                                      60,
+                                      24,
+                                      g_hToolDialog,
+                                      reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogSampleCountEditId)),
+                                      wc.hInstance,
+                                      NULL);
+    assert(g_hSampleCountEdit != NULL);
+    ApplyToolDialogFont(g_hSampleCountEdit);
+
+    g_hApplySampleCountButton = CreateWindow(_T("BUTTON"),
+                                             _T("Apply"),
+                                             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                             230,
+                                             98,
+                                             60,
+                                             28,
+                                             g_hToolDialog,
+                                             reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogApplySampleCountButtonId)),
+                                             wc.hInstance,
+                                             NULL);
+    assert(g_hApplySampleCountButton != NULL);
+    ApplyToolDialogFont(g_hApplySampleCountButton);
+
     HWND hSsaoDepthRangeLabel = CreateWindow(_T("STATIC"),
                                              _T("SSAO depth range (m):"),
                                              WS_CHILD | WS_VISIBLE,
                                              20,
-                                             104,
+                                             136,
                                              130,
                                              20,
                                              g_hToolDialog,
@@ -722,7 +768,7 @@ void CreateToolDialog()
                                          _T("50.0"),
                                          WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                          160,
-                                         100,
+                                         132,
                                          60,
                                          24,
                                          g_hToolDialog,
@@ -736,7 +782,7 @@ void CreateToolDialog()
                                                 _T("Apply"),
                                                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                                 230,
-                                                98,
+                                                130,
                                                 60,
                                                 28,
                                                 g_hToolDialog,
@@ -750,7 +796,7 @@ void CreateToolDialog()
                                            _T("Use thickness for SSAO"),
                                            WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                            20,
-                                           138,
+                                           170,
                                            180,
                                            24,
                                            g_hToolDialog,
@@ -765,7 +811,7 @@ void CreateToolDialog()
                                              _T("Thickness scale:"),
                                              WS_CHILD | WS_VISIBLE,
                                              20,
-                                             170,
+                                             202,
                                              130,
                                              20,
                                              g_hToolDialog,
@@ -778,7 +824,7 @@ void CreateToolDialog()
                                          _T("1.0"),
                                          WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                          160,
-                                         166,
+                                         198,
                                          60,
                                          24,
                                          g_hToolDialog,
@@ -792,7 +838,7 @@ void CreateToolDialog()
                                                 _T("Apply"),
                                                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                                 230,
-                                                164,
+                                                196,
                                                 60,
                                                 28,
                                                 g_hToolDialog,
@@ -806,7 +852,7 @@ void CreateToolDialog()
                                             _T("Remote Desktop"),
                                             WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                             20,
-                                            206,
+                                            238,
                                             180,
                                             24,
                                             g_hToolDialog,
@@ -821,7 +867,7 @@ void CreateToolDialog()
                                               _T("Normal bias scale:"),
                                               WS_CHILD | WS_VISIBLE,
                                               20,
-                                              238,
+                                              270,
                                               130,
                                               20,
                                               g_hToolDialog,
@@ -834,7 +880,7 @@ void CreateToolDialog()
                                           _T("1.0"),
                                           WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                           160,
-                                          234,
+                                          266,
                                           60,
                                           24,
                                           g_hToolDialog,
@@ -848,7 +894,7 @@ void CreateToolDialog()
                                                  _T("Apply"),
                                                  WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                                  230,
-                                                 232,
+                                                 264,
                                                  60,
                                                  28,
                                                  g_hToolDialog,
@@ -862,7 +908,7 @@ void CreateToolDialog()
                                              _T("Depth bias scale:"),
                                              WS_CHILD | WS_VISIBLE,
                                              20,
-                                             270,
+                                             302,
                                              130,
                                              20,
                                              g_hToolDialog,
@@ -875,7 +921,7 @@ void CreateToolDialog()
                                          _T("1.0"),
                                          WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                          160,
-                                         266,
+                                         298,
                                          60,
                                          24,
                                          g_hToolDialog,
@@ -889,7 +935,7 @@ void CreateToolDialog()
                                                 _T("Apply"),
                                                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                                 230,
-                                                264,
+                                                296,
                                                 60,
                                                 28,
                                                 g_hToolDialog,
@@ -903,7 +949,7 @@ void CreateToolDialog()
                                                    _T("Depth compare dist:"),
                                                    WS_CHILD | WS_VISIBLE,
                                                    20,
-                                                   302,
+                                                   334,
                                                    130,
                                                    20,
                                                    g_hToolDialog,
@@ -916,7 +962,7 @@ void CreateToolDialog()
                                                _T("0.10"),
                                                WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                                160,
-                                               298,
+                                               330,
                                                60,
                                                24,
                                                g_hToolDialog,
@@ -930,7 +976,7 @@ void CreateToolDialog()
                                                       _T("Apply"),
                                                       WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                                       230,
-                                                      296,
+                                                      328,
                                                       60,
                                                       28,
                                                       g_hToolDialog,
@@ -944,7 +990,7 @@ void CreateToolDialog()
                                                   _T("Allow straight up/down"),
                                                   WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                                   20,
-                                                  334,
+                                                  366,
                                                   200,
                                                   24,
                                                   g_hToolDialog,
@@ -959,7 +1005,7 @@ void CreateToolDialog()
                                                 _T("Depth bias dist:"),
                                                 WS_CHILD | WS_VISIBLE,
                                                 20,
-                                                366,
+                                                398,
                                                 130,
                                                 20,
                                                 g_hToolDialog,
@@ -972,7 +1018,7 @@ void CreateToolDialog()
                                             _T("0.10"),
                                             WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                             160,
-                                            362,
+                                            394,
                                             60,
                                             24,
                                             g_hToolDialog,
@@ -986,7 +1032,7 @@ void CreateToolDialog()
                                                    _T("Apply"),
                                                    WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                                    230,
-                                                   360,
+                                                   392,
                                                    60,
                                                    28,
                                                    g_hToolDialog,
@@ -999,6 +1045,10 @@ void CreateToolDialog()
     TCHAR depthRangeText[64] = { };
     _stprintf_s(depthRangeText, _T("%.1f"), g_ssaoDepthRange);
     SetWindowText(g_hSsaoDepthRangeEdit, depthRangeText);
+
+    TCHAR sampleCountText[64] = { };
+    _stprintf_s(sampleCountText, _T("%d"), g_simpleSsaoSampleCount);
+    SetWindowText(g_hSampleCountEdit, sampleCountText);
 
     TCHAR normalBiasScaleText[64] = { };
     _stprintf_s(normalBiasScaleText, _T("%.5f"), g_targetNormalBiasScale);
@@ -1607,6 +1657,7 @@ void RenderPass2()
     hResult = g_pEffect2->SetBool("g_bEnableSimpleSsao", g_bEnableSimpleSsao ? TRUE : FALSE); assert(hResult == S_OK);
     hResult = g_pEffect2->SetBool("g_bUseThicknessForSsao", g_bUseThicknessForSsao ? TRUE : FALSE); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_simpleSsaoSamplePixels", g_simpleSsaoSamplePixels); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetInt("g_simpleSsaoSampleCount", g_simpleSsaoSampleCount); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_thicknessScale", g_thicknessScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_ssaoDepthRange", g_ssaoDepthRange); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_depthCompareThreshold", g_depthCompareDistance / g_ssaoDepthRange); assert(hResult == S_OK);
@@ -1741,6 +1792,29 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 TCHAR normalizedText[64] = { };
                 _stprintf_s(normalizedText, _T("%.1f"), g_simpleSsaoSamplePixels);
                 SetWindowText(g_hSsaoSampleEdit, normalizedText);
+            }
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogApplySampleCountButtonId)
+        {
+            TCHAR buffer[64] = { };
+            GetWindowText(g_hSampleCountEdit, buffer, _countof(buffer));
+            int sampleCount = g_simpleSsaoSampleCount;
+            if (_stscanf_s(buffer, _T("%d"), &sampleCount) == 1)
+            {
+                if (sampleCount < 1)
+                {
+                    sampleCount = 1;
+                }
+                if (sampleCount > 128)
+                {
+                    sampleCount = 128;
+                }
+                g_simpleSsaoSampleCount = sampleCount;
+
+                TCHAR normalizedText[64] = { };
+                _stprintf_s(normalizedText, _T("%d"), g_simpleSsaoSampleCount);
+                SetWindowText(g_hSampleCountEdit, normalizedText);
             }
             return 0;
         }
