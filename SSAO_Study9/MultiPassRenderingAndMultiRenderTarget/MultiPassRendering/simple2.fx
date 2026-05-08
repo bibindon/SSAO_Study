@@ -119,7 +119,6 @@ float2 ComputeOcclusionSample(float2 shiftedTexCoord,
     }
 
     float expectedSampleDepth = saturate(sampleViewPosition.z / g_ssaoDepthRange);
-    expectedSampleDepth *= 0.5f;
     float targetNormalDepthBiasFactor = saturate(abs(currentNormal.z)) * g_targetNormalBiasScale;
     float sampleDepthBias = (currentDepth - expectedSampleDepth) * targetNormalDepthBiasFactor * (currentDepth * g_targetDepthBiasScale);
     float adjustedSampleDepth = max(0.0f, sampleDepth + sampleDepthBias);

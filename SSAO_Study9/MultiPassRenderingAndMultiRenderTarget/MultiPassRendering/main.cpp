@@ -129,7 +129,7 @@ bool g_bPrevEscapeToggleKeyDown = false;
 bool g_bMouseCursorVisible = false;
 bool g_bUseLambertLighting = true;
 bool g_bEnableSimpleSsao = true;
-bool g_bEnableSsaoBlur = true;
+bool g_bEnableSsaoBlur = false;
 bool g_bUseLargeSsaoBlur = true;
 bool g_bUseThicknessForSsao = true;
 bool g_bRemoteDesktopCameraMode = false;
@@ -402,8 +402,8 @@ void InitD3D(HWND hWnd)
     LoadMeshWithTextures(_T("resource\\small_cube.x"), &g_pMesh, g_pMaterials, g_pTextures, &g_dwNumMaterials);
     LoadMeshWithTextures(_T("resource\\large_cube_inside.x"), &g_pLargeCubeMesh, g_pLargeCubeMaterials, g_pLargeCubeTextures, &g_dwLargeCubeNumMaterials);
     LoadMeshWithTextures(_T("resource\\plate.x"), &g_pPlateMesh, g_pPlateMaterials, g_pPlateTextures, &g_dwPlateNumMaterials);
-    LoadSceneMeshInstance(_T("resource\\cube_red.x"), D3DXVECTOR3(-8.0f, 0.5f, -6.0f), 0.2f);
-    LoadSceneMeshInstance(_T("resource\\cube_green.x"), D3DXVECTOR3(-3.5f, 0.5f, -7.5f), 0.8f);
+    LoadSceneMeshInstance(_T("resource\\cube_red.x"), D3DXVECTOR3(-8.0f, 0.5f, -6.0f), 0.0f);
+    LoadSceneMeshInstance(_T("resource\\cube_green.x"), D3DXVECTOR3(-3.5f, 0.5f, -7.5f), 0.0f);
     LoadSceneMeshInstance(_T("resource\\cube_blue.x"), D3DXVECTOR3(2.5f, 0.5f, -6.5f), -0.4f);
     LoadSceneMeshInstance(_T("resource\\sphere_orange.x"), D3DXVECTOR3(-6.5f, 1.2f, 3.0f), 0.0f);
     LoadSceneMeshInstance(_T("resource\\sphere_pink.x"), D3DXVECTOR3(-1.5f, 1.2f, 5.0f), 0.0f);
@@ -412,8 +412,8 @@ void InitD3D(HWND hWnd)
     LoadSceneMeshInstance(_T("resource\\cube_black.x"), D3DXVECTOR3(8.6f, 0.5f, 2.5f), -0.2f);
     LoadSceneMeshInstance(_T("resource\\sphere_orange.x"), D3DXVECTOR3(-8.6f, 8.4f, 5.5f), 0.0f);
     LoadSceneMeshInstance(_T("resource\\sphere_pink.x"), D3DXVECTOR3(0.0f, 8.5f, -7.2f), 0.0f);
-    LoadSceneMeshInstance(_T("resource\\cube_red.x"), D3DXVECTOR3(6.8f, 8.3f, 8.6f), 0.6f);
-    LoadSceneMeshInstance(_T("resource\\cube_green.x"), D3DXVECTOR3(-4.0f, 8.2f, -8.8f), -0.5f);
+    LoadSceneMeshInstance(_T("resource\\cube_red.x"), D3DXVECTOR3(6.8f, 8.3f, 9.0f), 0.0f);
+    LoadSceneMeshInstance(_T("resource\\cube_green.x"), D3DXVECTOR3(-4.0f, 8.2f, -9.0f), 0.0f);
 
     hResult = D3DXCreateEffectFromFile(g_pd3dDevice,
                                        _T("simple.fx"),
