@@ -24,21 +24,20 @@ void VertexShader1(
     in float2 inTexCoord0 : TEXCOORD0,
     out float4 outPosition : POSITION0,
     out float2 outTexCoord0 : TEXCOORD0,
-    out float3 outViewPosition : TEXCOORD1,
+    out float4 outLocalPosition : TEXCOORD1,
     out float3 outNormal : TEXCOORD2)
 {
     float4 clipPosition = mul(inPosition, g_matWorldViewProj);
-    float4 viewPosition = mul(inPosition, g_matWorldView);
     outPosition = clipPosition;
     outTexCoord0 = inTexCoord0;
     outNormal = normalize(inNormal);
-    outViewPosition = viewPosition.xyz;
+    outLocalPosition = inPosition;
 }
 
 // ▼ ピクセルシェーダー：MRTのCOLOR1にグレースケールで深度を書き込む
 void PixelShaderMRT(
     in float2 inTexCoord0 : TEXCOORD0,
-    in float3 inViewPosition : TEXCOORD1,
+    in float4 inLocalPosition : TEXCOORD1,
     in float3 inNormal : TEXCOORD2,
     out float4 outColor0 : COLOR0,
     out float4 outDepth : COLOR1,
@@ -62,8 +61,8 @@ void PixelShaderMRT(
 
     outColor0 = float4(baseColor.rgb * lighting, baseColor.a);
 
-    // 近いほど黒、遠いほど白
-    float viewDepth = max(0.0f, inViewPosition.z);
+    float4 viewPosition = mul(inLocalPosition, g_matWorldView);
+    float viewDepth = max(0.0f, viewPosition.z);
     float depth01 = saturate(viewDepth / g_ssaoDepthRange);
     float3 viewNormal = normalize(mul(float4(normal, 0.0f), g_matWorldView).xyz);
     outDepth = float4(depth01, 0.0f, 0.0f, 1.0f);
@@ -71,7 +70,7 @@ void PixelShaderMRT(
 }
 
 void PixelShaderBackDepth(
-    in float3 inViewPosition : TEXCOORD1,
+    in float4 inLocalPosition : TEXCOORD1,
     in float faceSign : VFACE,
     out float4 outDepth : COLOR0)
 {
@@ -80,7 +79,8 @@ void PixelShaderBackDepth(
         clip(-1.0f);
     }
 
-    float viewDepth = max(0.0f, inViewPosition.z);
+    float4 viewPosition = mul(inLocalPosition, g_matWorldView);
+    float viewDepth = max(0.0f, viewPosition.z);
     float depth01 = saturate(viewDepth / g_ssaoDepthRange);
     outDepth = float4(depth01, 0.0f, 0.0f, 1.0f);
 }

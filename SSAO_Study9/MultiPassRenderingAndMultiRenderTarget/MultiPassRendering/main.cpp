@@ -52,7 +52,7 @@ namespace
     constexpr int kDebugViewBackDepth = 4;
     constexpr float kCameraNearPlane = 0.1f;
     constexpr float kCameraFarPlane = 50.0f;
-    constexpr float kDefaultSsaoDepthRange = kCameraFarPlane;
+    constexpr float kDefaultSsaoDepthRange = 50.0f;
     constexpr float kMinSsaoDepthRange = 0.5f;
     constexpr float kDepthCompareDistance = 0.1f;
 }
@@ -106,7 +106,7 @@ bool g_bMouseCursorVisible = false;
 bool g_bUseLambertLighting = true;
 bool g_bEnableSimpleSsao = true;
 bool g_bUseThicknessForSsao = true;
-bool g_bRemoteDesktopCameraMode = false;
+bool g_bRemoteDesktopCameraMode = true;
 bool g_bHasPreviousMousePosition = false;
 int g_debugViewMode = kDebugViewNone;
 float g_simpleSsaoSamplePixels = 20.0f;
