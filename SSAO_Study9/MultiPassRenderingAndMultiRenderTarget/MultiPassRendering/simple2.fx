@@ -91,7 +91,7 @@ void PixelShader1(in float4 inPosition    : POSITION,
             if (sampleDepth < 0.999f)
             {
                 float targetNormalDepthBiasFactor = saturate(length(currentNormal.xy));
-                float sampleDepthBias = g_depthCompareThreshold * targetNormalDepthBiasFactor * sampleDepth;
+                float sampleDepthBias = g_depthCompareThreshold * targetNormalDepthBiasFactor * currentDepth;
                 float adjustedSampleDepth = max(0.0f, sampleDepth - sampleDepthBias);
                 float sampleThickness = tex2D(thicknessSampler, sampleTexCoord).r;
                 float frontDepthWithMargin = adjustedSampleDepth - g_depthCompareThreshold;
