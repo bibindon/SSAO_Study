@@ -118,7 +118,7 @@ bool g_bAllowStraightUpDown = false;
 bool g_bDepthScaledSampleDistance = false;
 bool g_bHasPreviousMousePosition = false;
 int g_debugViewMode = kDebugViewNone;
-float g_simpleSsaoSamplePixels = 100.0f;
+float g_simpleSsaoSampleDistanceMeters = 1.0f;
 int g_simpleSsaoSampleCount = 8;
 float g_thicknessScale = 1.0f;
 float g_ssaoDepthRange = kDefaultSsaoDepthRange;
@@ -673,7 +673,7 @@ void CreateToolDialog()
     ApplyToolDialogFont(g_hOpenMeshButton);
 
     HWND hSsaoSampleLabel = CreateWindow(_T("STATIC"),
-                                         _T("SSAO sample pixels:"),
+                                         _T("SSAO sample dist (m):"),
                                          WS_CHILD | WS_VISIBLE,
                                          20,
                                          72,
@@ -686,7 +686,7 @@ void CreateToolDialog()
     ApplyToolDialogFont(hSsaoSampleLabel);
 
     g_hSsaoSampleEdit = CreateWindow(_T("EDIT"),
-                                     _T("100.0"),
+                                     _T("1.0"),
                                      WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                      160,
                                      68,
@@ -1063,6 +1063,10 @@ void CreateToolDialog()
     TCHAR depthRangeText[64] = { };
     _stprintf_s(depthRangeText, _T("%.1f"), g_ssaoDepthRange);
     SetWindowText(g_hSsaoDepthRangeEdit, depthRangeText);
+
+    TCHAR sampleDistanceMetersText[64] = { };
+    _stprintf_s(sampleDistanceMetersText, _T("%.2f"), g_simpleSsaoSampleDistanceMeters);
+    SetWindowText(g_hSsaoSampleEdit, sampleDistanceMetersText);
 
     TCHAR sampleCountText[64] = { };
     _stprintf_s(sampleCountText, _T("%d"), g_simpleSsaoSampleCount);
@@ -1675,8 +1679,13 @@ void RenderPass2()
     hResult = g_pEffect2->SetBool("g_bEnableSimpleSsao", g_bEnableSimpleSsao ? TRUE : FALSE); assert(hResult == S_OK);
     hResult = g_pEffect2->SetBool("g_bUseThicknessForSsao", g_bUseThicknessForSsao ? TRUE : FALSE); assert(hResult == S_OK);
     hResult = g_pEffect2->SetBool("g_bDepthScaledSampleDistance", g_bDepthScaledSampleDistance ? TRUE : FALSE); assert(hResult == S_OK);
-    hResult = g_pEffect2->SetFloat("g_simpleSsaoSamplePixels", g_simpleSsaoSamplePixels); assert(hResult == S_OK);
+    const float verticalFovRadians = D3DXToRadian(45.0f);
+    const float projectionScaleY = 1.0f / tanf(verticalFovRadians * 0.5f);
+    const float projectionScaleX = projectionScaleY / (static_cast<float>(kRenderWidth) / static_cast<float>(kRenderHeight));
+    float projectionScale[2] = { projectionScaleX, projectionScaleY };
+    hResult = g_pEffect2->SetFloat("g_simpleSsaoSampleDistanceMeters", g_simpleSsaoSampleDistanceMeters); assert(hResult == S_OK);
     hResult = g_pEffect2->SetInt("g_simpleSsaoSampleCount", g_simpleSsaoSampleCount); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloatArray("g_projectionScale", projectionScale, 2); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_thicknessScale", g_thicknessScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_ssaoDepthRange", g_ssaoDepthRange); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_depthCompareThreshold", g_depthCompareDistance / g_ssaoDepthRange); assert(hResult == S_OK);
@@ -1799,17 +1808,17 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         {
             TCHAR buffer[64] = { };
             GetWindowText(g_hSsaoSampleEdit, buffer, _countof(buffer));
-            float samplePixels = g_simpleSsaoSamplePixels;
-            if (_stscanf_s(buffer, _T("%f"), &samplePixels) == 1)
+            float sampleDistanceMeters = g_simpleSsaoSampleDistanceMeters;
+            if (_stscanf_s(buffer, _T("%f"), &sampleDistanceMeters) == 1)
             {
-                if (samplePixels < 1.0f)
+                if (sampleDistanceMeters < 0.0f)
                 {
-                    samplePixels = 1.0f;
+                    sampleDistanceMeters = 0.0f;
                 }
-                g_simpleSsaoSamplePixels = samplePixels;
+                g_simpleSsaoSampleDistanceMeters = sampleDistanceMeters;
 
                 TCHAR normalizedText[64] = { };
-                _stprintf_s(normalizedText, _T("%.1f"), g_simpleSsaoSamplePixels);
+                _stprintf_s(normalizedText, _T("%.2f"), g_simpleSsaoSampleDistanceMeters);
                 SetWindowText(g_hSsaoSampleEdit, normalizedText);
             }
             return 0;
