@@ -184,7 +184,7 @@ void PixelShader1(in float4 inPosition    : POSITION,
                         float sampleIndexFloat = (float)sampleIndex;
                         float randomValue = Random01(shiftedTexCoord * g_screenSize + float2(sampleIndexFloat * 13.37f,
                                                                                              sampleIndexFloat * 7.91f));
-                        float distanceScale = randomValue * randomValue;
+                        float distanceScale = randomValue * randomValue * randomValue;
                         float2 occlusionSample = ComputeOcclusionSample(shiftedTexCoord,
                                                                         currentDepth,
                                                                         currentNormal,
