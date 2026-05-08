@@ -11,8 +11,8 @@ float g_simpleSsaoSamplePixels = 100.0f;
 float g_thicknessScale = 1.0f;
 float g_ssaoDepthRange = 50.0f;
 float g_depthCompareThreshold = 0.0f;
-float g_sampleDepthBiasThreshold = 0.002f;
-float g_targetNormalBiasScale = 1.0f;
+float g_sampleDepthBiasThreshold = 1.0f;
+float g_targetNormalBiasScale = 2.0f;
 float g_targetDepthBiasScale = 1.0f;
 
 texture texture1;
@@ -95,7 +95,7 @@ void PixelShader1(in float4 inPosition    : POSITION,
             {
                 float targetNormalDepthBiasFactor = saturate(length(currentNormal.xy)) * g_targetNormalBiasScale;
                 float sampleDepthBias = g_sampleDepthBiasThreshold * targetNormalDepthBiasFactor * (currentDepth * g_targetDepthBiasScale);
-                float adjustedSampleDepth = max(0.0f, sampleDepth - sampleDepthBias);
+                float adjustedSampleDepth = max(0.0f, sampleDepth + sampleDepthBias);
                 float sampleThickness = tex2D(thicknessSampler, sampleTexCoord).r;
                 float frontDepthWithMargin = adjustedSampleDepth - g_depthCompareThreshold;
                 float backDepthWithMargin = adjustedSampleDepth + g_depthCompareThreshold;
