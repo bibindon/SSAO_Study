@@ -26,6 +26,7 @@ namespace
     constexpr float kMouseSensitivity = 0.0009f;
     constexpr float kRemoteDesktopMouseSensitivityScale = 4.0f;
     constexpr float kMaxPitch = D3DX_PI * 0.45f;
+    constexpr float kExtendedMaxPitch = D3DX_PI * 0.499f;
     constexpr int kCubeGridWidth = 11;
     constexpr int kCubeGridDepth = 11;
     constexpr float kCubeSpacing = 1.2f;
@@ -45,6 +46,7 @@ namespace
     constexpr int kToolDialogApplyDepthBiasScaleButtonId = 1013;
     constexpr int kToolDialogDepthCompareDistanceEditId = 1014;
     constexpr int kToolDialogApplyDepthCompareDistanceButtonId = 1015;
+    constexpr int kToolDialogAllowStraightUpDownCheckboxId = 1016;
     constexpr int kDebugViewNone = 0;
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
@@ -107,6 +109,7 @@ bool g_bUseLambertLighting = true;
 bool g_bEnableSimpleSsao = true;
 bool g_bUseThicknessForSsao = true;
 bool g_bRemoteDesktopCameraMode = true;
+bool g_bAllowStraightUpDown = false;
 bool g_bHasPreviousMousePosition = false;
 int g_debugViewMode = kDebugViewNone;
 float g_simpleSsaoSamplePixels = 20.0f;
@@ -135,6 +138,7 @@ HWND g_hDepthBiasScaleEdit = NULL;
 HWND g_hApplyDepthBiasScaleButton = NULL;
 HWND g_hDepthCompareDistanceEdit = NULL;
 HWND g_hApplyDepthCompareDistanceButton = NULL;
+HWND g_hAllowStraightUpDownCheckbox = NULL;
 HFONT g_hToolDialogFont = NULL;
 
 struct UserMeshInstance
@@ -615,7 +619,7 @@ void CreateToolDialog()
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,
                                    340,
-                                   420,
+                                   456,
                                    g_hWnd,
                                    NULL,
                                    wc.hInstance,
@@ -931,6 +935,21 @@ void CreateToolDialog()
     assert(g_hApplyDepthCompareDistanceButton != NULL);
     ApplyToolDialogFont(g_hApplyDepthCompareDistanceButton);
 
+    g_hAllowStraightUpDownCheckbox = CreateWindow(_T("BUTTON"),
+                                                  _T("Allow straight up/down"),
+                                                  WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                                                  20,
+                                                  334,
+                                                  200,
+                                                  24,
+                                                  g_hToolDialog,
+                                                  reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogAllowStraightUpDownCheckboxId)),
+                                                  wc.hInstance,
+                                                  NULL);
+    assert(g_hAllowStraightUpDownCheckbox != NULL);
+    ApplyToolDialogFont(g_hAllowStraightUpDownCheckbox);
+    SendMessage(g_hAllowStraightUpDownCheckbox, BM_SETCHECK, g_bAllowStraightUpDown ? BST_CHECKED : BST_UNCHECKED, 0);
+
     TCHAR depthRangeText[64] = { };
     _stprintf_s(depthRangeText, _T("%.1f"), g_ssaoDepthRange);
     SetWindowText(g_hSsaoDepthRangeEdit, depthRangeText);
@@ -1041,6 +1060,7 @@ void SetMouseCursorVisible(bool visible)
 void UpdateInputAndCamera()
 {
     const float deltaTime = 1.0f / 60.0f;
+    const float maxPitch = g_bAllowStraightUpDown ? kExtendedMaxPitch : kMaxPitch;
     const HWND foregroundWindow = GetForegroundWindow();
     const bool isMainWindowActive = (foregroundWindow == g_hWnd);
     const bool isToolDialogActive = (g_hToolDialog != NULL && foregroundWindow == g_hToolDialog);
@@ -1179,8 +1199,8 @@ void UpdateInputAndCamera()
 
                     g_cameraYaw += static_cast<float>(deltaX) * kMouseSensitivity * kRemoteDesktopMouseSensitivityScale;
                     g_cameraPitch -= static_cast<float>(deltaY) * kMouseSensitivity * kRemoteDesktopMouseSensitivityScale;
-                    g_cameraPitch = (g_cameraPitch < -kMaxPitch) ? -kMaxPitch : g_cameraPitch;
-                    g_cameraPitch = (g_cameraPitch > kMaxPitch) ? kMaxPitch : g_cameraPitch;
+                    g_cameraPitch = (g_cameraPitch < -maxPitch) ? -maxPitch : g_cameraPitch;
+                    g_cameraPitch = (g_cameraPitch > maxPitch) ? maxPitch : g_cameraPitch;
                 }
 
                 g_previousMousePosition = mousePos;
@@ -1204,8 +1224,8 @@ void UpdateInputAndCamera()
 
                     g_cameraYaw += static_cast<float>(deltaX) * kMouseSensitivity;
                     g_cameraPitch -= static_cast<float>(deltaY) * kMouseSensitivity;
-                    g_cameraPitch = (g_cameraPitch < -kMaxPitch) ? -kMaxPitch : g_cameraPitch;
-                    g_cameraPitch = (g_cameraPitch > kMaxPitch) ? kMaxPitch : g_cameraPitch;
+                    g_cameraPitch = (g_cameraPitch < -maxPitch) ? -maxPitch : g_cameraPitch;
+                    g_cameraPitch = (g_cameraPitch > maxPitch) ? maxPitch : g_cameraPitch;
 
                     SetCursorPos(screenCenter.x, screenCenter.y);
                     ResetMouseLookTracking();
@@ -1705,6 +1725,11 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         {
             g_bRemoteDesktopCameraMode = (SendMessage(g_hRemoteDesktopCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
             ResetMouseLookTracking();
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogAllowStraightUpDownCheckboxId)
+        {
+            g_bAllowStraightUpDown = (SendMessage(g_hAllowStraightUpDownCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
             return 0;
         }
         if (LOWORD(wParam) == kToolDialogApplyThicknessScaleButtonId)
