@@ -35,11 +35,18 @@ namespace
     constexpr int kToolDialogUseThicknessCheckboxId = 1004;
     constexpr int kToolDialogThicknessScaleEditId = 1005;
     constexpr int kToolDialogApplyThicknessScaleButtonId = 1006;
+    constexpr int kToolDialogSsaoDepthRangeEditId = 1007;
+    constexpr int kToolDialogApplySsaoDepthRangeButtonId = 1008;
     constexpr int kDebugViewNone = 0;
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
     constexpr int kDebugViewThickness = 3;
     constexpr int kDebugViewBackDepth = 4;
+    constexpr float kCameraNearPlane = 0.1f;
+    constexpr float kCameraFarPlane = 50.0f;
+    constexpr float kDefaultSsaoDepthRange = kCameraFarPlane;
+    constexpr float kMinSsaoDepthRange = 0.5f;
+    constexpr float kDepthCompareDistance = 0.1f;
 }
 
 LPDIRECT3D9 g_pD3D = NULL;
@@ -94,6 +101,7 @@ bool g_bUseThicknessForSsao = true;
 int g_debugViewMode = kDebugViewNone;
 float g_simpleSsaoSamplePixels = 20.0f;
 float g_thicknessScale = 1.0f;
+float g_ssaoDepthRange = kDefaultSsaoDepthRange;
 float g_cameraYaw = -D3DX_PI * 0.25f;
 float g_cameraPitch = -0.34f;
 D3DXVECTOR3 g_cameraPosition(2.0f, 1.0f, -3.0f);
@@ -104,6 +112,9 @@ HWND g_hApplySsaoButton = NULL;
 HWND g_hUseThicknessCheckbox = NULL;
 HWND g_hThicknessScaleEdit = NULL;
 HWND g_hApplyThicknessScaleButton = NULL;
+HWND g_hSsaoDepthRangeEdit = NULL;
+HWND g_hApplySsaoDepthRangeButton = NULL;
+HFONT g_hToolDialogFont = NULL;
 
 struct UserMeshInstance
 {
@@ -152,6 +163,7 @@ static void DrawSceneGeometry(const D3DXMATRIX& View, const D3DXMATRIX& Proj);
 static void RenderPass1();
 static void RenderPass2();
 static void DrawFullscreenQuad();
+static void ApplyToolDialogFont(HWND controlHandle);
 
 LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -448,6 +460,11 @@ void Cleanup()
         DestroyWindow(g_hToolDialog);
         g_hToolDialog = NULL;
     }
+    if (g_hToolDialogFont)
+    {
+        DeleteObject(g_hToolDialogFont);
+        g_hToolDialogFont = NULL;
+    }
 
     SAFE_RELEASE(g_pd3dDevice);
     SAFE_RELEASE(g_pD3D);
@@ -576,12 +593,31 @@ void CreateToolDialog()
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,
                                    340,
-                                   230,
+                                   280,
                                    g_hWnd,
                                    NULL,
                                    wc.hInstance,
                                    NULL);
     assert(g_hToolDialog != NULL);
+
+    if (g_hToolDialogFont == NULL)
+    {
+        NONCLIENTMETRICS metrics = { };
+        metrics.cbSize = sizeof(metrics);
+        if (SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(metrics), &metrics, 0))
+        {
+            LOGFONT logFont = metrics.lfMessageFont;
+            if (logFont.lfHeight < 0)
+            {
+                logFont.lfHeight += 2;
+            }
+            else
+            {
+                logFont.lfHeight = (logFont.lfHeight > 10) ? (logFont.lfHeight - 2) : 8;
+            }
+            g_hToolDialogFont = CreateFontIndirect(&logFont);
+        }
+    }
 
     g_hOpenMeshButton = CreateWindow(_T("BUTTON"),
                                      _T("Open X File"),
@@ -595,18 +631,20 @@ void CreateToolDialog()
                                      wc.hInstance,
                                      NULL);
     assert(g_hOpenMeshButton != NULL);
+    ApplyToolDialogFont(g_hOpenMeshButton);
 
-    CreateWindow(_T("STATIC"),
-                 _T("SSAO sample pixels:"),
-                 WS_CHILD | WS_VISIBLE,
-                 20,
-                 72,
-                 130,
-                 20,
-                 g_hToolDialog,
-                 NULL,
-                 wc.hInstance,
-                 NULL);
+    HWND hSsaoSampleLabel = CreateWindow(_T("STATIC"),
+                                         _T("SSAO sample pixels:"),
+                                         WS_CHILD | WS_VISIBLE,
+                                         20,
+                                         72,
+                                         130,
+                                         20,
+                                         g_hToolDialog,
+                                         NULL,
+                                         wc.hInstance,
+                                         NULL);
+    ApplyToolDialogFont(hSsaoSampleLabel);
 
     g_hSsaoSampleEdit = CreateWindow(_T("EDIT"),
                                      _T("20.0"),
@@ -620,6 +658,7 @@ void CreateToolDialog()
                                      wc.hInstance,
                                      NULL);
     assert(g_hSsaoSampleEdit != NULL);
+    ApplyToolDialogFont(g_hSsaoSampleEdit);
 
     g_hApplySsaoButton = CreateWindow(_T("BUTTON"),
                                       _T("Apply"),
@@ -633,12 +672,54 @@ void CreateToolDialog()
                                       wc.hInstance,
                                       NULL);
     assert(g_hApplySsaoButton != NULL);
+    ApplyToolDialogFont(g_hApplySsaoButton);
+
+    HWND hSsaoDepthRangeLabel = CreateWindow(_T("STATIC"),
+                                             _T("SSAO depth range (m):"),
+                                             WS_CHILD | WS_VISIBLE,
+                                             20,
+                                             104,
+                                             130,
+                                             20,
+                                             g_hToolDialog,
+                                             NULL,
+                                             wc.hInstance,
+                                             NULL);
+    ApplyToolDialogFont(hSsaoDepthRangeLabel);
+
+    g_hSsaoDepthRangeEdit = CreateWindow(_T("EDIT"),
+                                         _T("50.0"),
+                                         WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                                         160,
+                                         100,
+                                         60,
+                                         24,
+                                         g_hToolDialog,
+                                         reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogSsaoDepthRangeEditId)),
+                                         wc.hInstance,
+                                         NULL);
+    assert(g_hSsaoDepthRangeEdit != NULL);
+    ApplyToolDialogFont(g_hSsaoDepthRangeEdit);
+
+    g_hApplySsaoDepthRangeButton = CreateWindow(_T("BUTTON"),
+                                                _T("Apply"),
+                                                WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                                230,
+                                                98,
+                                                60,
+                                                28,
+                                                g_hToolDialog,
+                                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogApplySsaoDepthRangeButtonId)),
+                                                wc.hInstance,
+                                                NULL);
+    assert(g_hApplySsaoDepthRangeButton != NULL);
+    ApplyToolDialogFont(g_hApplySsaoDepthRangeButton);
 
     g_hUseThicknessCheckbox = CreateWindow(_T("BUTTON"),
                                            _T("Use thickness for SSAO"),
                                            WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                            20,
-                                           106,
+                                           138,
                                            180,
                                            24,
                                            g_hToolDialog,
@@ -646,25 +727,27 @@ void CreateToolDialog()
                                            wc.hInstance,
                                            NULL);
     assert(g_hUseThicknessCheckbox != NULL);
+    ApplyToolDialogFont(g_hUseThicknessCheckbox);
     SendMessage(g_hUseThicknessCheckbox, BM_SETCHECK, g_bUseThicknessForSsao ? BST_CHECKED : BST_UNCHECKED, 0);
 
-    CreateWindow(_T("STATIC"),
-                 _T("Thickness scale:"),
-                 WS_CHILD | WS_VISIBLE,
-                 20,
-                 138,
-                 130,
-                 20,
-                 g_hToolDialog,
-                 NULL,
-                 wc.hInstance,
-                 NULL);
+    HWND hThicknessScaleLabel = CreateWindow(_T("STATIC"),
+                                             _T("Thickness scale:"),
+                                             WS_CHILD | WS_VISIBLE,
+                                             20,
+                                             170,
+                                             130,
+                                             20,
+                                             g_hToolDialog,
+                                             NULL,
+                                             wc.hInstance,
+                                             NULL);
+    ApplyToolDialogFont(hThicknessScaleLabel);
 
     g_hThicknessScaleEdit = CreateWindow(_T("EDIT"),
                                          _T("1.0"),
                                          WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                          160,
-                                         134,
+                                         166,
                                          60,
                                          24,
                                          g_hToolDialog,
@@ -672,12 +755,13 @@ void CreateToolDialog()
                                          wc.hInstance,
                                          NULL);
     assert(g_hThicknessScaleEdit != NULL);
+    ApplyToolDialogFont(g_hThicknessScaleEdit);
 
     g_hApplyThicknessScaleButton = CreateWindow(_T("BUTTON"),
                                                 _T("Apply"),
                                                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                                 230,
-                                                132,
+                                                164,
                                                 60,
                                                 28,
                                                 g_hToolDialog,
@@ -685,6 +769,11 @@ void CreateToolDialog()
                                                 wc.hInstance,
                                                 NULL);
     assert(g_hApplyThicknessScaleButton != NULL);
+    ApplyToolDialogFont(g_hApplyThicknessScaleButton);
+
+    TCHAR depthRangeText[64] = { };
+    _stprintf_s(depthRangeText, _T("%.1f"), g_ssaoDepthRange);
+    SetWindowText(g_hSsaoDepthRangeEdit, depthRangeText);
 }
 
 void ToggleToolDialog()
@@ -950,7 +1039,7 @@ void UpdateInputAndCamera()
 
 void DrawOverlayText()
 {
-    TCHAR lines[][128] =
+    TCHAR lines[13][128] =
     {
         _T("SSAO sample controls"),
         _T("W/A/S/D: move"),
@@ -964,7 +1053,9 @@ void DrawOverlayText()
         _T("3: toggle lambert lighting"),
         _T("4: toggle mesh dialog"),
         _T("5: toggle simple SSAO"),
+        _T(""),
     };
+    _stprintf_s(lines[12], _T("SSAO depth range: %.1f m"), g_ssaoDepthRange);
 
     for (int i = 0; i < _countof(lines); ++i)
     {
@@ -1108,8 +1199,8 @@ void RenderPass1()
     D3DXMatrixPerspectiveFovLH(&Proj,
                                D3DXToRadian(45),
                                static_cast<float>(kRenderWidth) / static_cast<float>(kRenderHeight),
-                               0.1f,
-                               50.0f);
+                               kCameraNearPlane,
+                               kCameraFarPlane);
 
     D3DXVECTOR3 forward(sinf(g_cameraYaw) * cosf(g_cameraPitch),
                         sinf(g_cameraPitch),
@@ -1136,6 +1227,7 @@ void RenderPass1()
 
     hResult = g_pEffect1->SetBool("g_bUseTexture", TRUE); assert(hResult == S_OK);
     hResult = g_pEffect1->SetBool("g_bUseLambert", g_bUseLambertLighting ? TRUE : FALSE); assert(hResult == S_OK);
+    hResult = g_pEffect1->SetFloat("g_ssaoDepthRange", g_ssaoDepthRange); assert(hResult == S_OK);
     DrawSceneGeometry(View, Proj);
 
     hResult = g_pEffect1->EndPass(); assert(hResult == S_OK);
@@ -1242,6 +1334,8 @@ void RenderPass2()
     hResult = g_pEffect2->SetBool("g_bUseThicknessForSsao", g_bUseThicknessForSsao ? TRUE : FALSE); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_simpleSsaoSamplePixels", g_simpleSsaoSamplePixels); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_thicknessScale", g_thicknessScale); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloat("g_ssaoDepthRange", g_ssaoDepthRange); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloat("g_depthCompareThreshold", kDepthCompareDistance / g_ssaoDepthRange); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("depthTexture", g_pDepthRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("thicknessTexture", g_pThicknessRenderTarget); assert(hResult == S_OK);
@@ -1321,6 +1415,14 @@ void DrawFullscreenQuad()
     g_pd3dDevice->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, v, sizeof(QuadVertex));
 }
 
+void ApplyToolDialogFont(HWND controlHandle)
+{
+    if (controlHandle != NULL && g_hToolDialogFont != NULL)
+    {
+        SendMessage(controlHandle, WM_SETFONT, reinterpret_cast<WPARAM>(g_hToolDialogFont), TRUE);
+    }
+}
+
 LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     switch (msg)
@@ -1362,6 +1464,29 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 TCHAR normalizedText[64] = { };
                 _stprintf_s(normalizedText, _T("%.1f"), g_simpleSsaoSamplePixels);
                 SetWindowText(g_hSsaoSampleEdit, normalizedText);
+            }
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogApplySsaoDepthRangeButtonId)
+        {
+            TCHAR buffer[64] = { };
+            GetWindowText(g_hSsaoDepthRangeEdit, buffer, _countof(buffer));
+            float ssaoDepthRange = g_ssaoDepthRange;
+            if (_stscanf_s(buffer, _T("%f"), &ssaoDepthRange) == 1)
+            {
+                if (ssaoDepthRange < kMinSsaoDepthRange)
+                {
+                    ssaoDepthRange = kMinSsaoDepthRange;
+                }
+                if (ssaoDepthRange > kCameraFarPlane)
+                {
+                    ssaoDepthRange = kCameraFarPlane;
+                }
+                g_ssaoDepthRange = ssaoDepthRange;
+
+                TCHAR normalizedText[64] = { };
+                _stprintf_s(normalizedText, _T("%.1f"), g_ssaoDepthRange);
+                SetWindowText(g_hSsaoDepthRangeEdit, normalizedText);
             }
             return 0;
         }

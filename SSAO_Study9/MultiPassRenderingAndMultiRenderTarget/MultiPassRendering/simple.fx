@@ -2,6 +2,7 @@ float4x4 g_matWorldViewProj;
 float4x4 g_matWorldView;
 float4 g_lightNormal = { -0.3f, -1.0f, -0.5f, 0.0f };
 float3 g_ambient = { 0.3f, 0.3f, 0.3f };
+float g_ssaoDepthRange = 50.0f;
 
 bool g_bUseTexture = true;
 bool g_bUseLambert = true;
@@ -23,22 +24,23 @@ void VertexShader1(
     in float2 inTexCoord0 : TEXCOORD0,
     out float4 outPosition : POSITION0,
     out float2 outTexCoord0 : TEXCOORD0,
-    out float2 outClipDepth : TEXCOORD1,
+    out float outViewDepth : TEXCOORD1,
     out float3 outNormal : TEXCOORD2,
     out float3 outViewNormal : TEXCOORD3)
 {
     float4 clipPosition = mul(inPosition, g_matWorldViewProj);
+    float4 viewPosition = mul(inPosition, g_matWorldView);
     outPosition = clipPosition;
     outTexCoord0 = inTexCoord0;
     outNormal = normalize(inNormal);
     outViewNormal = normalize(mul(float4(inNormal, 0.0f), g_matWorldView).xyz);
-    outClipDepth = clipPosition.zw;
+    outViewDepth = max(0.0f, viewPosition.z);
 }
 
 // ▼ ピクセルシェーダー：MRTのCOLOR1にグレースケールで深度を書き込む
 void PixelShaderMRT(
     in float2 inTexCoord0 : TEXCOORD0,
-    in float2 inClipDepth : TEXCOORD1,
+    in float inViewDepth : TEXCOORD1,
     in float3 inNormal : TEXCOORD2,
     in float3 inViewNormal : TEXCOORD3,
     out float4 outColor0 : COLOR0,
@@ -64,14 +66,14 @@ void PixelShaderMRT(
     outColor0 = float4(baseColor.rgb * lighting, baseColor.a);
 
     // 近いほど黒、遠いほど白
-    float depth01 = saturate(inClipDepth.x / inClipDepth.y);
+    float depth01 = saturate(inViewDepth / g_ssaoDepthRange);
     float3 viewNormal = normalize(inViewNormal);
     outDepth = float4(depth01, 0.0f, 0.0f, 1.0f);
     outColor2 = float4(viewNormal * 0.5f + 0.5f, 1.0f);
 }
 
 void PixelShaderBackDepth(
-    in float2 inClipDepth : TEXCOORD1,
+    in float inViewDepth : TEXCOORD1,
     in float faceSign : VFACE,
     out float4 outDepth : COLOR0)
 {
@@ -80,7 +82,7 @@ void PixelShaderBackDepth(
         clip(-1.0f);
     }
 
-    float depth01 = saturate(inClipDepth.x / inClipDepth.y);
+    float depth01 = saturate(inViewDepth / g_ssaoDepthRange);
     outDepth = float4(depth01, 0.0f, 0.0f, 1.0f);
 }
 

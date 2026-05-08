@@ -9,6 +9,7 @@ bool g_bUseThicknessForSsao = true;
 float2 g_screenSize = { 1600.0f, 900.0f };
 float g_simpleSsaoSamplePixels = 20.0f;
 float g_thicknessScale = 1.0f;
+float g_ssaoDepthRange = 50.0f;
 float g_depthCompareThreshold = 0.002f;
 
 texture texture1;
@@ -79,24 +80,27 @@ void PixelShader1(in float4 inPosition    : POSITION,
     {
         float2 sampleDirection = currentNormal.xy;
         float directionLength = length(sampleDirection);
-        if (directionLength > 0.1f)
+        if (directionLength > 0.1f && currentDepth < 0.999f)
         {
             sampleDirection /= directionLength;
             float2 sampleOffset = float2(sampleDirection.x * (g_simpleSsaoSamplePixels / g_screenSize.x),
                                          -sampleDirection.y * (g_simpleSsaoSamplePixels / g_screenSize.y));
             float2 sampleTexCoord = saturate(shiftedTexCoord + sampleOffset);
             float sampleDepth = tex2D(depthSampler, sampleTexCoord).r;
-            float sampleThickness = tex2D(thicknessSampler, sampleTexCoord).r;
-            float frontDepthWithMargin = sampleDepth - g_depthCompareThreshold;
-            float backDepthWithMargin = sampleDepth + g_depthCompareThreshold;
-            if (g_bUseThicknessForSsao)
+            if (sampleDepth < 0.999f)
             {
-                backDepthWithMargin += sampleThickness * g_thicknessScale;
-            }
+                float sampleThickness = tex2D(thicknessSampler, sampleTexCoord).r;
+                float frontDepthWithMargin = sampleDepth - g_depthCompareThreshold;
+                float backDepthWithMargin = sampleDepth + g_depthCompareThreshold;
+                if (g_bUseThicknessForSsao)
+                {
+                    backDepthWithMargin += sampleThickness * g_thicknessScale;
+                }
 
-            if (frontDepthWithMargin <= currentDepth && currentDepth <= backDepthWithMargin)
-            {
-                workColor = float4(0.0f, 0.0f, 0.0f, workColor.a);
+                if (frontDepthWithMargin <= currentDepth && currentDepth <= backDepthWithMargin)
+                {
+                    workColor = float4(0.0f, 0.0f, 0.0f, workColor.a);
+                }
             }
         }
     }
