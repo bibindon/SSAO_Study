@@ -10,7 +10,7 @@ float2 g_screenSize = { 1600.0f, 900.0f };
 float g_simpleSsaoSamplePixels = 20.0f;
 float g_thicknessScale = 1.0f;
 float g_ssaoDepthRange = 50.0f;
-float g_depthCompareThreshold = 0.002f;
+float g_depthCompareThreshold = 0.0f;
 float g_targetNormalBiasScale = 1.0f;
 float g_targetDepthBiasScale = 1.0f;
 

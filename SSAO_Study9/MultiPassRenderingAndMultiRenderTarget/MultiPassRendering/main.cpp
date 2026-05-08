@@ -43,6 +43,8 @@ namespace
     constexpr int kToolDialogApplyNormalBiasScaleButtonId = 1011;
     constexpr int kToolDialogDepthBiasScaleEditId = 1012;
     constexpr int kToolDialogApplyDepthBiasScaleButtonId = 1013;
+    constexpr int kToolDialogDepthCompareDistanceEditId = 1014;
+    constexpr int kToolDialogApplyDepthCompareDistanceButtonId = 1015;
     constexpr int kDebugViewNone = 0;
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
@@ -112,6 +114,7 @@ float g_thicknessScale = 1.0f;
 float g_ssaoDepthRange = kDefaultSsaoDepthRange;
 float g_targetNormalBiasScale = 1.0f;
 float g_targetDepthBiasScale = 1.0f;
+float g_depthCompareDistance = 0.0f;
 float g_cameraYaw = -D3DX_PI * 0.25f;
 float g_cameraPitch = -0.34f;
 D3DXVECTOR3 g_cameraPosition(2.0f, 1.0f, -3.0f);
@@ -130,6 +133,8 @@ HWND g_hNormalBiasScaleEdit = NULL;
 HWND g_hApplyNormalBiasScaleButton = NULL;
 HWND g_hDepthBiasScaleEdit = NULL;
 HWND g_hApplyDepthBiasScaleButton = NULL;
+HWND g_hDepthCompareDistanceEdit = NULL;
+HWND g_hApplyDepthCompareDistanceButton = NULL;
 HFONT g_hToolDialogFont = NULL;
 
 struct UserMeshInstance
@@ -610,7 +615,7 @@ void CreateToolDialog()
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,
                                    340,
-                                   380,
+                                   420,
                                    g_hWnd,
                                    NULL,
                                    wc.hInstance,
@@ -885,6 +890,47 @@ void CreateToolDialog()
     assert(g_hApplyDepthBiasScaleButton != NULL);
     ApplyToolDialogFont(g_hApplyDepthBiasScaleButton);
 
+    HWND hDepthCompareDistanceLabel = CreateWindow(_T("STATIC"),
+                                                   _T("Depth compare dist:"),
+                                                   WS_CHILD | WS_VISIBLE,
+                                                   20,
+                                                   302,
+                                                   130,
+                                                   20,
+                                                   g_hToolDialog,
+                                                   NULL,
+                                                   wc.hInstance,
+                                                   NULL);
+    ApplyToolDialogFont(hDepthCompareDistanceLabel);
+
+    g_hDepthCompareDistanceEdit = CreateWindow(_T("EDIT"),
+                                               _T("0.10"),
+                                               WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                                               160,
+                                               298,
+                                               60,
+                                               24,
+                                               g_hToolDialog,
+                                               reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogDepthCompareDistanceEditId)),
+                                               wc.hInstance,
+                                               NULL);
+    assert(g_hDepthCompareDistanceEdit != NULL);
+    ApplyToolDialogFont(g_hDepthCompareDistanceEdit);
+
+    g_hApplyDepthCompareDistanceButton = CreateWindow(_T("BUTTON"),
+                                                      _T("Apply"),
+                                                      WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                                      230,
+                                                      296,
+                                                      60,
+                                                      28,
+                                                      g_hToolDialog,
+                                                      reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogApplyDepthCompareDistanceButtonId)),
+                                                      wc.hInstance,
+                                                      NULL);
+    assert(g_hApplyDepthCompareDistanceButton != NULL);
+    ApplyToolDialogFont(g_hApplyDepthCompareDistanceButton);
+
     TCHAR depthRangeText[64] = { };
     _stprintf_s(depthRangeText, _T("%.1f"), g_ssaoDepthRange);
     SetWindowText(g_hSsaoDepthRangeEdit, depthRangeText);
@@ -896,6 +942,10 @@ void CreateToolDialog()
     TCHAR depthBiasScaleText[64] = { };
     _stprintf_s(depthBiasScaleText, _T("%.2f"), g_targetDepthBiasScale);
     SetWindowText(g_hDepthBiasScaleEdit, depthBiasScaleText);
+
+    TCHAR depthCompareDistanceText[64] = { };
+    _stprintf_s(depthCompareDistanceText, _T("%.5f"), g_depthCompareDistance);
+    SetWindowText(g_hDepthCompareDistanceEdit, depthCompareDistanceText);
 }
 
 void ToggleToolDialog()
@@ -1489,7 +1539,7 @@ void RenderPass2()
     hResult = g_pEffect2->SetFloat("g_simpleSsaoSamplePixels", g_simpleSsaoSamplePixels); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_thicknessScale", g_thicknessScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_ssaoDepthRange", g_ssaoDepthRange); assert(hResult == S_OK);
-    hResult = g_pEffect2->SetFloat("g_depthCompareThreshold", kDepthCompareDistance / g_ssaoDepthRange); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloat("g_depthCompareThreshold", g_depthCompareDistance / g_ssaoDepthRange); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_targetNormalBiasScale", g_targetNormalBiasScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_targetDepthBiasScale", g_targetDepthBiasScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget); assert(hResult == S_OK);
@@ -1711,6 +1761,25 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 TCHAR normalizedText[64] = { };
                 _stprintf_s(normalizedText, _T("%.2f"), g_targetDepthBiasScale);
                 SetWindowText(g_hDepthBiasScaleEdit, normalizedText);
+            }
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogApplyDepthCompareDistanceButtonId)
+        {
+            TCHAR buffer[64] = { };
+            GetWindowText(g_hDepthCompareDistanceEdit, buffer, _countof(buffer));
+            float depthCompareDistance = g_depthCompareDistance;
+            if (_stscanf_s(buffer, _T("%f"), &depthCompareDistance) == 1)
+            {
+                if (depthCompareDistance < 0.0f)
+                {
+                    depthCompareDistance = 0.0f;
+                }
+                g_depthCompareDistance = depthCompareDistance;
+
+                TCHAR normalizedText[64] = { };
+                _stprintf_s(normalizedText, _T("%.5f"), g_depthCompareDistance);
+                SetWindowText(g_hDepthCompareDistanceEdit, normalizedText);
             }
             return 0;
         }
