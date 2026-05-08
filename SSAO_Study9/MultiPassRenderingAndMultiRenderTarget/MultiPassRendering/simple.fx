@@ -41,7 +41,8 @@ void PixelShaderMRT(
     in float3 inNormal : TEXCOORD2,
     out float4 outColor0 : COLOR0,
     out float4 outDepth : COLOR1,
-    out float4 outColor2 : COLOR2)
+    out float4 outColor2 : COLOR2,
+    out float4 outRawDepth : COLOR3)
 {
     float4 baseColor = float4(0.5, 0.5, 0.5, 1.0);
 
@@ -67,6 +68,7 @@ void PixelShaderMRT(
     float3 viewNormal = normalize(mul(float4(normal, 0.0f), g_matWorldView).xyz);
     outDepth = float4(depth01, 0.0f, 0.0f, 1.0f);
     outColor2 = float4(viewNormal * 0.5f + 0.5f, 1.0f);
+    outRawDepth = float4(viewDepth, 0.0f, 0.0f, 1.0f);
 }
 
 void PixelShaderBackDepth(

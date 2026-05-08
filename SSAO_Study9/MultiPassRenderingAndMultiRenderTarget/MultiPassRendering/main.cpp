@@ -52,6 +52,10 @@ namespace
     constexpr int kToolDialogSampleCountEditId = 1019;
     constexpr int kToolDialogApplySampleCountButtonId = 1020;
     constexpr int kToolDialogDepthScaledSampleDistanceCheckboxId = 1021;
+    constexpr int kToolDialogEnableThicknessCapCheckboxId = 1022;
+    constexpr int kToolDialogThicknessCapEditId = 1023;
+    constexpr int kToolDialogApplyThicknessCapButtonId = 1024;
+    constexpr int kToolDialogAutoScaleSsaoByCenterCheckboxId = 1025;
     constexpr int kDebugViewNone = 0;
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
@@ -89,9 +93,12 @@ bool g_bClose = false;
 // === 変更: RT を 2 枚用意 ===
 LPDIRECT3DTEXTURE9 g_pRenderTarget = NULL;
 LPDIRECT3DTEXTURE9 g_pDepthRenderTarget = NULL;
+LPDIRECT3DTEXTURE9 g_pRawDepthRenderTarget = NULL;
 LPDIRECT3DTEXTURE9 g_pBackDepthRenderTarget = NULL;
 LPDIRECT3DTEXTURE9 g_pNormalRenderTarget = NULL;
 LPDIRECT3DTEXTURE9 g_pThicknessRenderTarget = NULL;
+LPDIRECT3DTEXTURE9 g_pCenterDepthResolveTexture = NULL;
+LPDIRECT3DSURFACE9 g_pCenterDepthReadbackSurface = NULL;
 
 // フルスクリーンクアッド用
 LPDIRECT3DVERTEXDECLARATION9 g_pQuadDecl = NULL;
@@ -116,16 +123,21 @@ bool g_bUseThicknessForSsao = true;
 bool g_bRemoteDesktopCameraMode = false;
 bool g_bAllowStraightUpDown = false;
 bool g_bDepthScaledSampleDistance = false;
+bool g_bAutoScaleSsaoByCenterDepth = false;
 bool g_bHasPreviousMousePosition = false;
 int g_debugViewMode = kDebugViewNone;
 float g_simpleSsaoSampleDistanceMeters = 1.0f;
+float g_autoSsaoSampleDistanceMeters = 1.0f;
 int g_simpleSsaoSampleCount = 1;
 float g_thicknessScale = 1.0f;
 float g_ssaoDepthRange = kDefaultSsaoDepthRange;
+float g_autoSsaoDepthRange = kDefaultSsaoDepthRange;
 float g_targetNormalBiasScale = 1.0f;
 float g_targetDepthBiasScale = 1.0f;
 float g_depthCompareDistance = 0.0f;
 float g_sampleDepthBiasDistance = 0.1f;
+bool g_bEnableThicknessCap = false;
+float g_thicknessCapMeters = 1.0f;
 float g_cameraYaw = -D3DX_PI * 0.25f;
 float g_cameraPitch = -0.34f;
 D3DXVECTOR3 g_cameraPosition(2.0f, 1.0f, -3.0f);
@@ -152,6 +164,10 @@ HWND g_hAllowStraightUpDownCheckbox = NULL;
 HWND g_hDepthBiasDistanceEdit = NULL;
 HWND g_hApplyDepthBiasDistanceButton = NULL;
 HWND g_hDepthScaledSampleDistanceCheckbox = NULL;
+HWND g_hAutoScaleSsaoByCenterCheckbox = NULL;
+HWND g_hEnableThicknessCapCheckbox = NULL;
+HWND g_hThicknessCapEdit = NULL;
+HWND g_hApplyThicknessCapButton = NULL;
 HFONT g_hToolDialogFont = NULL;
 
 struct UserMeshInstance
@@ -203,6 +219,9 @@ static void RenderPass1();
 static void RenderPass2();
 static void DrawFullscreenQuad();
 static void ApplyToolDialogFont(HWND controlHandle);
+static float GetActiveSsaoSampleDistanceMeters();
+static float GetActiveSsaoDepthRange();
+static void UpdateAutoSsaoParametersFromCenterDepth();
 
 LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -421,6 +440,15 @@ void InitD3D(HWND hWnd)
                                 D3DUSAGE_RENDERTARGET,
                                 D3DFMT_R32F,
                                 D3DPOOL_DEFAULT,
+                                &g_pRawDepthRenderTarget);
+    assert(hResult == S_OK);
+
+    hResult = D3DXCreateTexture(g_pd3dDevice,
+                                kRenderWidth, kRenderHeight,
+                                1,
+                                D3DUSAGE_RENDERTARGET,
+                                D3DFMT_R32F,
+                                D3DPOOL_DEFAULT,
                                 &g_pBackDepthRenderTarget);
     assert(hResult == S_OK);
 
@@ -440,6 +468,23 @@ void InitD3D(HWND hWnd)
                                 D3DFMT_R32F,
                                 D3DPOOL_DEFAULT,
                                 &g_pThicknessRenderTarget);
+    assert(hResult == S_OK);
+
+    hResult = D3DXCreateTexture(g_pd3dDevice,
+                                1, 1,
+                                1,
+                                D3DUSAGE_RENDERTARGET,
+                                D3DFMT_R32F,
+                                D3DPOOL_DEFAULT,
+                                &g_pCenterDepthResolveTexture);
+    assert(hResult == S_OK);
+
+    hResult = g_pd3dDevice->CreateOffscreenPlainSurface(1,
+                                                        1,
+                                                        D3DFMT_R32F,
+                                                        D3DPOOL_SYSTEMMEM,
+                                                        &g_pCenterDepthReadbackSurface,
+                                                        NULL);
     assert(hResult == S_OK);
 
     // フルスクリーンクアッドの頂宣言
@@ -489,9 +534,12 @@ void Cleanup()
     // 追加: 解放漏れ防止
     SAFE_RELEASE(g_pRenderTarget);
     SAFE_RELEASE(g_pDepthRenderTarget);
+    SAFE_RELEASE(g_pRawDepthRenderTarget);
     SAFE_RELEASE(g_pBackDepthRenderTarget);
     SAFE_RELEASE(g_pNormalRenderTarget);
     SAFE_RELEASE(g_pThicknessRenderTarget);
+    SAFE_RELEASE(g_pCenterDepthResolveTexture);
+    SAFE_RELEASE(g_pCenterDepthReadbackSurface);
     SAFE_RELEASE(g_pQuadDecl);
     SAFE_RELEASE(g_pSprite);
     if (g_hToolDialog)
@@ -632,7 +680,7 @@ void CreateToolDialog()
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,
                                    340,
-                                   564,
+                                   664,
                                    g_hWnd,
                                    NULL,
                                    wc.hInstance,
@@ -1060,6 +1108,77 @@ void CreateToolDialog()
     ApplyToolDialogFont(g_hDepthScaledSampleDistanceCheckbox);
     SendMessage(g_hDepthScaledSampleDistanceCheckbox, BM_SETCHECK, g_bDepthScaledSampleDistance ? BST_CHECKED : BST_UNCHECKED, 0);
 
+    g_hAutoScaleSsaoByCenterCheckbox = CreateWindow(_T("BUTTON"),
+                                                    _T("Auto scale SSAO by center depth"),
+                                                    WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                                                    20,
+                                                    462,
+                                                    240,
+                                                    24,
+                                                    g_hToolDialog,
+                                                    reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogAutoScaleSsaoByCenterCheckboxId)),
+                                                    wc.hInstance,
+                                                    NULL);
+    assert(g_hAutoScaleSsaoByCenterCheckbox != NULL);
+    ApplyToolDialogFont(g_hAutoScaleSsaoByCenterCheckbox);
+    SendMessage(g_hAutoScaleSsaoByCenterCheckbox, BM_SETCHECK, g_bAutoScaleSsaoByCenterDepth ? BST_CHECKED : BST_UNCHECKED, 0);
+
+    g_hEnableThicknessCapCheckbox = CreateWindow(_T("BUTTON"),
+                                                 _T("Enable thickness cap"),
+                                                 WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                                                 20,
+                                                 494,
+                                                 180,
+                                                 24,
+                                                 g_hToolDialog,
+                                                 reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogEnableThicknessCapCheckboxId)),
+                                                 wc.hInstance,
+                                                 NULL);
+    assert(g_hEnableThicknessCapCheckbox != NULL);
+    ApplyToolDialogFont(g_hEnableThicknessCapCheckbox);
+    SendMessage(g_hEnableThicknessCapCheckbox, BM_SETCHECK, g_bEnableThicknessCap ? BST_CHECKED : BST_UNCHECKED, 0);
+
+    HWND hThicknessCapLabel = CreateWindow(_T("STATIC"),
+                                           _T("Thickness cap (m):"),
+                                           WS_CHILD | WS_VISIBLE,
+                                           20,
+                                           526,
+                                           130,
+                                           20,
+                                           g_hToolDialog,
+                                           NULL,
+                                           wc.hInstance,
+                                           NULL);
+    ApplyToolDialogFont(hThicknessCapLabel);
+
+    g_hThicknessCapEdit = CreateWindow(_T("EDIT"),
+                                       _T("1.00"),
+                                       WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                                       160,
+                                       522,
+                                       60,
+                                       24,
+                                       g_hToolDialog,
+                                       reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogThicknessCapEditId)),
+                                       wc.hInstance,
+                                       NULL);
+    assert(g_hThicknessCapEdit != NULL);
+    ApplyToolDialogFont(g_hThicknessCapEdit);
+
+    g_hApplyThicknessCapButton = CreateWindow(_T("BUTTON"),
+                                              _T("Apply"),
+                                              WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                              230,
+                                              520,
+                                              60,
+                                              28,
+                                              g_hToolDialog,
+                                              reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogApplyThicknessCapButtonId)),
+                                              wc.hInstance,
+                                              NULL);
+    assert(g_hApplyThicknessCapButton != NULL);
+    ApplyToolDialogFont(g_hApplyThicknessCapButton);
+
     TCHAR depthRangeText[64] = { };
     _stprintf_s(depthRangeText, _T("%.1f"), g_ssaoDepthRange);
     SetWindowText(g_hSsaoDepthRangeEdit, depthRangeText);
@@ -1087,6 +1206,10 @@ void CreateToolDialog()
     TCHAR depthBiasDistanceText[64] = { };
     _stprintf_s(depthBiasDistanceText, _T("%.5f"), g_sampleDepthBiasDistance);
     SetWindowText(g_hDepthBiasDistanceEdit, depthBiasDistanceText);
+
+    TCHAR thicknessCapText[64] = { };
+    _stprintf_s(thicknessCapText, _T("%.2f"), g_thicknessCapMeters);
+    SetWindowText(g_hThicknessCapEdit, thicknessCapText);
 }
 
 void ToggleToolDialog()
@@ -1383,7 +1506,9 @@ void UpdateInputAndCamera()
 
 void DrawOverlayText()
 {
-    TCHAR lines[14][128] =
+    const float activeDepthRange = GetActiveSsaoDepthRange();
+    const float activeSampleDistanceMeters = GetActiveSsaoSampleDistanceMeters();
+    TCHAR lines[15][128] =
     {
         _T("SSAO sample controls"),
         _T("W/A/S/D: move"),
@@ -1399,9 +1524,11 @@ void DrawOverlayText()
         _T("5: toggle simple SSAO"),
         _T(""),
         _T(""),
+        _T(""),
     };
-    _stprintf_s(lines[12], _T("SSAO depth range: %.1f m"), g_ssaoDepthRange);
-    _stprintf_s(lines[13], _T("Remote Desktop camera: %s"), g_bRemoteDesktopCameraMode ? _T("ON") : _T("OFF"));
+    _stprintf_s(lines[12], _T("SSAO depth range: %.1f m"), activeDepthRange);
+    _stprintf_s(lines[13], _T("SSAO sample dist: %.2f m"), activeSampleDistanceMeters);
+    _stprintf_s(lines[14], _T("Remote Desktop camera: %s"), g_bRemoteDesktopCameraMode ? _T("ON") : _T("OFF"));
 
     for (int i = 0; i < _countof(lines); ++i)
     {
@@ -1516,29 +1643,114 @@ void DrawSceneGeometry(const D3DXMATRIX& View, const D3DXMATRIX& Proj)
     }
 }
 
+float GetActiveSsaoSampleDistanceMeters()
+{
+    if (g_bAutoScaleSsaoByCenterDepth)
+    {
+        return g_autoSsaoSampleDistanceMeters;
+    }
+
+    return g_simpleSsaoSampleDistanceMeters;
+}
+
+float GetActiveSsaoDepthRange()
+{
+    if (g_bAutoScaleSsaoByCenterDepth)
+    {
+        return g_autoSsaoDepthRange;
+    }
+
+    return g_ssaoDepthRange;
+}
+
+void UpdateAutoSsaoParametersFromCenterDepth()
+{
+    if (!g_bAutoScaleSsaoByCenterDepth || g_pCenterDepthResolveTexture == NULL || g_pCenterDepthReadbackSurface == NULL)
+    {
+        return;
+    }
+
+    HRESULT hResult = E_FAIL;
+    LPDIRECT3DSURFACE9 pDepthSurface = NULL;
+    LPDIRECT3DSURFACE9 pResolveSurface = NULL;
+
+    hResult = g_pRawDepthRenderTarget->GetSurfaceLevel(0, &pDepthSurface);
+    assert(hResult == S_OK);
+    hResult = g_pCenterDepthResolveTexture->GetSurfaceLevel(0, &pResolveSurface);
+    assert(hResult == S_OK);
+
+    RECT centerRect = { kRenderWidth / 2, kRenderHeight / 2, (kRenderWidth / 2) + 1, (kRenderHeight / 2) + 1 };
+    hResult = g_pd3dDevice->StretchRect(pDepthSurface, &centerRect, pResolveSurface, NULL, D3DTEXF_POINT);
+    assert(hResult == S_OK);
+
+    hResult = g_pd3dDevice->GetRenderTargetData(pResolveSurface, g_pCenterDepthReadbackSurface);
+    assert(hResult == S_OK);
+
+    D3DLOCKED_RECT lockedRect = { };
+    hResult = g_pCenterDepthReadbackSurface->LockRect(&lockedRect, NULL, D3DLOCK_READONLY);
+    assert(hResult == S_OK);
+
+    const float centerDepthMeters = *reinterpret_cast<const float*>(lockedRect.pBits);
+    hResult = g_pCenterDepthReadbackSurface->UnlockRect();
+    assert(hResult == S_OK);
+
+    SAFE_RELEASE(pResolveSurface);
+    SAFE_RELEASE(pDepthSurface);
+
+    if (centerDepthMeters <= 0.0f || centerDepthMeters >= kCameraFarPlane)
+    {
+        return;
+    }
+
+    const float clampedCenterDepthMeters = (centerDepthMeters > 15.0f) ? 15.0f : centerDepthMeters;
+    g_autoSsaoDepthRange = clampedCenterDepthMeters * 2.0f;
+    if (g_autoSsaoDepthRange < kMinSsaoDepthRange)
+    {
+        g_autoSsaoDepthRange = kMinSsaoDepthRange;
+    }
+    if (g_autoSsaoDepthRange > kCameraFarPlane)
+    {
+        g_autoSsaoDepthRange = kCameraFarPlane;
+    }
+
+    g_autoSsaoSampleDistanceMeters = clampedCenterDepthMeters * 0.25f;
+    if (g_autoSsaoSampleDistanceMeters < 0.0f)
+    {
+        g_autoSsaoSampleDistanceMeters = 0.0f;
+    }
+    if (g_autoSsaoSampleDistanceMeters > kCameraFarPlane)
+    {
+        g_autoSsaoSampleDistanceMeters = kCameraFarPlane;
+    }
+}
+
 void RenderPass1()
 {
     HRESULT hResult = E_FAIL;
+    const float activeSsaoDepthRange = GetActiveSsaoDepthRange();
 
     // 既存の RT0 を保存
     LPDIRECT3DSURFACE9 pOldRT0 = NULL;
     hResult = g_pd3dDevice->GetRenderTarget(0, &pOldRT0);
     assert(hResult == S_OK);
 
-    // 2 枚の RT サーフェスを取得
+    // MRT と背面深度用の RT サーフェスを取得
     LPDIRECT3DSURFACE9 pRT0 = NULL;
     LPDIRECT3DSURFACE9 pRT1 = NULL;
     LPDIRECT3DSURFACE9 pRT2 = NULL;
     LPDIRECT3DSURFACE9 pRT3 = NULL;
+    LPDIRECT3DSURFACE9 pRT4 = NULL;
     hResult = g_pRenderTarget->GetSurfaceLevel(0, &pRT0);  assert(hResult == S_OK);
     hResult = g_pDepthRenderTarget->GetSurfaceLevel(0, &pRT1); assert(hResult == S_OK);
     hResult = g_pNormalRenderTarget->GetSurfaceLevel(0, &pRT2); assert(hResult == S_OK);
-    hResult = g_pBackDepthRenderTarget->GetSurfaceLevel(0, &pRT3); assert(hResult == S_OK);
+    hResult = g_pRawDepthRenderTarget->GetSurfaceLevel(0, &pRT3); assert(hResult == S_OK);
+    hResult = g_pBackDepthRenderTarget->GetSurfaceLevel(0, &pRT4); assert(hResult == S_OK);
 
     // MRT セット
     hResult = g_pd3dDevice->SetRenderTarget(0, pRT0); assert(hResult == S_OK);
     hResult = g_pd3dDevice->SetRenderTarget(1, pRT1); assert(hResult == S_OK);
     hResult = g_pd3dDevice->SetRenderTarget(2, pRT2); assert(hResult == S_OK);
+    hResult = g_pd3dDevice->SetRenderTarget(3, pRT3); assert(hResult == S_OK);
 
     D3DXMATRIX View, Proj;
 
@@ -1573,7 +1785,7 @@ void RenderPass1()
 
     hResult = g_pEffect1->SetBool("g_bUseTexture", TRUE); assert(hResult == S_OK);
     hResult = g_pEffect1->SetBool("g_bUseLambert", g_bUseLambertLighting ? TRUE : FALSE); assert(hResult == S_OK);
-    hResult = g_pEffect1->SetFloat("g_ssaoDepthRange", g_ssaoDepthRange); assert(hResult == S_OK);
+    hResult = g_pEffect1->SetFloat("g_ssaoDepthRange", activeSsaoDepthRange); assert(hResult == S_OK);
     DrawSceneGeometry(View, Proj);
 
     hResult = g_pEffect1->EndPass(); assert(hResult == S_OK);
@@ -1582,7 +1794,8 @@ void RenderPass1()
 
     hResult = g_pd3dDevice->SetRenderTarget(2, NULL); assert(hResult == S_OK);
     hResult = g_pd3dDevice->SetRenderTarget(1, NULL); assert(hResult == S_OK);
-    hResult = g_pd3dDevice->SetRenderTarget(0, pRT3); assert(hResult == S_OK);
+    hResult = g_pd3dDevice->SetRenderTarget(3, NULL); assert(hResult == S_OK);
+    hResult = g_pd3dDevice->SetRenderTarget(0, pRT4); assert(hResult == S_OK);
 
     hResult = g_pd3dDevice->Clear(0, NULL,
                                   D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
@@ -1614,12 +1827,15 @@ void RenderPass1()
     SAFE_RELEASE(pRT1);
     SAFE_RELEASE(pRT2);
     SAFE_RELEASE(pRT3);
+    SAFE_RELEASE(pRT4);
     SAFE_RELEASE(pOldRT0);
 }
 
 void RenderPass2()
 {
     HRESULT hResult = E_FAIL;
+    const float activeSsaoDepthRange = GetActiveSsaoDepthRange();
+    const float activeSsaoSampleDistanceMeters = GetActiveSsaoSampleDistanceMeters();
     LPDIRECT3DSURFACE9 pOldRT0 = NULL;
     LPDIRECT3DSURFACE9 pThicknessRT = NULL;
 
@@ -1644,6 +1860,8 @@ void RenderPass2()
     hResult = g_pEffect2->Begin(&thicknessNumPass, 0); assert(hResult == S_OK);
     hResult = g_pEffect2->BeginPass(0);                assert(hResult == S_OK);
 
+    hResult = g_pEffect2->SetBool("g_bEnableThicknessCap", g_bEnableThicknessCap ? TRUE : FALSE); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloat("g_thicknessCap", g_thicknessCapMeters / activeSsaoDepthRange); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("depthTexture", g_pDepthRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("backDepthTexture", g_pBackDepthRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->CommitChanges(); assert(hResult == S_OK);
@@ -1683,13 +1901,13 @@ void RenderPass2()
     const float projectionScaleY = 1.0f / tanf(verticalFovRadians * 0.5f);
     const float projectionScaleX = projectionScaleY / (static_cast<float>(kRenderWidth) / static_cast<float>(kRenderHeight));
     float projectionScale[2] = { projectionScaleX, projectionScaleY };
-    hResult = g_pEffect2->SetFloat("g_simpleSsaoSampleDistanceMeters", g_simpleSsaoSampleDistanceMeters); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloat("g_simpleSsaoSampleDistanceMeters", activeSsaoSampleDistanceMeters); assert(hResult == S_OK);
     hResult = g_pEffect2->SetInt("g_simpleSsaoSampleCount", g_simpleSsaoSampleCount); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloatArray("g_projectionScale", projectionScale, 2); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_thicknessScale", g_thicknessScale); assert(hResult == S_OK);
-    hResult = g_pEffect2->SetFloat("g_ssaoDepthRange", g_ssaoDepthRange); assert(hResult == S_OK);
-    hResult = g_pEffect2->SetFloat("g_depthCompareThreshold", g_depthCompareDistance / g_ssaoDepthRange); assert(hResult == S_OK);
-    hResult = g_pEffect2->SetFloat("g_sampleDepthBiasThreshold", g_sampleDepthBiasDistance / g_ssaoDepthRange); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloat("g_ssaoDepthRange", activeSsaoDepthRange); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloat("g_depthCompareThreshold", g_depthCompareDistance / activeSsaoDepthRange); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloat("g_sampleDepthBiasThreshold", g_sampleDepthBiasDistance / activeSsaoDepthRange); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_targetNormalBiasScale", g_targetNormalBiasScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_targetDepthBiasScale", g_targetDepthBiasScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget); assert(hResult == S_OK);
@@ -1753,6 +1971,8 @@ void RenderPass2()
 
     hResult = g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, TRUE);
     assert(hResult == S_OK);
+
+    UpdateAutoSsaoParametersFromCenterDepth();
 }
 
 void DrawFullscreenQuad()
@@ -1890,6 +2110,21 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             g_bDepthScaledSampleDistance = (SendMessage(g_hDepthScaledSampleDistanceCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
             return 0;
         }
+        if (LOWORD(wParam) == kToolDialogAutoScaleSsaoByCenterCheckboxId)
+        {
+            g_bAutoScaleSsaoByCenterDepth = (SendMessage(g_hAutoScaleSsaoByCenterCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            if (g_bAutoScaleSsaoByCenterDepth)
+            {
+                g_autoSsaoSampleDistanceMeters = g_simpleSsaoSampleDistanceMeters;
+                g_autoSsaoDepthRange = g_ssaoDepthRange;
+            }
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogEnableThicknessCapCheckboxId)
+        {
+            g_bEnableThicknessCap = (SendMessage(g_hEnableThicknessCapCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            return 0;
+        }
         if (LOWORD(wParam) == kToolDialogApplyThicknessScaleButtonId)
         {
             TCHAR buffer[64] = { };
@@ -1982,6 +2217,25 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 TCHAR normalizedText[64] = { };
                 _stprintf_s(normalizedText, _T("%.5f"), g_sampleDepthBiasDistance);
                 SetWindowText(g_hDepthBiasDistanceEdit, normalizedText);
+            }
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogApplyThicknessCapButtonId)
+        {
+            TCHAR buffer[64] = { };
+            GetWindowText(g_hThicknessCapEdit, buffer, _countof(buffer));
+            float thicknessCapMeters = g_thicknessCapMeters;
+            if (_stscanf_s(buffer, _T("%f"), &thicknessCapMeters) == 1)
+            {
+                if (thicknessCapMeters < 0.0f)
+                {
+                    thicknessCapMeters = 0.0f;
+                }
+                g_thicknessCapMeters = thicknessCapMeters;
+
+                TCHAR normalizedText[64] = { };
+                _stprintf_s(normalizedText, _T("%.2f"), g_thicknessCapMeters);
+                SetWindowText(g_hThicknessCapEdit, normalizedText);
             }
             return 0;
         }

@@ -7,6 +7,7 @@ bool g_bSingleChannelInput = false;
 bool g_bEnableSimpleSsao = true;
 bool g_bUseThicknessForSsao = true;
 bool g_bDepthScaledSampleDistance = false;
+bool g_bEnableThicknessCap = false;
 int g_simpleSsaoSampleCount = 1;
 float2 g_screenSize = { 1600.0f, 900.0f };
 float2 g_projectionScale = { 1.0f, 1.0f };
@@ -17,6 +18,7 @@ float g_depthCompareThreshold = 0.0f;
 float g_sampleDepthBiasThreshold = 1.0f;
 float g_targetNormalBiasScale = 2.0f;
 float g_targetDepthBiasScale = 1.0f;
+float g_thicknessCap = 0.02f;
 
 texture texture1;
 sampler textureSampler = sampler_state {
@@ -119,6 +121,11 @@ float2 ComputeOcclusionSample(float2 shiftedTexCoord,
     {
         backDepthWithMargin += sampleThickness * g_thicknessScale;
     }
+    else
+    {
+        float fallbackThickness = (1.0f / g_ssaoDepthRange) * currentDepth;
+        backDepthWithMargin += fallbackThickness * g_thicknessScale;
+    }
 
     float occluded = (frontDepthWithMargin <= currentDepth && currentDepth <= backDepthWithMargin) ? 1.0f : 0.0f;
     return float2(occluded, 1.0f);
@@ -185,6 +192,9 @@ void PixelShader1(in float4 inPosition    : POSITION,
                         float randomValue = Random01(shiftedTexCoord * g_screenSize + float2(sampleIndexFloat * 13.37f,
                                                                                              sampleIndexFloat * 7.91f));
                         float distanceScale = randomValue * randomValue * randomValue;
+
+                        // 0にならないようにする。
+                        distanceScale += (0.1 * currentDepth);
                         float2 occlusionSample = ComputeOcclusionSample(shiftedTexCoord,
                                                                         currentDepth,
                                                                         currentNormal,
@@ -251,6 +261,10 @@ void PixelShaderThickness(in float4 inPosition : POSITION,
     if (backDepth < 0.999f)
     {
         thickness = saturate(backDepth - frontDepth);
+        if (g_bEnableThicknessCap && thickness > g_thicknessCap)
+        {
+            thickness = 0.0f;
+        }
     }
 
     outColor = float4(thickness, 0.0f, 0.0f, 1.0f);
