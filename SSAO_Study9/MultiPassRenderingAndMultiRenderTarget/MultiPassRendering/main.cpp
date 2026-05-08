@@ -415,7 +415,7 @@ void InitD3D(HWND hWnd)
                                 kRenderWidth, kRenderHeight,
                                 1,
                                 D3DUSAGE_RENDERTARGET,
-                                D3DFMT_A8R8G8B8,
+                                D3DFMT_A16B16G16R16F,
                                 D3DPOOL_DEFAULT,
                                 &g_pNormalRenderTarget);
     assert(hResult == S_OK);

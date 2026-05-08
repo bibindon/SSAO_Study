@@ -103,7 +103,7 @@ void PixelShader1(in float4 inPosition    : POSITION,
                     backDepthWithMargin += sampleThickness * g_thicknessScale;
                 }
 
-                frontDepthWithMargin += 0.001f;
+//                frontDepthWithMargin += 0.001f;
 
                 if (frontDepthWithMargin <= currentDepth && currentDepth <= backDepthWithMargin)
                 {
