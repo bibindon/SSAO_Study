@@ -39,6 +39,10 @@ namespace
     constexpr int kToolDialogSsaoDepthRangeEditId = 1007;
     constexpr int kToolDialogApplySsaoDepthRangeButtonId = 1008;
     constexpr int kToolDialogRemoteDesktopCheckboxId = 1009;
+    constexpr int kToolDialogNormalBiasScaleEditId = 1010;
+    constexpr int kToolDialogApplyNormalBiasScaleButtonId = 1011;
+    constexpr int kToolDialogDepthBiasScaleEditId = 1012;
+    constexpr int kToolDialogApplyDepthBiasScaleButtonId = 1013;
     constexpr int kDebugViewNone = 0;
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
@@ -106,6 +110,8 @@ int g_debugViewMode = kDebugViewNone;
 float g_simpleSsaoSamplePixels = 20.0f;
 float g_thicknessScale = 1.0f;
 float g_ssaoDepthRange = kDefaultSsaoDepthRange;
+float g_targetNormalBiasScale = 1.0f;
+float g_targetDepthBiasScale = 1.0f;
 float g_cameraYaw = -D3DX_PI * 0.25f;
 float g_cameraPitch = -0.34f;
 D3DXVECTOR3 g_cameraPosition(2.0f, 1.0f, -3.0f);
@@ -120,6 +126,10 @@ HWND g_hApplyThicknessScaleButton = NULL;
 HWND g_hSsaoDepthRangeEdit = NULL;
 HWND g_hApplySsaoDepthRangeButton = NULL;
 HWND g_hRemoteDesktopCheckbox = NULL;
+HWND g_hNormalBiasScaleEdit = NULL;
+HWND g_hApplyNormalBiasScaleButton = NULL;
+HWND g_hDepthBiasScaleEdit = NULL;
+HWND g_hApplyDepthBiasScaleButton = NULL;
 HFONT g_hToolDialogFont = NULL;
 
 struct UserMeshInstance
@@ -600,7 +610,7 @@ void CreateToolDialog()
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,
                                    340,
-                                   280,
+                                   380,
                                    g_hWnd,
                                    NULL,
                                    wc.hInstance,
@@ -793,9 +803,99 @@ void CreateToolDialog()
     ApplyToolDialogFont(g_hRemoteDesktopCheckbox);
     SendMessage(g_hRemoteDesktopCheckbox, BM_SETCHECK, g_bRemoteDesktopCameraMode ? BST_CHECKED : BST_UNCHECKED, 0);
 
+    HWND hNormalBiasScaleLabel = CreateWindow(_T("STATIC"),
+                                              _T("Normal bias scale:"),
+                                              WS_CHILD | WS_VISIBLE,
+                                              20,
+                                              238,
+                                              130,
+                                              20,
+                                              g_hToolDialog,
+                                              NULL,
+                                              wc.hInstance,
+                                              NULL);
+    ApplyToolDialogFont(hNormalBiasScaleLabel);
+
+    g_hNormalBiasScaleEdit = CreateWindow(_T("EDIT"),
+                                          _T("1.0"),
+                                          WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                                          160,
+                                          234,
+                                          60,
+                                          24,
+                                          g_hToolDialog,
+                                          reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogNormalBiasScaleEditId)),
+                                          wc.hInstance,
+                                          NULL);
+    assert(g_hNormalBiasScaleEdit != NULL);
+    ApplyToolDialogFont(g_hNormalBiasScaleEdit);
+
+    g_hApplyNormalBiasScaleButton = CreateWindow(_T("BUTTON"),
+                                                 _T("Apply"),
+                                                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                                 230,
+                                                 232,
+                                                 60,
+                                                 28,
+                                                 g_hToolDialog,
+                                                 reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogApplyNormalBiasScaleButtonId)),
+                                                 wc.hInstance,
+                                                 NULL);
+    assert(g_hApplyNormalBiasScaleButton != NULL);
+    ApplyToolDialogFont(g_hApplyNormalBiasScaleButton);
+
+    HWND hDepthBiasScaleLabel = CreateWindow(_T("STATIC"),
+                                             _T("Depth bias scale:"),
+                                             WS_CHILD | WS_VISIBLE,
+                                             20,
+                                             270,
+                                             130,
+                                             20,
+                                             g_hToolDialog,
+                                             NULL,
+                                             wc.hInstance,
+                                             NULL);
+    ApplyToolDialogFont(hDepthBiasScaleLabel);
+
+    g_hDepthBiasScaleEdit = CreateWindow(_T("EDIT"),
+                                         _T("1.0"),
+                                         WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                                         160,
+                                         266,
+                                         60,
+                                         24,
+                                         g_hToolDialog,
+                                         reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogDepthBiasScaleEditId)),
+                                         wc.hInstance,
+                                         NULL);
+    assert(g_hDepthBiasScaleEdit != NULL);
+    ApplyToolDialogFont(g_hDepthBiasScaleEdit);
+
+    g_hApplyDepthBiasScaleButton = CreateWindow(_T("BUTTON"),
+                                                _T("Apply"),
+                                                WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                                230,
+                                                264,
+                                                60,
+                                                28,
+                                                g_hToolDialog,
+                                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogApplyDepthBiasScaleButtonId)),
+                                                wc.hInstance,
+                                                NULL);
+    assert(g_hApplyDepthBiasScaleButton != NULL);
+    ApplyToolDialogFont(g_hApplyDepthBiasScaleButton);
+
     TCHAR depthRangeText[64] = { };
     _stprintf_s(depthRangeText, _T("%.1f"), g_ssaoDepthRange);
     SetWindowText(g_hSsaoDepthRangeEdit, depthRangeText);
+
+    TCHAR normalBiasScaleText[64] = { };
+    _stprintf_s(normalBiasScaleText, _T("%.2f"), g_targetNormalBiasScale);
+    SetWindowText(g_hNormalBiasScaleEdit, normalBiasScaleText);
+
+    TCHAR depthBiasScaleText[64] = { };
+    _stprintf_s(depthBiasScaleText, _T("%.2f"), g_targetDepthBiasScale);
+    SetWindowText(g_hDepthBiasScaleEdit, depthBiasScaleText);
 }
 
 void ToggleToolDialog()
@@ -1390,6 +1490,8 @@ void RenderPass2()
     hResult = g_pEffect2->SetFloat("g_thicknessScale", g_thicknessScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_ssaoDepthRange", g_ssaoDepthRange); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_depthCompareThreshold", kDepthCompareDistance / g_ssaoDepthRange); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloat("g_targetNormalBiasScale", g_targetNormalBiasScale); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloat("g_targetDepthBiasScale", g_targetDepthBiasScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("depthTexture", g_pDepthRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("thicknessTexture", g_pThicknessRenderTarget); assert(hResult == S_OK);
@@ -1571,6 +1673,44 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 TCHAR normalizedText[64] = { };
                 _stprintf_s(normalizedText, _T("%.2f"), g_thicknessScale);
                 SetWindowText(g_hThicknessScaleEdit, normalizedText);
+            }
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogApplyNormalBiasScaleButtonId)
+        {
+            TCHAR buffer[64] = { };
+            GetWindowText(g_hNormalBiasScaleEdit, buffer, _countof(buffer));
+            float normalBiasScale = g_targetNormalBiasScale;
+            if (_stscanf_s(buffer, _T("%f"), &normalBiasScale) == 1)
+            {
+                if (normalBiasScale < 0.0f)
+                {
+                    normalBiasScale = 0.0f;
+                }
+                g_targetNormalBiasScale = normalBiasScale;
+
+                TCHAR normalizedText[64] = { };
+                _stprintf_s(normalizedText, _T("%.2f"), g_targetNormalBiasScale);
+                SetWindowText(g_hNormalBiasScaleEdit, normalizedText);
+            }
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogApplyDepthBiasScaleButtonId)
+        {
+            TCHAR buffer[64] = { };
+            GetWindowText(g_hDepthBiasScaleEdit, buffer, _countof(buffer));
+            float depthBiasScale = g_targetDepthBiasScale;
+            if (_stscanf_s(buffer, _T("%f"), &depthBiasScale) == 1)
+            {
+                if (depthBiasScale < 0.0f)
+                {
+                    depthBiasScale = 0.0f;
+                }
+                g_targetDepthBiasScale = depthBiasScale;
+
+                TCHAR normalizedText[64] = { };
+                _stprintf_s(normalizedText, _T("%.2f"), g_targetDepthBiasScale);
+                SetWindowText(g_hDepthBiasScaleEdit, normalizedText);
             }
             return 0;
         }
