@@ -10,6 +10,7 @@ bool g_bDepthScaledSampleDistance = false;
 int g_simpleSsaoSampleCount = 1;
 float2 g_screenSize = { 1600.0f, 900.0f };
 float2 g_projectionScale = { 1.0f, 1.0f };
+float3 g_viewWorldUp = { 0.0f, 1.0f, 0.0f };
 float g_simpleSsaoSampleDistanceMeters = 1.0f;
 float g_thicknessScale = 1.0f;
 float g_ssaoDepthRange = 50.0f;
@@ -63,19 +64,41 @@ float Random01(float2 seed)
     return frac(sin(dot(seed, float2(12.9898f, 78.233f))) * 43758.5453f);
 }
 
+float3 ReconstructViewPosition(float2 texCoord, float currentDepth)
+{
+    float viewDepthMeters = currentDepth * g_ssaoDepthRange;
+    float2 ndc = float2(texCoord.x * 2.0f - 1.0f,
+                        1.0f - texCoord.y * 2.0f);
+    return float3(ndc.x * viewDepthMeters / g_projectionScale.x,
+                  ndc.y * viewDepthMeters / g_projectionScale.y,
+                  viewDepthMeters);
+}
+
+float2 ProjectViewPositionToTexCoord(float3 viewPosition)
+{
+    float viewDepthSafe = max(viewPosition.z, 0.0001f);
+    float2 ndc = float2(viewPosition.x * g_projectionScale.x / viewDepthSafe,
+                        viewPosition.y * g_projectionScale.y / viewDepthSafe);
+    return float2(ndc.x * 0.5f + 0.5f,
+                  0.5f - ndc.y * 0.5f);
+}
+
 float2 ComputeOcclusionSample(float2 shiftedTexCoord,
                               float currentDepth,
                               float3 currentNormal,
+                              float3 currentViewPosition,
+                              float3 uphillDirectionView,
                               float sampleDistanceMeters,
-                              float viewDepthMeters,
-                              float2 sampleDirectionNormalized,
                               float distanceScale)
 {
     float sampleDistanceMetersScaled = sampleDistanceMeters * distanceScale;
-    float viewDepthSafe = max(viewDepthMeters, 0.0001f);
-    float2 sampleOffset = float2(sampleDirectionNormalized.x * (sampleDistanceMetersScaled * g_projectionScale.x * 0.5f / viewDepthSafe),
-                                 -sampleDirectionNormalized.y * (sampleDistanceMetersScaled * g_projectionScale.y * 0.5f / viewDepthSafe));
-    float2 sampleTexCoord = shiftedTexCoord + sampleOffset;
+    float3 sampleViewPosition = currentViewPosition + uphillDirectionView * sampleDistanceMetersScaled;
+    if (sampleViewPosition.z <= 0.0f)
+    {
+        return float2(0.0f, 0.0f);
+    }
+
+    float2 sampleTexCoord = ProjectViewPositionToTexCoord(sampleViewPosition);
     if (sampleTexCoord.x < 0.0f || sampleTexCoord.x > 1.0f || sampleTexCoord.y < 0.0f || sampleTexCoord.y > 1.0f)
     {
         return float2(0.0f, 0.0f);
@@ -87,8 +110,9 @@ float2 ComputeOcclusionSample(float2 shiftedTexCoord,
         return float2(0.0f, 0.0f);
     }
 
-    float targetNormalDepthBiasFactor = saturate(length(currentNormal.xy)) * g_targetNormalBiasScale;
-    float sampleDepthBias = g_sampleDepthBiasThreshold * targetNormalDepthBiasFactor * (currentDepth * g_targetDepthBiasScale);
+    float expectedSampleDepth = saturate(sampleViewPosition.z / g_ssaoDepthRange);
+    float targetNormalDepthBiasFactor = saturate(abs(currentNormal.z)) * g_targetNormalBiasScale;
+    float sampleDepthBias = (currentDepth - expectedSampleDepth) * targetNormalDepthBiasFactor * (currentDepth * g_targetDepthBiasScale);
     float adjustedSampleDepth = max(0.0f, sampleDepth + sampleDepthBias);
     float sampleThickness = tex2Dlod(thicknessSampler, sampleTexCoordLod).r;
     float frontDepthWithMargin = adjustedSampleDepth - g_depthCompareThreshold;
@@ -128,33 +152,37 @@ void PixelShader1(in float4 inPosition    : POSITION,
 
     if (g_bEnableSimpleSsao)
     {
-        float2 sampleDirection = currentNormal.xy;
-        float directionLength = length(sampleDirection);
         if (currentDepth < 0.999f)
         {
-            float2 sampleDirectionNormalized = (directionLength > 0.0001f) ? (sampleDirection / directionLength) : float2(0.0f, 0.0f);
-            float viewDepthMeters = max(currentDepth * g_ssaoDepthRange, 0.0001f);
-            float sampleDistanceMeters = g_simpleSsaoSampleDistanceMeters * saturate(directionLength);
+            float3 currentViewPosition = ReconstructViewPosition(shiftedTexCoord, currentDepth);
+            float3 uphillDirectionView = g_viewWorldUp - currentNormal * dot(g_viewWorldUp, currentNormal);
+            float uphillDirectionLength = length(uphillDirectionView);
+            if (uphillDirectionLength > 0.0001f)
+            {
+                uphillDirectionView /= uphillDirectionLength;
+            }
+
+            float sampleDistanceMeters = g_simpleSsaoSampleDistanceMeters;
             if (g_bDepthScaledSampleDistance)
             {
                 float depthDistanceScale = 1.0f + saturate(1.0f - currentDepth);
                 sampleDistanceMeters *= depthDistanceScale;
             }
-            if (g_simpleSsaoSampleCount <= 1)
+            if (uphillDirectionLength > 0.0001f && g_simpleSsaoSampleCount <= 1)
             {
                 float2 occlusionSample = ComputeOcclusionSample(shiftedTexCoord,
                                                                 currentDepth,
                                                                 currentNormal,
+                                                                currentViewPosition,
+                                                                uphillDirectionView,
                                                                 sampleDistanceMeters,
-                                                                viewDepthMeters,
-                                                                sampleDirectionNormalized,
                                                                 1.0f);
                 if (occlusionSample.x > 0.5f)
                 {
                     workColor = float4(0.0f, 0.0f, 0.0f, workColor.a);
                 }
             }
-            else
+            else if (uphillDirectionLength > 0.0001f)
             {
                 float occlusionCount = 0.0f;
                 float validSampleCount = 0.0f;
@@ -170,9 +198,9 @@ void PixelShader1(in float4 inPosition    : POSITION,
                         float2 occlusionSample = ComputeOcclusionSample(shiftedTexCoord,
                                                                         currentDepth,
                                                                         currentNormal,
+                                                                        currentViewPosition,
+                                                                        uphillDirectionView,
                                                                         sampleDistanceMeters,
-                                                                        viewDepthMeters,
-                                                                        sampleDirectionNormalized,
                                                                         distanceScale);
                         occlusionCount += occlusionSample.x;
                         validSampleCount += occlusionSample.y;
