@@ -80,11 +80,12 @@ void PixelShader1(in float4 inPosition    : POSITION,
     {
         float2 sampleDirection = currentNormal.xy;
         float directionLength = length(sampleDirection);
-        if (directionLength > 0.1f && currentDepth < 0.999f)
+        if (currentDepth < 0.999f)
         {
-            sampleDirection /= directionLength;
-            float2 sampleOffset = float2(sampleDirection.x * (g_simpleSsaoSamplePixels / g_screenSize.x),
-                                         -sampleDirection.y * (g_simpleSsaoSamplePixels / g_screenSize.y));
+            float2 sampleDirectionNormalized = (directionLength > 0.0001f) ? (sampleDirection / directionLength) : float2(0.0f, 0.0f);
+            float samplePixelDistance = g_simpleSsaoSamplePixels * saturate(directionLength);
+            float2 sampleOffset = float2(sampleDirectionNormalized.x * (samplePixelDistance / g_screenSize.x),
+                                         -sampleDirectionNormalized.y * (samplePixelDistance / g_screenSize.y));
             float2 sampleTexCoord = saturate(shiftedTexCoord + sampleOffset);
             float sampleDepth = tex2D(depthSampler, sampleTexCoord).r;
             if (sampleDepth < 0.999f)
