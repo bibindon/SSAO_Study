@@ -112,7 +112,7 @@ bool g_bRemoteDesktopCameraMode = true;
 bool g_bAllowStraightUpDown = false;
 bool g_bHasPreviousMousePosition = false;
 int g_debugViewMode = kDebugViewNone;
-float g_simpleSsaoSamplePixels = 20.0f;
+float g_simpleSsaoSamplePixels = 100.0f;
 float g_thicknessScale = 1.0f;
 float g_ssaoDepthRange = kDefaultSsaoDepthRange;
 float g_targetNormalBiasScale = 1.0f;
@@ -673,7 +673,7 @@ void CreateToolDialog()
     ApplyToolDialogFont(hSsaoSampleLabel);
 
     g_hSsaoSampleEdit = CreateWindow(_T("EDIT"),
-                                     _T("20.0"),
+                                     _T("100.0"),
                                      WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                      160,
                                      68,
