@@ -47,6 +47,8 @@ namespace
     constexpr int kToolDialogDepthCompareDistanceEditId = 1014;
     constexpr int kToolDialogApplyDepthCompareDistanceButtonId = 1015;
     constexpr int kToolDialogAllowStraightUpDownCheckboxId = 1016;
+    constexpr int kToolDialogDepthBiasDistanceEditId = 1017;
+    constexpr int kToolDialogApplyDepthBiasDistanceButtonId = 1018;
     constexpr int kDebugViewNone = 0;
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
@@ -118,6 +120,7 @@ float g_ssaoDepthRange = kDefaultSsaoDepthRange;
 float g_targetNormalBiasScale = 1.0f;
 float g_targetDepthBiasScale = 1.0f;
 float g_depthCompareDistance = 0.0f;
+float g_sampleDepthBiasDistance = 0.1f;
 float g_cameraYaw = -D3DX_PI * 0.25f;
 float g_cameraPitch = -0.34f;
 D3DXVECTOR3 g_cameraPosition(2.0f, 1.0f, -3.0f);
@@ -139,6 +142,8 @@ HWND g_hApplyDepthBiasScaleButton = NULL;
 HWND g_hDepthCompareDistanceEdit = NULL;
 HWND g_hApplyDepthCompareDistanceButton = NULL;
 HWND g_hAllowStraightUpDownCheckbox = NULL;
+HWND g_hDepthBiasDistanceEdit = NULL;
+HWND g_hApplyDepthBiasDistanceButton = NULL;
 HFONT g_hToolDialogFont = NULL;
 
 struct UserMeshInstance
@@ -619,7 +624,7 @@ void CreateToolDialog()
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,
                                    340,
-                                   456,
+                                   492,
                                    g_hWnd,
                                    NULL,
                                    wc.hInstance,
@@ -950,21 +955,66 @@ void CreateToolDialog()
     ApplyToolDialogFont(g_hAllowStraightUpDownCheckbox);
     SendMessage(g_hAllowStraightUpDownCheckbox, BM_SETCHECK, g_bAllowStraightUpDown ? BST_CHECKED : BST_UNCHECKED, 0);
 
+    HWND hDepthBiasDistanceLabel = CreateWindow(_T("STATIC"),
+                                                _T("Depth bias dist:"),
+                                                WS_CHILD | WS_VISIBLE,
+                                                20,
+                                                366,
+                                                130,
+                                                20,
+                                                g_hToolDialog,
+                                                NULL,
+                                                wc.hInstance,
+                                                NULL);
+    ApplyToolDialogFont(hDepthBiasDistanceLabel);
+
+    g_hDepthBiasDistanceEdit = CreateWindow(_T("EDIT"),
+                                            _T("0.10"),
+                                            WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                                            160,
+                                            362,
+                                            60,
+                                            24,
+                                            g_hToolDialog,
+                                            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogDepthBiasDistanceEditId)),
+                                            wc.hInstance,
+                                            NULL);
+    assert(g_hDepthBiasDistanceEdit != NULL);
+    ApplyToolDialogFont(g_hDepthBiasDistanceEdit);
+
+    g_hApplyDepthBiasDistanceButton = CreateWindow(_T("BUTTON"),
+                                                   _T("Apply"),
+                                                   WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                                   230,
+                                                   360,
+                                                   60,
+                                                   28,
+                                                   g_hToolDialog,
+                                                   reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogApplyDepthBiasDistanceButtonId)),
+                                                   wc.hInstance,
+                                                   NULL);
+    assert(g_hApplyDepthBiasDistanceButton != NULL);
+    ApplyToolDialogFont(g_hApplyDepthBiasDistanceButton);
+
     TCHAR depthRangeText[64] = { };
     _stprintf_s(depthRangeText, _T("%.1f"), g_ssaoDepthRange);
     SetWindowText(g_hSsaoDepthRangeEdit, depthRangeText);
 
     TCHAR normalBiasScaleText[64] = { };
-    _stprintf_s(normalBiasScaleText, _T("%.2f"), g_targetNormalBiasScale);
+    _stprintf_s(normalBiasScaleText, _T("%.5f"), g_targetNormalBiasScale);
     SetWindowText(g_hNormalBiasScaleEdit, normalBiasScaleText);
 
     TCHAR depthBiasScaleText[64] = { };
-    _stprintf_s(depthBiasScaleText, _T("%.2f"), g_targetDepthBiasScale);
+    _stprintf_s(depthBiasScaleText, _T("%.5f"), g_targetDepthBiasScale);
     SetWindowText(g_hDepthBiasScaleEdit, depthBiasScaleText);
 
     TCHAR depthCompareDistanceText[64] = { };
     _stprintf_s(depthCompareDistanceText, _T("%.5f"), g_depthCompareDistance);
     SetWindowText(g_hDepthCompareDistanceEdit, depthCompareDistanceText);
+
+    TCHAR depthBiasDistanceText[64] = { };
+    _stprintf_s(depthBiasDistanceText, _T("%.5f"), g_sampleDepthBiasDistance);
+    SetWindowText(g_hDepthBiasDistanceEdit, depthBiasDistanceText);
 }
 
 void ToggleToolDialog()
@@ -1560,6 +1610,7 @@ void RenderPass2()
     hResult = g_pEffect2->SetFloat("g_thicknessScale", g_thicknessScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_ssaoDepthRange", g_ssaoDepthRange); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_depthCompareThreshold", g_depthCompareDistance / g_ssaoDepthRange); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloat("g_sampleDepthBiasThreshold", g_sampleDepthBiasDistance / g_ssaoDepthRange); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_targetNormalBiasScale", g_targetNormalBiasScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_targetDepthBiasScale", g_targetDepthBiasScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget); assert(hResult == S_OK);
@@ -1746,7 +1797,7 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 g_thicknessScale = thicknessScale;
 
                 TCHAR normalizedText[64] = { };
-                _stprintf_s(normalizedText, _T("%.2f"), g_thicknessScale);
+                _stprintf_s(normalizedText, _T("%.5f"), g_thicknessScale);
                 SetWindowText(g_hThicknessScaleEdit, normalizedText);
             }
             return 0;
@@ -1765,7 +1816,7 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 g_targetNormalBiasScale = normalBiasScale;
 
                 TCHAR normalizedText[64] = { };
-                _stprintf_s(normalizedText, _T("%.2f"), g_targetNormalBiasScale);
+                _stprintf_s(normalizedText, _T("%.5f"), g_targetNormalBiasScale);
                 SetWindowText(g_hNormalBiasScaleEdit, normalizedText);
             }
             return 0;
@@ -1784,7 +1835,7 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 g_targetDepthBiasScale = depthBiasScale;
 
                 TCHAR normalizedText[64] = { };
-                _stprintf_s(normalizedText, _T("%.2f"), g_targetDepthBiasScale);
+                _stprintf_s(normalizedText, _T("%.5f"), g_targetDepthBiasScale);
                 SetWindowText(g_hDepthBiasScaleEdit, normalizedText);
             }
             return 0;
@@ -1805,6 +1856,25 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 TCHAR normalizedText[64] = { };
                 _stprintf_s(normalizedText, _T("%.5f"), g_depthCompareDistance);
                 SetWindowText(g_hDepthCompareDistanceEdit, normalizedText);
+            }
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogApplyDepthBiasDistanceButtonId)
+        {
+            TCHAR buffer[64] = { };
+            GetWindowText(g_hDepthBiasDistanceEdit, buffer, _countof(buffer));
+            float depthBiasDistance = g_sampleDepthBiasDistance;
+            if (_stscanf_s(buffer, _T("%f"), &depthBiasDistance) == 1)
+            {
+                if (depthBiasDistance < 0.0f)
+                {
+                    depthBiasDistance = 0.0f;
+                }
+                g_sampleDepthBiasDistance = depthBiasDistance;
+
+                TCHAR normalizedText[64] = { };
+                _stprintf_s(normalizedText, _T("%.5f"), g_sampleDepthBiasDistance);
+                SetWindowText(g_hDepthBiasDistanceEdit, normalizedText);
             }
             return 0;
         }
