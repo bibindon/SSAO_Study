@@ -10,7 +10,6 @@ bool g_bDepthScaledSampleDistance = false;
 int g_simpleSsaoSampleCount = 1;
 float2 g_screenSize = { 1600.0f, 900.0f };
 float2 g_projectionScale = { 1.0f, 1.0f };
-float3 g_viewWorldUp = { 0.0f, 1.0f, 0.0f };
 float g_simpleSsaoSampleDistanceMeters = 1.0f;
 float g_thicknessScale = 1.0f;
 float g_ssaoDepthRange = 50.0f;
@@ -87,12 +86,11 @@ float2 ComputeOcclusionSample(float2 shiftedTexCoord,
                               float currentDepth,
                               float3 currentNormal,
                               float3 currentViewPosition,
-                              float3 uphillDirectionView,
                               float sampleDistanceMeters,
                               float distanceScale)
 {
     float sampleDistanceMetersScaled = sampleDistanceMeters * distanceScale;
-    float3 sampleViewPosition = currentViewPosition + uphillDirectionView * sampleDistanceMetersScaled;
+    float3 sampleViewPosition = currentViewPosition + currentNormal * sampleDistanceMetersScaled;
     if (sampleViewPosition.z <= 0.0f)
     {
         return float2(0.0f, 0.0f);
@@ -155,26 +153,18 @@ void PixelShader1(in float4 inPosition    : POSITION,
         if (currentDepth < 0.999f)
         {
             float3 currentViewPosition = ReconstructViewPosition(shiftedTexCoord, currentDepth);
-            float3 uphillDirectionView = g_viewWorldUp - currentNormal * dot(g_viewWorldUp, currentNormal);
-            float uphillDirectionLength = length(uphillDirectionView);
-            if (uphillDirectionLength > 0.0001f)
-            {
-                uphillDirectionView /= uphillDirectionLength;
-            }
-
             float sampleDistanceMeters = g_simpleSsaoSampleDistanceMeters;
             if (g_bDepthScaledSampleDistance)
             {
                 float depthDistanceScale = 1.0f + saturate(1.0f - currentDepth);
                 sampleDistanceMeters *= depthDistanceScale;
             }
-            if (uphillDirectionLength > 0.0001f && g_simpleSsaoSampleCount <= 1)
+            if (g_simpleSsaoSampleCount <= 1)
             {
                 float2 occlusionSample = ComputeOcclusionSample(shiftedTexCoord,
                                                                 currentDepth,
                                                                 currentNormal,
                                                                 currentViewPosition,
-                                                                uphillDirectionView,
                                                                 sampleDistanceMeters,
                                                                 1.0f);
                 if (occlusionSample.x > 0.5f)
@@ -182,7 +172,7 @@ void PixelShader1(in float4 inPosition    : POSITION,
                     workColor = float4(0.0f, 0.0f, 0.0f, workColor.a);
                 }
             }
-            else if (uphillDirectionLength > 0.0001f)
+            else
             {
                 float occlusionCount = 0.0f;
                 float validSampleCount = 0.0f;
@@ -199,7 +189,6 @@ void PixelShader1(in float4 inPosition    : POSITION,
                                                                         currentDepth,
                                                                         currentNormal,
                                                                         currentViewPosition,
-                                                                        uphillDirectionView,
                                                                         sampleDistanceMeters,
                                                                         distanceScale);
                         occlusionCount += occlusionSample.x;

@@ -1676,18 +1676,6 @@ void RenderPass2()
     hResult = g_pEffect2->Begin(&numPass, 0);               assert(hResult == S_OK);
     hResult = g_pEffect2->BeginPass(0);                     assert(hResult == S_OK);
 
-    D3DXVECTOR3 currentForward(sinf(g_cameraYaw) * cosf(g_cameraPitch),
-                               sinf(g_cameraPitch),
-                               cosf(g_cameraYaw) * cosf(g_cameraPitch));
-    D3DXVec3Normalize(&currentForward, &currentForward);
-    D3DXVECTOR3 currentTarget = g_cameraPosition + currentForward;
-    D3DXVECTOR3 currentWorldUp(0.0f, 1.0f, 0.0f);
-    D3DXMATRIX currentView;
-    D3DXMatrixLookAtLH(&currentView, &g_cameraPosition, &currentTarget, &currentWorldUp);
-    D3DXVECTOR3 viewWorldUp;
-    D3DXVec3TransformNormal(&viewWorldUp, &currentWorldUp, &currentView);
-    D3DXVec3Normalize(&viewWorldUp, &viewWorldUp);
-
     hResult = g_pEffect2->SetBool("g_bEnableSimpleSsao", g_bEnableSimpleSsao ? TRUE : FALSE); assert(hResult == S_OK);
     hResult = g_pEffect2->SetBool("g_bUseThicknessForSsao", g_bUseThicknessForSsao ? TRUE : FALSE); assert(hResult == S_OK);
     hResult = g_pEffect2->SetBool("g_bDepthScaledSampleDistance", g_bDepthScaledSampleDistance ? TRUE : FALSE); assert(hResult == S_OK);
@@ -1698,7 +1686,6 @@ void RenderPass2()
     hResult = g_pEffect2->SetFloat("g_simpleSsaoSampleDistanceMeters", g_simpleSsaoSampleDistanceMeters); assert(hResult == S_OK);
     hResult = g_pEffect2->SetInt("g_simpleSsaoSampleCount", g_simpleSsaoSampleCount); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloatArray("g_projectionScale", projectionScale, 2); assert(hResult == S_OK);
-    hResult = g_pEffect2->SetFloatArray("g_viewWorldUp", &viewWorldUp.x, 3); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_thicknessScale", g_thicknessScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_ssaoDepthRange", g_ssaoDepthRange); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_depthCompareThreshold", g_depthCompareDistance / g_ssaoDepthRange); assert(hResult == S_OK);
