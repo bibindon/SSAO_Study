@@ -58,6 +58,9 @@ namespace
     constexpr int kToolDialogApplyThicknessCapButtonId = 1024;
     constexpr int kToolDialogAutoScaleSsaoByCenterCheckboxId = 1025;
     constexpr int kToolDialogSmoothAutoSsaoCheckboxId = 1026;
+    constexpr int kToolDialogEnableSsaoBlurCheckboxId = 1027;
+    constexpr int kToolDialogSsaoBlur5x5RadioId = 1028;
+    constexpr int kToolDialogSsaoBlur11x11RadioId = 1029;
     constexpr int kDebugViewNone = 0;
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
@@ -102,6 +105,8 @@ LPDIRECT3DTEXTURE9 g_pRawDepthRenderTarget = NULL;
 LPDIRECT3DTEXTURE9 g_pBackDepthRenderTarget = NULL;
 LPDIRECT3DTEXTURE9 g_pNormalRenderTarget = NULL;
 LPDIRECT3DTEXTURE9 g_pThicknessRenderTarget = NULL;
+LPDIRECT3DTEXTURE9 g_pSsaoRenderTarget = NULL;
+LPDIRECT3DTEXTURE9 g_pSsaoBlurRenderTarget = NULL;
 LPDIRECT3DTEXTURE9 g_pCenterDepthResolveTexture = NULL;
 LPDIRECT3DSURFACE9 g_pCenterDepthReadbackSurface = NULL;
 
@@ -124,6 +129,8 @@ bool g_bPrevEscapeToggleKeyDown = false;
 bool g_bMouseCursorVisible = false;
 bool g_bUseLambertLighting = true;
 bool g_bEnableSimpleSsao = true;
+bool g_bEnableSsaoBlur = true;
+bool g_bUseLargeSsaoBlur = true;
 bool g_bUseThicknessForSsao = true;
 bool g_bRemoteDesktopCameraMode = false;
 bool g_bAllowStraightUpDown = false;
@@ -174,6 +181,9 @@ HWND g_hApplyDepthBiasDistanceButton = NULL;
 HWND g_hDepthScaledSampleDistanceCheckbox = NULL;
 HWND g_hAutoScaleSsaoByCenterCheckbox = NULL;
 HWND g_hSmoothAutoSsaoCheckbox = NULL;
+HWND g_hEnableSsaoBlurCheckbox = NULL;
+HWND g_hSsaoBlur5x5Radio = NULL;
+HWND g_hSsaoBlur11x11Radio = NULL;
 HWND g_hEnableThicknessCapCheckbox = NULL;
 HWND g_hThicknessCapEdit = NULL;
 HWND g_hApplyThicknessCapButton = NULL;
@@ -480,6 +490,24 @@ void InitD3D(HWND hWnd)
     assert(hResult == S_OK);
 
     hResult = D3DXCreateTexture(g_pd3dDevice,
+                                kRenderWidth, kRenderHeight,
+                                1,
+                                D3DUSAGE_RENDERTARGET,
+                                D3DFMT_A8R8G8B8,
+                                D3DPOOL_DEFAULT,
+                                &g_pSsaoRenderTarget);
+    assert(hResult == S_OK);
+
+    hResult = D3DXCreateTexture(g_pd3dDevice,
+                                kRenderWidth, kRenderHeight,
+                                1,
+                                D3DUSAGE_RENDERTARGET,
+                                D3DFMT_A8R8G8B8,
+                                D3DPOOL_DEFAULT,
+                                &g_pSsaoBlurRenderTarget);
+    assert(hResult == S_OK);
+
+    hResult = D3DXCreateTexture(g_pd3dDevice,
                                 1, 1,
                                 1,
                                 D3DUSAGE_RENDERTARGET,
@@ -547,6 +575,8 @@ void Cleanup()
     SAFE_RELEASE(g_pBackDepthRenderTarget);
     SAFE_RELEASE(g_pNormalRenderTarget);
     SAFE_RELEASE(g_pThicknessRenderTarget);
+    SAFE_RELEASE(g_pSsaoRenderTarget);
+    SAFE_RELEASE(g_pSsaoBlurRenderTarget);
     SAFE_RELEASE(g_pCenterDepthResolveTexture);
     SAFE_RELEASE(g_pCenterDepthReadbackSurface);
     SAFE_RELEASE(g_pQuadDecl);
@@ -689,7 +719,7 @@ void CreateToolDialog()
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,
                                    340,
-                                   696,
+                                   780,
                                    g_hWnd,
                                    NULL,
                                    wc.hInstance,
@@ -1147,11 +1177,56 @@ void CreateToolDialog()
     ApplyToolDialogFont(g_hSmoothAutoSsaoCheckbox);
     SendMessage(g_hSmoothAutoSsaoCheckbox, BM_SETCHECK, g_bSmoothAutoSsaoByCenterDepth ? BST_CHECKED : BST_UNCHECKED, 0);
 
+    g_hEnableSsaoBlurCheckbox = CreateWindow(_T("BUTTON"),
+                                             _T("Enable SSAO blur"),
+                                             WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                                             20,
+                                             526,
+                                             180,
+                                             24,
+                                             g_hToolDialog,
+                                             reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogEnableSsaoBlurCheckboxId)),
+                                             wc.hInstance,
+                                             NULL);
+    assert(g_hEnableSsaoBlurCheckbox != NULL);
+    ApplyToolDialogFont(g_hEnableSsaoBlurCheckbox);
+    SendMessage(g_hEnableSsaoBlurCheckbox, BM_SETCHECK, g_bEnableSsaoBlur ? BST_CHECKED : BST_UNCHECKED, 0);
+
+    g_hSsaoBlur5x5Radio = CreateWindow(_T("BUTTON"),
+                                       _T("5x5 blur"),
+                                       WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | WS_GROUP,
+                                       40,
+                                       554,
+                                       120,
+                                       22,
+                                       g_hToolDialog,
+                                       reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogSsaoBlur5x5RadioId)),
+                                       wc.hInstance,
+                                       NULL);
+    assert(g_hSsaoBlur5x5Radio != NULL);
+    ApplyToolDialogFont(g_hSsaoBlur5x5Radio);
+
+    g_hSsaoBlur11x11Radio = CreateWindow(_T("BUTTON"),
+                                         _T("11x11 blur"),
+                                         WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON,
+                                         170,
+                                         554,
+                                         120,
+                                         22,
+                                         g_hToolDialog,
+                                         reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogSsaoBlur11x11RadioId)),
+                                         wc.hInstance,
+                                         NULL);
+    assert(g_hSsaoBlur11x11Radio != NULL);
+    ApplyToolDialogFont(g_hSsaoBlur11x11Radio);
+    SendMessage(g_hSsaoBlur5x5Radio, BM_SETCHECK, g_bUseLargeSsaoBlur ? BST_UNCHECKED : BST_CHECKED, 0);
+    SendMessage(g_hSsaoBlur11x11Radio, BM_SETCHECK, g_bUseLargeSsaoBlur ? BST_CHECKED : BST_UNCHECKED, 0);
+
     g_hEnableThicknessCapCheckbox = CreateWindow(_T("BUTTON"),
                                                  _T("Enable thickness cap"),
                                                  WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                                  20,
-                                                 526,
+                                                 588,
                                                  180,
                                                  24,
                                                  g_hToolDialog,
@@ -1166,7 +1241,7 @@ void CreateToolDialog()
                                            _T("Thickness cap (m):"),
                                            WS_CHILD | WS_VISIBLE,
                                            20,
-                                           558,
+                                           620,
                                            130,
                                            20,
                                            g_hToolDialog,
@@ -1179,7 +1254,7 @@ void CreateToolDialog()
                                        _T("1.00"),
                                        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                        160,
-                                       554,
+                                       616,
                                        60,
                                        24,
                                        g_hToolDialog,
@@ -1193,7 +1268,7 @@ void CreateToolDialog()
                                               _T("Apply"),
                                               WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                               230,
-                                              552,
+                                              614,
                                               60,
                                               28,
                                               g_hToolDialog,
@@ -1948,6 +2023,8 @@ void RenderPass2()
     const float activeSsaoSampleDistanceMeters = GetActiveSsaoSampleDistanceMeters();
     LPDIRECT3DSURFACE9 pOldRT0 = NULL;
     LPDIRECT3DSURFACE9 pThicknessRT = NULL;
+    LPDIRECT3DSURFACE9 pSsaoRT = NULL;
+    LPDIRECT3DSURFACE9 pSsaoBlurRT = NULL;
 
     hResult = g_pd3dDevice->GetRenderTarget(0, &pOldRT0); assert(hResult == S_OK);
     hResult = g_pThicknessRenderTarget->GetSurfaceLevel(0, &pThicknessRT); assert(hResult == S_OK);
@@ -1983,26 +2060,23 @@ void RenderPass2()
 
     hResult = g_pd3dDevice->SetRenderTarget(0, pOldRT0); assert(hResult == S_OK);
     SAFE_RELEASE(pThicknessRT);
-    SAFE_RELEASE(pOldRT0);
+
+    hResult = g_pSsaoRenderTarget->GetSurfaceLevel(0, &pSsaoRT); assert(hResult == S_OK);
+    hResult = g_pd3dDevice->SetRenderTarget(0, pSsaoRT); assert(hResult == S_OK);
 
     hResult = g_pd3dDevice->Clear(0, NULL,
-                                  D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
-                                  D3DCOLOR_XRGB(0, 0, 0),
+                                  D3DCLEAR_TARGET,
+                                  D3DCOLOR_XRGB(255, 255, 255),
                                   1.0f, 0);
-    assert(hResult == S_OK);
-
-    // 2D 全面描画なので Z 無効
-    hResult = g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
     assert(hResult == S_OK);
 
     hResult = g_pd3dDevice->BeginScene(); assert(hResult == S_OK);
 
-    // フルスクリーン: RT0 を simple2.fx で表示
-    hResult = g_pEffect2->SetTechnique("Technique1");       assert(hResult == S_OK);
+    hResult = g_pEffect2->SetTechnique("TechniqueSsao"); assert(hResult == S_OK);
 
-    UINT numPass = 0;
-    hResult = g_pEffect2->Begin(&numPass, 0);               assert(hResult == S_OK);
-    hResult = g_pEffect2->BeginPass(0);                     assert(hResult == S_OK);
+    UINT ssaoNumPass = 0;
+    hResult = g_pEffect2->Begin(&ssaoNumPass, 0); assert(hResult == S_OK);
+    hResult = g_pEffect2->BeginPass(0);           assert(hResult == S_OK);
 
     hResult = g_pEffect2->SetBool("g_bEnableSimpleSsao", g_bEnableSimpleSsao ? TRUE : FALSE); assert(hResult == S_OK);
     hResult = g_pEffect2->SetBool("g_bUseThicknessForSsao", g_bUseThicknessForSsao ? TRUE : FALSE); assert(hResult == S_OK);
@@ -2020,10 +2094,68 @@ void RenderPass2()
     hResult = g_pEffect2->SetFloat("g_sampleDepthBiasThreshold", g_sampleDepthBiasDistance / activeSsaoDepthRange); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_targetNormalBiasScale", g_targetNormalBiasScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_targetDepthBiasScale", g_targetDepthBiasScale); assert(hResult == S_OK);
-    hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("depthTexture", g_pDepthRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("thicknessTexture", g_pThicknessRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("normalTexture", g_pNormalRenderTarget); assert(hResult == S_OK);
+    hResult = g_pEffect2->CommitChanges(); assert(hResult == S_OK);
+    DrawFullscreenQuad();
+
+    hResult = g_pEffect2->EndPass(); assert(hResult == S_OK);
+    hResult = g_pEffect2->End();     assert(hResult == S_OK);
+    hResult = g_pd3dDevice->EndScene(); assert(hResult == S_OK);
+
+    if (g_bEnableSsaoBlur)
+    {
+        hResult = g_pSsaoBlurRenderTarget->GetSurfaceLevel(0, &pSsaoBlurRT); assert(hResult == S_OK);
+        hResult = g_pd3dDevice->SetRenderTarget(0, pSsaoBlurRT); assert(hResult == S_OK);
+
+        hResult = g_pd3dDevice->Clear(0, NULL,
+                                      D3DCLEAR_TARGET,
+                                      D3DCOLOR_XRGB(255, 255, 255),
+                                      1.0f, 0);
+        assert(hResult == S_OK);
+
+        hResult = g_pd3dDevice->BeginScene(); assert(hResult == S_OK);
+
+        hResult = g_pEffect2->SetTechnique(g_bUseLargeSsaoBlur ? "TechniqueSsaoBlurLarge" : "TechniqueSsaoBlur"); assert(hResult == S_OK);
+
+    UINT blurNumPass = 0;
+    hResult = g_pEffect2->Begin(&blurNumPass, 0); assert(hResult == S_OK);
+    hResult = g_pEffect2->BeginPass(0);           assert(hResult == S_OK);
+
+        hResult = g_pEffect2->SetTexture("ssaoTexture", g_pSsaoRenderTarget); assert(hResult == S_OK);
+    hResult = g_pEffect2->CommitChanges(); assert(hResult == S_OK);
+        DrawFullscreenQuad();
+
+        hResult = g_pEffect2->EndPass(); assert(hResult == S_OK);
+        hResult = g_pEffect2->End();     assert(hResult == S_OK);
+        hResult = g_pd3dDevice->EndScene(); assert(hResult == S_OK);
+    }
+
+    hResult = g_pd3dDevice->SetRenderTarget(0, pOldRT0); assert(hResult == S_OK);
+    SAFE_RELEASE(pSsaoRT);
+    SAFE_RELEASE(pSsaoBlurRT);
+
+    hResult = g_pd3dDevice->Clear(0, NULL,
+                                  D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER,
+                                  D3DCOLOR_XRGB(0, 0, 0),
+                                  1.0f, 0);
+    assert(hResult == S_OK);
+
+    // 2D 全面描画なので Z 無効
+    hResult = g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
+    assert(hResult == S_OK);
+
+    hResult = g_pd3dDevice->BeginScene(); assert(hResult == S_OK);
+
+    hResult = g_pEffect2->SetTechnique("TechniqueComposite"); assert(hResult == S_OK);
+
+    UINT numPass = 0;
+    hResult = g_pEffect2->Begin(&numPass, 0);               assert(hResult == S_OK);
+    hResult = g_pEffect2->BeginPass(0);                     assert(hResult == S_OK);
+
+    hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetTexture("ssaoTexture", g_bEnableSsaoBlur ? g_pSsaoBlurRenderTarget : g_pSsaoRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->CommitChanges();                          assert(hResult == S_OK);
 
     DrawFullscreenQuad();
@@ -2083,6 +2215,7 @@ void RenderPass2()
     assert(hResult == S_OK);
 
     UpdateAutoSsaoParametersFromCenterDepth();
+    SAFE_RELEASE(pOldRT0);
 }
 
 void DrawFullscreenQuad()
@@ -2237,6 +2370,21 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             g_bSmoothAutoSsaoByCenterDepth = (SendMessage(g_hSmoothAutoSsaoCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
             g_targetAutoSsaoSampleDistanceMeters = g_autoSsaoSampleDistanceMeters;
             g_targetAutoSsaoDepthRange = g_autoSsaoDepthRange;
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogEnableSsaoBlurCheckboxId)
+        {
+            g_bEnableSsaoBlur = (SendMessage(g_hEnableSsaoBlurCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogSsaoBlur5x5RadioId)
+        {
+            g_bUseLargeSsaoBlur = false;
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogSsaoBlur11x11RadioId)
+        {
+            g_bUseLargeSsaoBlur = true;
             return 0;
         }
         if (LOWORD(wParam) == kToolDialogEnableThicknessCapCheckboxId)

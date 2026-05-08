@@ -60,6 +60,14 @@ sampler normalSampler = sampler_state {
     MagFilter = POINT;
 };
 
+texture ssaoTexture;
+sampler ssaoSampler = sampler_state {
+    Texture = (ssaoTexture);
+    MipFilter = NONE;
+    MinFilter = POINT;
+    MagFilter = POINT;
+};
+
 float Random01(float2 seed)
 {
     return frac(sin(dot(seed, float2(12.9898f, 78.233f))) * 43758.5453f);
@@ -141,19 +149,12 @@ void VertexShader1(in  float4 inPosition  : POSITION,
     outTexCood = inTexCood;
 }
 
-void PixelShader1(in float4 inPosition    : POSITION,
-                  in float2 inTexCood     : TEXCOORD0,
-
-                  out float4 outColor     : COLOR)
+float ComputeSsaoFactor(float2 shiftedTexCoord)
 {
-    float4 workColor = (float4)0;
-    float2 halfPixelOffset = 0.5f / g_screenSize;
-    float2 shiftedTexCoord = inTexCood + halfPixelOffset;
-    workColor = tex2D(textureSampler, shiftedTexCoord);
-
     float currentDepth = tex2D(depthSampler, shiftedTexCoord).r;
     float3 currentNormal = tex2D(normalSampler, shiftedTexCoord).xyz * 2.0f - 1.0f;
     currentNormal = normalize(currentNormal);
+    float ssaoFactor = 1.0f;
 
     if (g_bEnableSimpleSsao)
     {
@@ -176,7 +177,7 @@ void PixelShader1(in float4 inPosition    : POSITION,
                                                                 1.0f);
                 if (occlusionSample.x > 0.5f)
                 {
-                    workColor = float4(0.0f, 0.0f, 0.0f, workColor.a);
+                    ssaoFactor = 0.0f;
                 }
             }
             else
@@ -209,26 +210,98 @@ void PixelShader1(in float4 inPosition    : POSITION,
                 if (validSampleCount > 0.0f)
                 {
                     float occlusionRate = occlusionCount / validSampleCount;
-                    workColor.rgb *= (1.0f - occlusionRate);
+                    ssaoFactor = 1.0f - occlusionRate;
                 }
             }
         }
     }
 
-    workColor = saturate(workColor);
+    return saturate(ssaoFactor);
+}
 
-    if (false)
+void PixelShaderSsao(in float4 inPosition    : POSITION,
+                     in float2 inTexCood     : TEXCOORD0,
+
+                     out float4 outColor     : COLOR)
+{
+    float2 halfPixelOffset = 0.5f / g_screenSize;
+    float2 shiftedTexCoord = inTexCood + halfPixelOffset;
+    float ssaoFactor = ComputeSsaoFactor(shiftedTexCoord);
+    outColor = float4(ssaoFactor, ssaoFactor, ssaoFactor, 1.0f);
+}
+
+void PixelShaderComposite(in float4 inPosition    : POSITION,
+                          in float2 inTexCood     : TEXCOORD0,
+
+                          out float4 outColor     : COLOR)
+{
+    float2 halfPixelOffset = 0.5f / g_screenSize;
+    float2 shiftedTexCoord = inTexCood + halfPixelOffset;
+    float4 workColor = tex2D(textureSampler, shiftedTexCoord);
+    float ssaoFactor = tex2D(ssaoSampler, shiftedTexCoord).r;
+    workColor.rgb *= ssaoFactor;
+    workColor = saturate(workColor);
+    outColor = workColor;
+}
+
+void PixelShaderSsaoBlur5x5(in float4 inPosition    : POSITION,
+                            in float2 inTexCood     : TEXCOORD0,
+
+                            out float4 outColor     : COLOR)
+{
+    float2 halfPixelOffset = 0.5f / g_screenSize;
+    float2 shiftedTexCoord = inTexCood + halfPixelOffset;
+    float2 texelSize = 1.0f / g_screenSize;
+    float weights[5] = { 1.0f, 4.0f, 6.0f, 4.0f, 1.0f };
+    float blurredValue = 0.0f;
+    float weightSum = 0.0f;
+
+    [unroll]
+    for (int y = -2; y <= 2; ++y)
     {
-        float2 pixelCoord = shiftedTexCoord * g_screenSize;
-        float lineX = 1.0f - step(1.0f, fmod(pixelCoord.x, 5.0f));
-        float lineY = 1.0f - step(1.0f, fmod(pixelCoord.y, 5.0f));
-        float lineMask = saturate(lineX + lineY);
-        float4 lineColor = float4(0.0f, 1.0f, 0.0f, 1.0f);
-        workColor = lerp(workColor, lineColor, lineMask);
+        [unroll]
+        for (int x = -2; x <= 2; ++x)
+        {
+            float2 sampleTexCoord = shiftedTexCoord + float2((float)x * texelSize.x, (float)y * texelSize.y);
+            sampleTexCoord = saturate(sampleTexCoord);
+            float weight = weights[x + 2] * weights[y + 2];
+            blurredValue += tex2D(ssaoSampler, sampleTexCoord).r * weight;
+            weightSum += weight;
+        }
     }
 
-    outColor = workColor;
-    
+    float ssaoFactor = (weightSum > 0.0f) ? (blurredValue / weightSum) : 1.0f;
+    outColor = float4(ssaoFactor, ssaoFactor, ssaoFactor, 1.0f);
+}
+
+void PixelShaderSsaoBlur11x11(in float4 inPosition    : POSITION,
+                              in float2 inTexCood     : TEXCOORD0,
+
+                              out float4 outColor     : COLOR)
+{
+    float2 halfPixelOffset = 0.5f / g_screenSize;
+    float2 shiftedTexCoord = inTexCood + halfPixelOffset;
+    float2 texelSize = 1.0f / g_screenSize;
+    float weights[11] = { 1.0f, 10.0f, 45.0f, 120.0f, 210.0f, 252.0f, 210.0f, 120.0f, 45.0f, 10.0f, 1.0f };
+    float blurredValue = 0.0f;
+    float weightSum = 0.0f;
+
+    [loop]
+    for (int y = -5; y <= 5; ++y)
+    {
+        [loop]
+        for (int x = -5; x <= 5; ++x)
+        {
+            float2 sampleTexCoord = shiftedTexCoord + float2((float)x * texelSize.x, (float)y * texelSize.y);
+            sampleTexCoord = saturate(sampleTexCoord);
+            float weight = weights[x + 5] * weights[y + 5];
+            blurredValue += tex2D(ssaoSampler, sampleTexCoord).r * weight;
+            weightSum += weight;
+        }
+    }
+
+    float ssaoFactor = (weightSum > 0.0f) ? (blurredValue / weightSum) : 1.0f;
+    outColor = float4(ssaoFactor, ssaoFactor, ssaoFactor, 1.0f);
 }
 
 void PixelShaderDebug(in float4 inPosition    : POSITION,
@@ -270,14 +343,14 @@ void PixelShaderThickness(in float4 inPosition : POSITION,
     outColor = float4(thickness, 0.0f, 0.0f, 1.0f);
 }
 
-technique Technique1
+technique TechniqueSsao
 {
     pass Pass1
     {
         CullMode = NONE;
 
         VertexShader = compile vs_3_0 VertexShader1();
-        PixelShader = compile ps_3_0 PixelShader1();
+        PixelShader = compile ps_3_0 PixelShaderSsao();
    }
 }
 
@@ -300,5 +373,38 @@ technique TechniqueThickness
 
         VertexShader = compile vs_3_0 VertexShader1();
         PixelShader = compile ps_3_0 PixelShaderThickness();
+   }
+}
+
+technique TechniqueSsaoBlur
+{
+    pass Pass1
+    {
+        CullMode = NONE;
+
+        VertexShader = compile vs_3_0 VertexShader1();
+        PixelShader = compile ps_3_0 PixelShaderSsaoBlur5x5();
+   }
+}
+
+technique TechniqueSsaoBlurLarge
+{
+    pass Pass1
+    {
+        CullMode = NONE;
+
+        VertexShader = compile vs_3_0 VertexShader1();
+        PixelShader = compile ps_3_0 PixelShaderSsaoBlur11x11();
+   }
+}
+
+technique TechniqueComposite
+{
+    pass Pass1
+    {
+        CullMode = NONE;
+
+        VertexShader = compile vs_3_0 VertexShader1();
+        PixelShader = compile ps_3_0 PixelShaderComposite();
    }
 }
