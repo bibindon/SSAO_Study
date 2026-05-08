@@ -23,6 +23,7 @@ namespace
     constexpr int kRenderWidth = 1600;
     constexpr int kRenderHeight = 900;
     constexpr float kCameraMoveSpeed = 6.0f;
+    constexpr float kCameraSlowMoveScale = 0.25f;
     constexpr float kMouseSensitivity = 0.0009f;
     constexpr float kRemoteDesktopMouseSensitivityScale = 4.0f;
     constexpr float kMaxPitch = D3DX_PI * 0.45f;
@@ -1499,8 +1500,16 @@ void UpdateInputAndCamera()
 
     if (D3DXVec3LengthSq(&move) > 0.0f)
     {
+        const bool isShiftHeld = ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0);
+        const bool isHorizontalMoveHeld =
+            ((GetAsyncKeyState('W') & 0x8000) != 0) ||
+            ((GetAsyncKeyState('A') & 0x8000) != 0) ||
+            ((GetAsyncKeyState('S') & 0x8000) != 0) ||
+            ((GetAsyncKeyState('D') & 0x8000) != 0);
+        const float moveSpeedScale = (isShiftHeld && isHorizontalMoveHeld) ? kCameraSlowMoveScale : 1.0f;
+
         D3DXVec3Normalize(&move, &move);
-        g_cameraPosition += move * (kCameraMoveSpeed * deltaTime);
+        g_cameraPosition += move * (kCameraMoveSpeed * moveSpeedScale * deltaTime);
     }
 }
 
@@ -1679,29 +1688,54 @@ void UpdateAutoSsaoParametersFromCenterDepth()
     hResult = g_pCenterDepthResolveTexture->GetSurfaceLevel(0, &pResolveSurface);
     assert(hResult == S_OK);
 
-    RECT centerRect = { kRenderWidth / 2, kRenderHeight / 2, (kRenderWidth / 2) + 1, (kRenderHeight / 2) + 1 };
-    hResult = g_pd3dDevice->StretchRect(pDepthSurface, &centerRect, pResolveSurface, NULL, D3DTEXF_POINT);
-    assert(hResult == S_OK);
+    const float sampleFractions[4] = { 0.2f, 0.4f, 0.6f, 0.8f };
 
-    hResult = g_pd3dDevice->GetRenderTargetData(pResolveSurface, g_pCenterDepthReadbackSurface);
-    assert(hResult == S_OK);
+    float nearestDepthMeters = kCameraFarPlane;
+    bool hasValidDepth = false;
+    for (int sampleYIndex = 0; sampleYIndex < _countof(sampleFractions); ++sampleYIndex)
+    {
+        for (int sampleXIndex = 0; sampleXIndex < _countof(sampleFractions); ++sampleXIndex)
+        {
+            const LONG sampleX = static_cast<LONG>(sampleFractions[sampleXIndex] * static_cast<float>(kRenderWidth - 1));
+            const LONG sampleY = static_cast<LONG>(sampleFractions[sampleYIndex] * static_cast<float>(kRenderHeight - 1));
+            RECT sampleRect =
+            {
+                sampleX,
+                sampleY,
+                sampleX + 1,
+                sampleY + 1
+            };
+            hResult = g_pd3dDevice->StretchRect(pDepthSurface, &sampleRect, pResolveSurface, NULL, D3DTEXF_POINT);
+            assert(hResult == S_OK);
 
-    D3DLOCKED_RECT lockedRect = { };
-    hResult = g_pCenterDepthReadbackSurface->LockRect(&lockedRect, NULL, D3DLOCK_READONLY);
-    assert(hResult == S_OK);
+            hResult = g_pd3dDevice->GetRenderTargetData(pResolveSurface, g_pCenterDepthReadbackSurface);
+            assert(hResult == S_OK);
 
-    const float centerDepthMeters = *reinterpret_cast<const float*>(lockedRect.pBits);
-    hResult = g_pCenterDepthReadbackSurface->UnlockRect();
-    assert(hResult == S_OK);
+            D3DLOCKED_RECT lockedRect = { };
+            hResult = g_pCenterDepthReadbackSurface->LockRect(&lockedRect, NULL, D3DLOCK_READONLY);
+            assert(hResult == S_OK);
+
+            const float sampleDepthMeters = *reinterpret_cast<const float*>(lockedRect.pBits);
+            hResult = g_pCenterDepthReadbackSurface->UnlockRect();
+            assert(hResult == S_OK);
+
+            if (sampleDepthMeters > 0.0f && sampleDepthMeters < nearestDepthMeters)
+            {
+                nearestDepthMeters = sampleDepthMeters;
+                hasValidDepth = true;
+            }
+        }
+    }
 
     SAFE_RELEASE(pResolveSurface);
     SAFE_RELEASE(pDepthSurface);
 
-    if (centerDepthMeters <= 0.0f || centerDepthMeters >= kCameraFarPlane)
+    if (!hasValidDepth || nearestDepthMeters >= kCameraFarPlane)
     {
         return;
     }
 
+    const float centerDepthMeters = nearestDepthMeters;
     const float clampedCenterDepthMeters = (centerDepthMeters > 15.0f) ? 15.0f : centerDepthMeters;
     g_autoSsaoDepthRange = clampedCenterDepthMeters * 2.0f;
     if (g_autoSsaoDepthRange < kMinSsaoDepthRange)
