@@ -24,6 +24,7 @@ namespace
     constexpr int kRenderHeight = 900;
     constexpr float kCameraMoveSpeed = 6.0f;
     constexpr float kMouseSensitivity = 0.0009f;
+    constexpr float kRemoteDesktopMouseSensitivityScale = 4.0f;
     constexpr float kMaxPitch = D3DX_PI * 0.45f;
     constexpr int kCubeGridWidth = 11;
     constexpr int kCubeGridDepth = 11;
@@ -1026,8 +1027,8 @@ void UpdateInputAndCamera()
                     const LONG deltaX = mousePos.x - g_previousMousePosition.x;
                     const LONG deltaY = mousePos.y - g_previousMousePosition.y;
 
-                    g_cameraYaw += static_cast<float>(deltaX) * kMouseSensitivity;
-                    g_cameraPitch -= static_cast<float>(deltaY) * kMouseSensitivity;
+                    g_cameraYaw += static_cast<float>(deltaX) * kMouseSensitivity * kRemoteDesktopMouseSensitivityScale;
+                    g_cameraPitch -= static_cast<float>(deltaY) * kMouseSensitivity * kRemoteDesktopMouseSensitivityScale;
                     g_cameraPitch = (g_cameraPitch < -kMaxPitch) ? -kMaxPitch : g_cameraPitch;
                     g_cameraPitch = (g_cameraPitch > kMaxPitch) ? kMaxPitch : g_cameraPitch;
                 }
