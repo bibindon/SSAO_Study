@@ -57,6 +57,7 @@ namespace
     constexpr int kToolDialogThicknessCapEditId = 1023;
     constexpr int kToolDialogApplyThicknessCapButtonId = 1024;
     constexpr int kToolDialogAutoScaleSsaoByCenterCheckboxId = 1025;
+    constexpr int kToolDialogSmoothAutoSsaoCheckboxId = 1026;
     constexpr int kDebugViewNone = 0;
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
@@ -67,6 +68,9 @@ namespace
     constexpr float kDefaultSsaoDepthRange = 50.0f;
     constexpr float kMinSsaoDepthRange = 0.5f;
     constexpr float kDepthCompareDistance = 0.1f;
+    constexpr float kAutoSsaoSmoothingDurationSeconds = 10.0f / 60.0f;
+    constexpr float kAutoSsaoMaxDepthRange = 30.0f;
+    constexpr float kAutoSsaoMaxSampleDistanceMeters = 3.75f;
 }
 
 LPDIRECT3D9 g_pD3D = NULL;
@@ -125,14 +129,17 @@ bool g_bRemoteDesktopCameraMode = false;
 bool g_bAllowStraightUpDown = false;
 bool g_bDepthScaledSampleDistance = false;
 bool g_bAutoScaleSsaoByCenterDepth = false;
+bool g_bSmoothAutoSsaoByCenterDepth = false;
 bool g_bHasPreviousMousePosition = false;
 int g_debugViewMode = kDebugViewNone;
 float g_simpleSsaoSampleDistanceMeters = 1.0f;
 float g_autoSsaoSampleDistanceMeters = 1.0f;
+float g_targetAutoSsaoSampleDistanceMeters = 1.0f;
 int g_simpleSsaoSampleCount = 1;
 float g_thicknessScale = 1.0f;
 float g_ssaoDepthRange = kDefaultSsaoDepthRange;
 float g_autoSsaoDepthRange = kDefaultSsaoDepthRange;
+float g_targetAutoSsaoDepthRange = kDefaultSsaoDepthRange;
 float g_targetNormalBiasScale = 1.0f;
 float g_targetDepthBiasScale = 1.0f;
 float g_depthCompareDistance = 0.0f;
@@ -166,6 +173,7 @@ HWND g_hDepthBiasDistanceEdit = NULL;
 HWND g_hApplyDepthBiasDistanceButton = NULL;
 HWND g_hDepthScaledSampleDistanceCheckbox = NULL;
 HWND g_hAutoScaleSsaoByCenterCheckbox = NULL;
+HWND g_hSmoothAutoSsaoCheckbox = NULL;
 HWND g_hEnableThicknessCapCheckbox = NULL;
 HWND g_hThicknessCapEdit = NULL;
 HWND g_hApplyThicknessCapButton = NULL;
@@ -292,7 +300,7 @@ int WINAPI _tWinMain(_In_ HINSTANCE hInstance,
         }
         else
         {
-            Sleep(16);
+            // Sleep(16);
 
             UpdateInputAndCamera();
             RenderPass1();
@@ -681,7 +689,7 @@ void CreateToolDialog()
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,
                                    340,
-                                   664,
+                                   696,
                                    g_hWnd,
                                    NULL,
                                    wc.hInstance,
@@ -1124,11 +1132,26 @@ void CreateToolDialog()
     ApplyToolDialogFont(g_hAutoScaleSsaoByCenterCheckbox);
     SendMessage(g_hAutoScaleSsaoByCenterCheckbox, BM_SETCHECK, g_bAutoScaleSsaoByCenterDepth ? BST_CHECKED : BST_UNCHECKED, 0);
 
+    g_hSmoothAutoSsaoCheckbox = CreateWindow(_T("BUTTON"),
+                                             _T("Smooth auto SSAO change (0.5s)"),
+                                             WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                                             20,
+                                             494,
+                                             240,
+                                             24,
+                                             g_hToolDialog,
+                                             reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogSmoothAutoSsaoCheckboxId)),
+                                             wc.hInstance,
+                                             NULL);
+    assert(g_hSmoothAutoSsaoCheckbox != NULL);
+    ApplyToolDialogFont(g_hSmoothAutoSsaoCheckbox);
+    SendMessage(g_hSmoothAutoSsaoCheckbox, BM_SETCHECK, g_bSmoothAutoSsaoByCenterDepth ? BST_CHECKED : BST_UNCHECKED, 0);
+
     g_hEnableThicknessCapCheckbox = CreateWindow(_T("BUTTON"),
                                                  _T("Enable thickness cap"),
                                                  WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                                  20,
-                                                 494,
+                                                 526,
                                                  180,
                                                  24,
                                                  g_hToolDialog,
@@ -1143,7 +1166,7 @@ void CreateToolDialog()
                                            _T("Thickness cap (m):"),
                                            WS_CHILD | WS_VISIBLE,
                                            20,
-                                           526,
+                                           558,
                                            130,
                                            20,
                                            g_hToolDialog,
@@ -1156,7 +1179,7 @@ void CreateToolDialog()
                                        _T("1.00"),
                                        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                        160,
-                                       522,
+                                       554,
                                        60,
                                        24,
                                        g_hToolDialog,
@@ -1170,7 +1193,7 @@ void CreateToolDialog()
                                               _T("Apply"),
                                               WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                               230,
-                                              520,
+                                              552,
                                               60,
                                               28,
                                               g_hToolDialog,
@@ -1517,9 +1540,11 @@ void DrawOverlayText()
 {
     const float activeDepthRange = GetActiveSsaoDepthRange();
     const float activeSampleDistanceMeters = GetActiveSsaoSampleDistanceMeters();
-    TCHAR lines[15][128] =
+    const float fps = 60.0f;
+    TCHAR lines[16][128] =
     {
         _T("SSAO sample controls"),
+        _T(""),
         _T("W/A/S/D: move"),
         _T("E / Q: move up / down"),
         _T("Mouse: look around"),
@@ -1535,9 +1560,10 @@ void DrawOverlayText()
         _T(""),
         _T(""),
     };
-    _stprintf_s(lines[12], _T("SSAO depth range: %.1f m"), activeDepthRange);
-    _stprintf_s(lines[13], _T("SSAO sample dist: %.2f m"), activeSampleDistanceMeters);
-    _stprintf_s(lines[14], _T("Remote Desktop camera: %s"), g_bRemoteDesktopCameraMode ? _T("ON") : _T("OFF"));
+    _stprintf_s(lines[1], _T("FPS: %.1f"), fps);
+    _stprintf_s(lines[13], _T("SSAO depth range: %.1f m"), activeDepthRange);
+    _stprintf_s(lines[14], _T("SSAO sample dist: %.2f m"), activeSampleDistanceMeters);
+    _stprintf_s(lines[15], _T("Remote Desktop camera: %s"), g_bRemoteDesktopCameraMode ? _T("ON") : _T("OFF"));
 
     for (int i = 0; i < _countof(lines); ++i)
     {
@@ -1737,24 +1763,74 @@ void UpdateAutoSsaoParametersFromCenterDepth()
 
     const float centerDepthMeters = nearestDepthMeters;
     const float clampedCenterDepthMeters = (centerDepthMeters > 15.0f) ? 15.0f : centerDepthMeters;
-    g_autoSsaoDepthRange = clampedCenterDepthMeters * 2.0f;
-    if (g_autoSsaoDepthRange < kMinSsaoDepthRange)
+    float newTargetAutoSsaoDepthRange = clampedCenterDepthMeters * 2.0f;
+    float newTargetAutoSsaoSampleDistanceMeters = clampedCenterDepthMeters * 0.25f;
+
+    if (newTargetAutoSsaoDepthRange < kMinSsaoDepthRange)
     {
-        g_autoSsaoDepthRange = kMinSsaoDepthRange;
+        newTargetAutoSsaoDepthRange = kMinSsaoDepthRange;
     }
-    if (g_autoSsaoDepthRange > kCameraFarPlane)
+    if (newTargetAutoSsaoDepthRange > kCameraFarPlane)
     {
-        g_autoSsaoDepthRange = kCameraFarPlane;
+        newTargetAutoSsaoDepthRange = kCameraFarPlane;
     }
 
-    g_autoSsaoSampleDistanceMeters = clampedCenterDepthMeters * 0.25f;
-    if (g_autoSsaoSampleDistanceMeters < 0.0f)
+    if (newTargetAutoSsaoSampleDistanceMeters < 0.0f)
     {
-        g_autoSsaoSampleDistanceMeters = 0.0f;
+        newTargetAutoSsaoSampleDistanceMeters = 0.0f;
     }
-    if (g_autoSsaoSampleDistanceMeters > kCameraFarPlane)
+    if (newTargetAutoSsaoSampleDistanceMeters > kCameraFarPlane)
     {
-        g_autoSsaoSampleDistanceMeters = kCameraFarPlane;
+        newTargetAutoSsaoSampleDistanceMeters = kCameraFarPlane;
+    }
+
+    g_targetAutoSsaoDepthRange = newTargetAutoSsaoDepthRange;
+    g_targetAutoSsaoSampleDistanceMeters = newTargetAutoSsaoSampleDistanceMeters;
+
+    if (g_bSmoothAutoSsaoByCenterDepth)
+    {
+        const float deltaTime = 1.0f / 60.0f;
+        const float depthRangeStep = (kAutoSsaoMaxDepthRange / kAutoSsaoSmoothingDurationSeconds) * deltaTime;
+        const float sampleDistanceStep = (kAutoSsaoMaxSampleDistanceMeters / kAutoSsaoSmoothingDurationSeconds) * deltaTime;
+
+        if (g_autoSsaoDepthRange < g_targetAutoSsaoDepthRange)
+        {
+            g_autoSsaoDepthRange += depthRangeStep;
+            if (g_autoSsaoDepthRange > g_targetAutoSsaoDepthRange)
+            {
+                g_autoSsaoDepthRange = g_targetAutoSsaoDepthRange;
+            }
+        }
+        else
+        {
+            g_autoSsaoDepthRange -= depthRangeStep;
+            if (g_autoSsaoDepthRange < g_targetAutoSsaoDepthRange)
+            {
+                g_autoSsaoDepthRange = g_targetAutoSsaoDepthRange;
+            }
+        }
+
+        if (g_autoSsaoSampleDistanceMeters < g_targetAutoSsaoSampleDistanceMeters)
+        {
+            g_autoSsaoSampleDistanceMeters += sampleDistanceStep;
+            if (g_autoSsaoSampleDistanceMeters > g_targetAutoSsaoSampleDistanceMeters)
+            {
+                g_autoSsaoSampleDistanceMeters = g_targetAutoSsaoSampleDistanceMeters;
+            }
+        }
+        else
+        {
+            g_autoSsaoSampleDistanceMeters -= sampleDistanceStep;
+            if (g_autoSsaoSampleDistanceMeters < g_targetAutoSsaoSampleDistanceMeters)
+            {
+                g_autoSsaoSampleDistanceMeters = g_targetAutoSsaoSampleDistanceMeters;
+            }
+        }
+    }
+    else
+    {
+        g_autoSsaoDepthRange = g_targetAutoSsaoDepthRange;
+        g_autoSsaoSampleDistanceMeters = g_targetAutoSsaoSampleDistanceMeters;
     }
 }
 
@@ -2151,7 +2227,16 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             {
                 g_autoSsaoSampleDistanceMeters = g_simpleSsaoSampleDistanceMeters;
                 g_autoSsaoDepthRange = g_ssaoDepthRange;
+                g_targetAutoSsaoSampleDistanceMeters = g_autoSsaoSampleDistanceMeters;
+                g_targetAutoSsaoDepthRange = g_autoSsaoDepthRange;
             }
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogSmoothAutoSsaoCheckboxId)
+        {
+            g_bSmoothAutoSsaoByCenterDepth = (SendMessage(g_hSmoothAutoSsaoCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            g_targetAutoSsaoSampleDistanceMeters = g_autoSsaoSampleDistanceMeters;
+            g_targetAutoSsaoDepthRange = g_autoSsaoDepthRange;
             return 0;
         }
         if (LOWORD(wParam) == kToolDialogEnableThicknessCapCheckboxId)
