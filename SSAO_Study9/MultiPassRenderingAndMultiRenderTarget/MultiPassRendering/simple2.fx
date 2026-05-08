@@ -6,6 +6,7 @@ bool g_bUseTexture = true;
 bool g_bSingleChannelInput = false;
 bool g_bEnableSimpleSsao = true;
 bool g_bUseThicknessForSsao = true;
+bool g_bDepthScaledSampleDistance = false;
 int g_simpleSsaoSampleCount = 1;
 float2 g_screenSize = { 1600.0f, 900.0f };
 float g_simpleSsaoSamplePixels = 100.0f;
@@ -124,6 +125,11 @@ void PixelShader1(in float4 inPosition    : POSITION,
         {
             float2 sampleDirectionNormalized = (directionLength > 0.0001f) ? (sampleDirection / directionLength) : float2(0.0f, 0.0f);
             float samplePixelDistance = g_simpleSsaoSamplePixels * saturate(directionLength);
+            if (g_bDepthScaledSampleDistance)
+            {
+                float depthDistanceScale = 1.0f + saturate(1.0f - currentDepth);
+                samplePixelDistance *= depthDistanceScale;
+            }
             if (g_simpleSsaoSampleCount <= 1)
             {
                 float occluded = ComputeOcclusionSample(shiftedTexCoord,

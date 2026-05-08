@@ -51,6 +51,7 @@ namespace
     constexpr int kToolDialogApplyDepthBiasDistanceButtonId = 1018;
     constexpr int kToolDialogSampleCountEditId = 1019;
     constexpr int kToolDialogApplySampleCountButtonId = 1020;
+    constexpr int kToolDialogDepthScaledSampleDistanceCheckboxId = 1021;
     constexpr int kDebugViewNone = 0;
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
@@ -114,6 +115,7 @@ bool g_bEnableSimpleSsao = true;
 bool g_bUseThicknessForSsao = true;
 bool g_bRemoteDesktopCameraMode = true;
 bool g_bAllowStraightUpDown = false;
+bool g_bDepthScaledSampleDistance = false;
 bool g_bHasPreviousMousePosition = false;
 int g_debugViewMode = kDebugViewNone;
 float g_simpleSsaoSamplePixels = 100.0f;
@@ -149,6 +151,7 @@ HWND g_hApplyDepthCompareDistanceButton = NULL;
 HWND g_hAllowStraightUpDownCheckbox = NULL;
 HWND g_hDepthBiasDistanceEdit = NULL;
 HWND g_hApplyDepthBiasDistanceButton = NULL;
+HWND g_hDepthScaledSampleDistanceCheckbox = NULL;
 HFONT g_hToolDialogFont = NULL;
 
 struct UserMeshInstance
@@ -629,7 +632,7 @@ void CreateToolDialog()
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,
                                    340,
-                                   528,
+                                   564,
                                    g_hWnd,
                                    NULL,
                                    wc.hInstance,
@@ -1041,6 +1044,21 @@ void CreateToolDialog()
                                                    NULL);
     assert(g_hApplyDepthBiasDistanceButton != NULL);
     ApplyToolDialogFont(g_hApplyDepthBiasDistanceButton);
+
+    g_hDepthScaledSampleDistanceCheckbox = CreateWindow(_T("BUTTON"),
+                                                        _T("Scale sample dist by depth"),
+                                                        WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                                                        20,
+                                                        430,
+                                                        220,
+                                                        24,
+                                                        g_hToolDialog,
+                                                        reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogDepthScaledSampleDistanceCheckboxId)),
+                                                        wc.hInstance,
+                                                        NULL);
+    assert(g_hDepthScaledSampleDistanceCheckbox != NULL);
+    ApplyToolDialogFont(g_hDepthScaledSampleDistanceCheckbox);
+    SendMessage(g_hDepthScaledSampleDistanceCheckbox, BM_SETCHECK, g_bDepthScaledSampleDistance ? BST_CHECKED : BST_UNCHECKED, 0);
 
     TCHAR depthRangeText[64] = { };
     _stprintf_s(depthRangeText, _T("%.1f"), g_ssaoDepthRange);
@@ -1656,6 +1674,7 @@ void RenderPass2()
 
     hResult = g_pEffect2->SetBool("g_bEnableSimpleSsao", g_bEnableSimpleSsao ? TRUE : FALSE); assert(hResult == S_OK);
     hResult = g_pEffect2->SetBool("g_bUseThicknessForSsao", g_bUseThicknessForSsao ? TRUE : FALSE); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetBool("g_bDepthScaledSampleDistance", g_bDepthScaledSampleDistance ? TRUE : FALSE); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_simpleSsaoSamplePixels", g_simpleSsaoSamplePixels); assert(hResult == S_OK);
     hResult = g_pEffect2->SetInt("g_simpleSsaoSampleCount", g_simpleSsaoSampleCount); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_thicknessScale", g_thicknessScale); assert(hResult == S_OK);
@@ -1855,6 +1874,11 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (LOWORD(wParam) == kToolDialogAllowStraightUpDownCheckboxId)
         {
             g_bAllowStraightUpDown = (SendMessage(g_hAllowStraightUpDownCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogDepthScaledSampleDistanceCheckboxId)
+        {
+            g_bDepthScaledSampleDistance = (SendMessage(g_hDepthScaledSampleDistanceCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
             return 0;
         }
         if (LOWORD(wParam) == kToolDialogApplyThicknessScaleButtonId)
