@@ -61,6 +61,7 @@ namespace
     constexpr int kToolDialogEnableSsaoBlurCheckboxId = 1027;
     constexpr int kToolDialogSsaoBlur5x5RadioId = 1028;
     constexpr int kToolDialogSsaoBlur11x11RadioId = 1029;
+    constexpr int kToolDialogFixedSsaoSampleDistanceCheckboxId = 1030;
     constexpr int kDebugViewNone = 0;
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
@@ -137,6 +138,7 @@ bool g_bAllowStraightUpDown = false;
 bool g_bDepthScaledSampleDistance = false;
 bool g_bAutoScaleSsaoByCenterDepth = false;
 bool g_bSmoothAutoSsaoByCenterDepth = false;
+bool g_bUseFixedSsaoSampleDistance = false;
 bool g_bHasPreviousMousePosition = false;
 int g_debugViewMode = kDebugViewNone;
 float g_simpleSsaoSampleDistanceMeters = 1.0f;
@@ -184,6 +186,7 @@ HWND g_hSmoothAutoSsaoCheckbox = NULL;
 HWND g_hEnableSsaoBlurCheckbox = NULL;
 HWND g_hSsaoBlur5x5Radio = NULL;
 HWND g_hSsaoBlur11x11Radio = NULL;
+HWND g_hFixedSsaoSampleDistanceCheckbox = NULL;
 HWND g_hEnableThicknessCapCheckbox = NULL;
 HWND g_hThicknessCapEdit = NULL;
 HWND g_hApplyThicknessCapButton = NULL;
@@ -719,7 +722,7 @@ void CreateToolDialog()
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,
                                    340,
-                                   780,
+                                   812,
                                    g_hWnd,
                                    NULL,
                                    wc.hInstance,
@@ -1286,11 +1289,33 @@ void CreateToolDialog()
         SendMessage(g_hSsaoBlur11x11Radio, BM_SETCHECK, BST_UNCHECKED, 0);
     }
 
+    g_hFixedSsaoSampleDistanceCheckbox = CreateWindow(_T("BUTTON"),
+                                                      _T("Use fixed SSAO sample dist"),
+                                                      WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                                                      20,
+                                                      584,
+                                                      220,
+                                                      24,
+                                                      g_hToolDialog,
+                                                      reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogFixedSsaoSampleDistanceCheckboxId)),
+                                                      wc.hInstance,
+                                                      NULL);
+    assert(g_hFixedSsaoSampleDistanceCheckbox != NULL);
+    ApplyToolDialogFont(g_hFixedSsaoSampleDistanceCheckbox);
+    if (g_bUseFixedSsaoSampleDistance)
+    {
+        SendMessage(g_hFixedSsaoSampleDistanceCheckbox, BM_SETCHECK, BST_CHECKED, 0);
+    }
+    else
+    {
+        SendMessage(g_hFixedSsaoSampleDistanceCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
+    }
+
     g_hEnableThicknessCapCheckbox = CreateWindow(_T("BUTTON"),
                                                  _T("Enable thickness cap"),
                                                  WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                                  20,
-                                                 588,
+                                                 620,
                                                  180,
                                                  24,
                                                  g_hToolDialog,
@@ -1312,7 +1337,7 @@ void CreateToolDialog()
                                            _T("Thickness cap (m):"),
                                            WS_CHILD | WS_VISIBLE,
                                            20,
-                                           620,
+                                           652,
                                            130,
                                            20,
                                            g_hToolDialog,
@@ -1325,7 +1350,7 @@ void CreateToolDialog()
                                        _T("1.00"),
                                        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                        160,
-                                       616,
+                                       648,
                                        60,
                                        24,
                                        g_hToolDialog,
@@ -1339,7 +1364,7 @@ void CreateToolDialog()
                                               _T("Apply"),
                                               WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                               230,
-                                              614,
+                                              646,
                                               60,
                                               28,
                                               g_hToolDialog,
@@ -2230,6 +2255,14 @@ void RenderPass2()
     {
         hResult = g_pEffect2->SetBool("g_bDepthScaledSampleDistance", FALSE); assert(hResult == S_OK);
     }
+    if (g_bUseFixedSsaoSampleDistance)
+    {
+        hResult = g_pEffect2->SetBool("g_bUseFixedSsaoSampleDistance", TRUE); assert(hResult == S_OK);
+    }
+    else
+    {
+        hResult = g_pEffect2->SetBool("g_bUseFixedSsaoSampleDistance", FALSE); assert(hResult == S_OK);
+    }
     const float verticalFovRadians = D3DXToRadian(45.0f);
     const float projectionScaleY = 1.0f / tanf(verticalFovRadians * 0.5f);
     const float projectionScaleX = projectionScaleY / (static_cast<float>(kRenderWidth) / static_cast<float>(kRenderHeight));
@@ -2555,6 +2588,11 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (LOWORD(wParam) == kToolDialogSsaoBlur11x11RadioId)
         {
             g_bUseLargeSsaoBlur = true;
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogFixedSsaoSampleDistanceCheckboxId)
+        {
+            g_bUseFixedSsaoSampleDistance = (SendMessage(g_hFixedSsaoSampleDistanceCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
             return 0;
         }
         if (LOWORD(wParam) == kToolDialogEnableThicknessCapCheckboxId)

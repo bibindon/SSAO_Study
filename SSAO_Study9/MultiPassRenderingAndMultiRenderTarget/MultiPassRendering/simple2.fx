@@ -8,6 +8,7 @@ bool g_bEnableSimpleSsao = true;
 bool g_bUseThicknessForSsao = true;
 bool g_bDepthScaledSampleDistance = false;
 bool g_bEnableThicknessCap = false;
+bool g_bUseFixedSsaoSampleDistance = false;
 int g_simpleSsaoSampleCount = 1;
 float2 g_screenSize = { 1600.0f, 900.0f };
 float2 g_projectionScale = { 1.0f, 1.0f };
@@ -120,7 +121,8 @@ float2 ComputeOcclusionSample(float2 shiftedTexCoord,
 
     float expectedSampleDepth = saturate(sampleViewPosition.z / g_ssaoDepthRange);
     float targetNormalDepthBiasFactor = saturate(abs(currentNormal.z)) * g_targetNormalBiasScale;
-    float sampleDepthBias = (currentDepth - expectedSampleDepth) * targetNormalDepthBiasFactor * (currentDepth * g_targetDepthBiasScale);
+    float work = (currentDepth - expectedSampleDepth);
+    float sampleDepthBias = (work) * targetNormalDepthBiasFactor * g_targetDepthBiasScale;
     float adjustedSampleDepth = max(0.0f, sampleDepth + sampleDepthBias);
     float sampleThickness = tex2Dlod(thicknessSampler, sampleTexCoordLod).r;
     float frontDepthWithMargin = adjustedSampleDepth - g_depthCompareThreshold;
@@ -194,12 +196,28 @@ float ComputeSsaoFactor(float2 shiftedTexCoord)
                     if (sampleIndex < g_simpleSsaoSampleCount)
                     {
                         float sampleIndexFloat = (float)sampleIndex;
-                        float randomValue = Random01(shiftedTexCoord * g_screenSize + float2(sampleIndexFloat * 13.37f,
-                                                                                             sampleIndexFloat * 7.91f));
-                        float distanceScale = randomValue * randomValue * randomValue;
+                        float randomValue = 0.0f;
+                        float distanceScale = 0.f;;
+
+                        if (g_bUseFixedSsaoSampleDistance)
+                        {
+                            distanceScale = 1.0f;
+                            if (g_simpleSsaoSampleCount > 1)
+                            {
+                                float fixedDistanceU = sampleIndexFloat / (float)(g_simpleSsaoSampleCount - 1);
+                                distanceScale = fixedDistanceU * fixedDistanceU * fixedDistanceU;
+                            }
+                        }
+                        else
+                        {
+                            randomValue = Random01(shiftedTexCoord * g_screenSize + float2(sampleIndexFloat * 13.37f,
+                                                                                                 sampleIndexFloat * 7.91f));
+                            distanceScale = randomValue * randomValue * randomValue;
+                        }
 
                         // 0にならないようにする。
                         distanceScale += (0.1 * currentDepth);
+
                         float2 occlusionSample = ComputeOcclusionSample(shiftedTexCoord,
                                                                         currentDepth,
                                                                         currentNormal,
