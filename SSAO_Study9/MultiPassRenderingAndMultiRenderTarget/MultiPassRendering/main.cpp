@@ -37,6 +37,7 @@ namespace
     constexpr int kToolDialogApplyThicknessScaleButtonId = 1006;
     constexpr int kToolDialogSsaoDepthRangeEditId = 1007;
     constexpr int kToolDialogApplySsaoDepthRangeButtonId = 1008;
+    constexpr int kToolDialogRemoteDesktopCheckboxId = 1009;
     constexpr int kDebugViewNone = 0;
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
@@ -98,6 +99,8 @@ bool g_bMouseCursorVisible = false;
 bool g_bUseLambertLighting = true;
 bool g_bEnableSimpleSsao = true;
 bool g_bUseThicknessForSsao = true;
+bool g_bRemoteDesktopCameraMode = false;
+bool g_bHasPreviousMousePosition = false;
 int g_debugViewMode = kDebugViewNone;
 float g_simpleSsaoSamplePixels = 20.0f;
 float g_thicknessScale = 1.0f;
@@ -105,6 +108,7 @@ float g_ssaoDepthRange = kDefaultSsaoDepthRange;
 float g_cameraYaw = -D3DX_PI * 0.25f;
 float g_cameraPitch = -0.34f;
 D3DXVECTOR3 g_cameraPosition(2.0f, 1.0f, -3.0f);
+POINT g_previousMousePosition = { };
 HWND g_hToolDialog = NULL;
 HWND g_hOpenMeshButton = NULL;
 HWND g_hSsaoSampleEdit = NULL;
@@ -114,6 +118,7 @@ HWND g_hThicknessScaleEdit = NULL;
 HWND g_hApplyThicknessScaleButton = NULL;
 HWND g_hSsaoDepthRangeEdit = NULL;
 HWND g_hApplySsaoDepthRangeButton = NULL;
+HWND g_hRemoteDesktopCheckbox = NULL;
 HFONT g_hToolDialogFont = NULL;
 
 struct UserMeshInstance
@@ -156,6 +161,7 @@ static void ToggleToolDialog();
 static void OpenMeshFileDialog();
 static void PlaceUserMeshAtCurrentLookTarget(UserMeshInstance& userMesh);
 static void LoadSceneMeshInstance(const TCHAR* meshPath, const D3DXVECTOR3& position, float yaw);
+static void ResetMouseLookTracking();
 static void SetMouseCursorVisible(bool visible);
 static void UpdateInputAndCamera();
 static void DrawOverlayText();
@@ -771,6 +777,21 @@ void CreateToolDialog()
     assert(g_hApplyThicknessScaleButton != NULL);
     ApplyToolDialogFont(g_hApplyThicknessScaleButton);
 
+    g_hRemoteDesktopCheckbox = CreateWindow(_T("BUTTON"),
+                                            _T("Remote Desktop"),
+                                            WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                                            20,
+                                            206,
+                                            180,
+                                            24,
+                                            g_hToolDialog,
+                                            reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogRemoteDesktopCheckboxId)),
+                                            wc.hInstance,
+                                            NULL);
+    assert(g_hRemoteDesktopCheckbox != NULL);
+    ApplyToolDialogFont(g_hRemoteDesktopCheckbox);
+    SendMessage(g_hRemoteDesktopCheckbox, BM_SETCHECK, g_bRemoteDesktopCameraMode ? BST_CHECKED : BST_UNCHECKED, 0);
+
     TCHAR depthRangeText[64] = { };
     _stprintf_s(depthRangeText, _T("%.1f"), g_ssaoDepthRange);
     SetWindowText(g_hSsaoDepthRangeEdit, depthRangeText);
@@ -835,6 +856,13 @@ void LoadSceneMeshInstance(const TCHAR* meshPath, const D3DXVECTOR3& position, f
     g_sceneMeshes.push_back(sceneMesh);
 }
 
+void ResetMouseLookTracking()
+{
+    g_bHasPreviousMousePosition = false;
+    g_previousMousePosition.x = 0;
+    g_previousMousePosition.y = 0;
+}
+
 void SetMouseCursorVisible(bool visible)
 {
     if (g_bMouseCursorVisible == visible)
@@ -856,6 +884,7 @@ void SetMouseCursorVisible(bool visible)
     }
 
     g_bMouseCursorVisible = visible;
+    ResetMouseLookTracking();
 }
 
 void UpdateInputAndCamera()
@@ -885,6 +914,7 @@ void UpdateInputAndCamera()
         g_bPrevDialogToggleKeyDown = dialogToggleKeyDown;
         g_bPrevSimpleSsaoToggleKeyDown = simpleSsaoToggleKeyDown;
         g_bPrevEscapeToggleKeyDown = escapeToggleKeyDown;
+        ResetMouseLookTracking();
         return;
     }
 
@@ -980,35 +1010,56 @@ void UpdateInputAndCamera()
 
     if (!isMainWindowActive)
     {
+        ResetMouseLookTracking();
         return;
     }
 
     if (!g_bMouseCursorVisible)
     {
-        RECT clientRect = { };
-        if (GetClientRect(g_hWnd, &clientRect))
+        POINT mousePos;
+        if (GetCursorPos(&mousePos))
         {
-            POINT clientCenter =
+            if (g_bRemoteDesktopCameraMode)
             {
-                (clientRect.right - clientRect.left) / 2,
-                (clientRect.bottom - clientRect.top) / 2
-            };
-            POINT screenCenter = clientCenter;
-            ClientToScreen(g_hWnd, &screenCenter);
+                if (g_bHasPreviousMousePosition)
+                {
+                    const LONG deltaX = mousePos.x - g_previousMousePosition.x;
+                    const LONG deltaY = mousePos.y - g_previousMousePosition.y;
 
-            POINT mousePos;
-            if (GetCursorPos(&mousePos))
-            {
-                const LONG deltaX = mousePos.x - screenCenter.x;
-                const LONG deltaY = mousePos.y - screenCenter.y;
+                    g_cameraYaw += static_cast<float>(deltaX) * kMouseSensitivity;
+                    g_cameraPitch -= static_cast<float>(deltaY) * kMouseSensitivity;
+                    g_cameraPitch = (g_cameraPitch < -kMaxPitch) ? -kMaxPitch : g_cameraPitch;
+                    g_cameraPitch = (g_cameraPitch > kMaxPitch) ? kMaxPitch : g_cameraPitch;
+                }
 
-                g_cameraYaw += static_cast<float>(deltaX) * kMouseSensitivity;
-                g_cameraPitch -= static_cast<float>(deltaY) * kMouseSensitivity;
-                g_cameraPitch = (g_cameraPitch < -kMaxPitch) ? -kMaxPitch : g_cameraPitch;
-                g_cameraPitch = (g_cameraPitch > kMaxPitch) ? kMaxPitch : g_cameraPitch;
+                g_previousMousePosition = mousePos;
+                g_bHasPreviousMousePosition = true;
             }
+            else
+            {
+                RECT clientRect = { };
+                if (GetClientRect(g_hWnd, &clientRect))
+                {
+                    POINT clientCenter =
+                    {
+                        (clientRect.right - clientRect.left) / 2,
+                        (clientRect.bottom - clientRect.top) / 2
+                    };
+                    POINT screenCenter = clientCenter;
+                    ClientToScreen(g_hWnd, &screenCenter);
 
-            SetCursorPos(screenCenter.x, screenCenter.y);
+                    const LONG deltaX = mousePos.x - screenCenter.x;
+                    const LONG deltaY = mousePos.y - screenCenter.y;
+
+                    g_cameraYaw += static_cast<float>(deltaX) * kMouseSensitivity;
+                    g_cameraPitch -= static_cast<float>(deltaY) * kMouseSensitivity;
+                    g_cameraPitch = (g_cameraPitch < -kMaxPitch) ? -kMaxPitch : g_cameraPitch;
+                    g_cameraPitch = (g_cameraPitch > kMaxPitch) ? kMaxPitch : g_cameraPitch;
+
+                    SetCursorPos(screenCenter.x, screenCenter.y);
+                    ResetMouseLookTracking();
+                }
+            }
         }
     }
 
@@ -1039,7 +1090,7 @@ void UpdateInputAndCamera()
 
 void DrawOverlayText()
 {
-    TCHAR lines[13][128] =
+    TCHAR lines[14][128] =
     {
         _T("SSAO sample controls"),
         _T("W/A/S/D: move"),
@@ -1054,8 +1105,10 @@ void DrawOverlayText()
         _T("4: toggle mesh dialog"),
         _T("5: toggle simple SSAO"),
         _T(""),
+        _T(""),
     };
     _stprintf_s(lines[12], _T("SSAO depth range: %.1f m"), g_ssaoDepthRange);
+    _stprintf_s(lines[13], _T("Remote Desktop camera: %s"), g_bRemoteDesktopCameraMode ? _T("ON") : _T("OFF"));
 
     for (int i = 0; i < _countof(lines); ++i)
     {
@@ -1493,6 +1546,12 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (LOWORD(wParam) == kToolDialogUseThicknessCheckboxId)
         {
             g_bUseThicknessForSsao = (SendMessage(g_hUseThicknessCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogRemoteDesktopCheckboxId)
+        {
+            g_bRemoteDesktopCameraMode = (SendMessage(g_hRemoteDesktopCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            ResetMouseLookTracking();
             return 0;
         }
         if (LOWORD(wParam) == kToolDialogApplyThicknessScaleButtonId)
