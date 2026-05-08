@@ -63,24 +63,28 @@ float Random01(float2 seed)
     return frac(sin(dot(seed, float2(12.9898f, 78.233f))) * 43758.5453f);
 }
 
-float ComputeOcclusionSample(float2 shiftedTexCoord,
-                             float currentDepth,
-                             float3 currentNormal,
-                             float sampleDistanceMeters,
-                             float viewDepthMeters,
-                             float2 sampleDirectionNormalized,
-                             float distanceScale)
+float2 ComputeOcclusionSample(float2 shiftedTexCoord,
+                              float currentDepth,
+                              float3 currentNormal,
+                              float sampleDistanceMeters,
+                              float viewDepthMeters,
+                              float2 sampleDirectionNormalized,
+                              float distanceScale)
 {
     float sampleDistanceMetersScaled = sampleDistanceMeters * distanceScale;
     float viewDepthSafe = max(viewDepthMeters, 0.0001f);
     float2 sampleOffset = float2(sampleDirectionNormalized.x * (sampleDistanceMetersScaled * g_projectionScale.x * 0.5f / viewDepthSafe),
                                  -sampleDirectionNormalized.y * (sampleDistanceMetersScaled * g_projectionScale.y * 0.5f / viewDepthSafe));
-    float2 sampleTexCoord = saturate(shiftedTexCoord + sampleOffset);
+    float2 sampleTexCoord = shiftedTexCoord + sampleOffset;
+    if (sampleTexCoord.x < 0.0f || sampleTexCoord.x > 1.0f || sampleTexCoord.y < 0.0f || sampleTexCoord.y > 1.0f)
+    {
+        return float2(0.0f, 0.0f);
+    }
     float4 sampleTexCoordLod = float4(sampleTexCoord, 0.0f, 0.0f);
     float sampleDepth = tex2Dlod(depthSampler, sampleTexCoordLod).r;
     if (sampleDepth >= 0.999f)
     {
-        return 0.0f;
+        return float2(0.0f, 0.0f);
     }
 
     float targetNormalDepthBiasFactor = saturate(length(currentNormal.xy)) * g_targetNormalBiasScale;
@@ -94,7 +98,8 @@ float ComputeOcclusionSample(float2 shiftedTexCoord,
         backDepthWithMargin += sampleThickness * g_thicknessScale;
     }
 
-    return (frontDepthWithMargin <= currentDepth && currentDepth <= backDepthWithMargin) ? 1.0f : 0.0f;
+    float occluded = (frontDepthWithMargin <= currentDepth && currentDepth <= backDepthWithMargin) ? 1.0f : 0.0f;
+    return float2(occluded, 1.0f);
 }
 
 void VertexShader1(in  float4 inPosition  : POSITION,
@@ -137,14 +142,14 @@ void PixelShader1(in float4 inPosition    : POSITION,
             }
             if (g_simpleSsaoSampleCount <= 1)
             {
-                float occluded = ComputeOcclusionSample(shiftedTexCoord,
-                                                        currentDepth,
-                                                        currentNormal,
-                                                        sampleDistanceMeters,
-                                                        viewDepthMeters,
-                                                        sampleDirectionNormalized,
-                                                        1.0f);
-                if (occluded > 0.5f)
+                float2 occlusionSample = ComputeOcclusionSample(shiftedTexCoord,
+                                                                currentDepth,
+                                                                currentNormal,
+                                                                sampleDistanceMeters,
+                                                                viewDepthMeters,
+                                                                sampleDirectionNormalized,
+                                                                1.0f);
+                if (occlusionSample.x > 0.5f)
                 {
                     workColor = float4(0.0f, 0.0f, 0.0f, workColor.a);
                 }
@@ -152,6 +157,7 @@ void PixelShader1(in float4 inPosition    : POSITION,
             else
             {
                 float occlusionCount = 0.0f;
+                float validSampleCount = 0.0f;
                 [loop]
                 for (int sampleIndex = 0; sampleIndex < 128; ++sampleIndex)
                 {
@@ -161,18 +167,23 @@ void PixelShader1(in float4 inPosition    : POSITION,
                         float randomValue = Random01(shiftedTexCoord * g_screenSize + float2(sampleIndexFloat * 13.37f,
                                                                                              sampleIndexFloat * 7.91f));
                         float distanceScale = randomValue * randomValue;
-                        occlusionCount += ComputeOcclusionSample(shiftedTexCoord,
-                                                                 currentDepth,
-                                                                 currentNormal,
-                                                                 sampleDistanceMeters,
-                                                                 viewDepthMeters,
-                                                                 sampleDirectionNormalized,
-                                                                 distanceScale);
+                        float2 occlusionSample = ComputeOcclusionSample(shiftedTexCoord,
+                                                                        currentDepth,
+                                                                        currentNormal,
+                                                                        sampleDistanceMeters,
+                                                                        viewDepthMeters,
+                                                                        sampleDirectionNormalized,
+                                                                        distanceScale);
+                        occlusionCount += occlusionSample.x;
+                        validSampleCount += occlusionSample.y;
                     }
                 }
 
-                float occlusionRate = occlusionCount / (float)g_simpleSsaoSampleCount;
-                workColor.rgb *= (1.0f - occlusionRate);
+                if (validSampleCount > 0.0f)
+                {
+                    float occlusionRate = occlusionCount / validSampleCount;
+                    workColor.rgb *= (1.0f - occlusionRate);
+                }
             }
         }
     }
