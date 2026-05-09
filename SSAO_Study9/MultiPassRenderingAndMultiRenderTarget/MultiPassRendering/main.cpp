@@ -75,7 +75,7 @@ namespace
     constexpr int kDebugViewBackDepth = 4;
     constexpr float kCameraNearPlane = 0.1f;
     constexpr float kCameraFarPlane = 50.0f;
-    constexpr float kDefaultSsaoDepthRange = 50.0f;
+    constexpr float kDefaultSsaoDepthRange = 15.0f;
     constexpr float kMinSsaoDepthRange = 0.5f;
     constexpr float kDepthCompareDistance = 0.1f;
     constexpr float kAutoSsaoSmoothingDurationSeconds = 10.0f / 60.0f;
@@ -132,17 +132,19 @@ bool g_bPrevCursorToggleKeyDown = false;
 bool g_bPrevLambertToggleKeyDown = false;
 bool g_bPrevDialogToggleKeyDown = false;
 bool g_bPrevSimpleSsaoToggleKeyDown = false;
+bool g_bPrevTextureToggleKeyDown = false;
 bool g_bPrevEscapeToggleKeyDown = false;
 bool g_bMouseCursorVisible = false;
 bool g_bUseLambertLighting = true;
+bool g_bUseTexture = true;
 bool g_bEnableSimpleSsao = true;
 bool g_bEnableSsaoBlur = true;
 int g_ssaoBlurKernelSize = 11;
 bool g_bUseThicknessForSsao = true;
 bool g_bRemoteDesktopCameraMode = false;
 bool g_bAllowStraightUpDown = false;
-bool g_bDepthScaledSampleDistance = false;
-bool g_bAutoScaleSsaoByCenterDepth = false;
+bool g_bDepthScaledSampleDistance = true;
+bool g_bAutoScaleSsaoByCenterDepth = true;
 bool g_bSmoothAutoSsaoByCenterDepth = false;
 bool g_bUseFixedSsaoSampleDistance = true;
 bool g_bHasPreviousMousePosition = false;
@@ -1679,6 +1681,7 @@ void UpdateInputAndCamera()
     const bool lambertToggleKeyDown = (GetAsyncKeyState('3') & 0x8000) != 0;
     const bool dialogToggleKeyDown = (GetAsyncKeyState('4') & 0x8000) != 0;
     const bool simpleSsaoToggleKeyDown = (GetAsyncKeyState('5') & 0x8000) != 0;
+    const bool textureToggleKeyDown = (GetAsyncKeyState('6') & 0x8000) != 0;
     const bool escapeToggleKeyDown = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
 
     if (isToolDialogActive)
@@ -1691,6 +1694,7 @@ void UpdateInputAndCamera()
         g_bPrevLambertToggleKeyDown = lambertToggleKeyDown;
         g_bPrevDialogToggleKeyDown = dialogToggleKeyDown;
         g_bPrevSimpleSsaoToggleKeyDown = simpleSsaoToggleKeyDown;
+        g_bPrevTextureToggleKeyDown = textureToggleKeyDown;
         g_bPrevEscapeToggleKeyDown = escapeToggleKeyDown;
         ResetMouseLookTracking();
         return;
@@ -1785,6 +1789,12 @@ void UpdateInputAndCamera()
         g_bEnableSimpleSsao = !g_bEnableSimpleSsao;
     }
     g_bPrevSimpleSsaoToggleKeyDown = simpleSsaoToggleKeyDown;
+
+    if (textureToggleKeyDown && !g_bPrevTextureToggleKeyDown)
+    {
+        g_bUseTexture = !g_bUseTexture;
+    }
+    g_bPrevTextureToggleKeyDown = textureToggleKeyDown;
 
     if (!isMainWindowActive)
     {
@@ -1910,7 +1920,7 @@ void DrawOverlayText()
         _T("3: toggle lambert lighting"),
         _T("4: toggle mesh dialog"),
         _T("5: toggle simple SSAO"),
-        _T(""),
+        _T("6: toggle texture"),
         _T(""),
         _T(""),
     };
@@ -1923,10 +1933,9 @@ void DrawOverlayText()
         remoteDesktopCameraText = _T("ON");
     }
     _stprintf_s(lines[2], _T("Remote Desktop camera: %s"), remoteDesktopCameraText);
-    _stprintf_s(lines[14], _T("Shadow darken: %.2f"), g_shadowStrength);
-    _stprintf_s(lines[15], _T("Shadow saturate: %.2f (%s)"),
-                g_shadowSaturationStrength,
-                g_bUseShadowSaturation ? _T("on") : _T("off"));
+    _stprintf_s(lines[11], _T("Texture: %s"), g_bUseTexture ? _T("on") : _T("off"));
+    _stprintf_s(lines[12], _T("Shadow darken: %.2f"), g_shadowStrength);
+    _stprintf_s(lines[15], _T("Shadow saturate: %.2f (%s)"), g_shadowSaturationStrength, g_bUseShadowSaturation ? _T("on") : _T("off"));
 
     for (int i = 0; i < _countof(lines); ++i)
     {
@@ -1944,6 +1953,7 @@ void DrawSceneGeometry(const D3DXMATRIX& View, const D3DXMATRIX& Proj)
     D3DXMatrixTranslation(&largeCubeWorld, 0.0f, 0.0f, 0.0f);
     largeCubeWorldView = largeCubeWorld * View;
     largeCubeWorldViewProj = largeCubeWorld * View * Proj;
+    hResult = g_pEffect1->SetMatrix("g_matWorld", &largeCubeWorld); assert(hResult == S_OK);
     hResult = g_pEffect1->SetMatrix("g_matWorldView", &largeCubeWorldView); assert(hResult == S_OK);
     hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &largeCubeWorldViewProj); assert(hResult == S_OK);
     for (DWORD i = 0; i < g_dwLargeCubeNumMaterials; i++)
@@ -1959,6 +1969,7 @@ void DrawSceneGeometry(const D3DXMATRIX& View, const D3DXMATRIX& Proj)
     D3DXMatrixTranslation(&plateWorld, 0.0f, 0.0f, 0.0f);
     plateWorldView = plateWorld * View;
     plateWorldViewProj = plateWorld * View * Proj;
+    hResult = g_pEffect1->SetMatrix("g_matWorld", &plateWorld); assert(hResult == S_OK);
     hResult = g_pEffect1->SetMatrix("g_matWorldView", &plateWorldView); assert(hResult == S_OK);
     hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &plateWorldViewProj); assert(hResult == S_OK);
     for (DWORD i = 0; i < g_dwPlateNumMaterials; i++)
@@ -1980,6 +1991,7 @@ void DrawSceneGeometry(const D3DXMATRIX& View, const D3DXMATRIX& Proj)
         sceneMeshWorld = sceneMeshRotation * sceneMeshTranslation;
         sceneMeshWorldView = sceneMeshWorld * View;
         sceneMeshWorldViewProj = sceneMeshWorld * View * Proj;
+        hResult = g_pEffect1->SetMatrix("g_matWorld", &sceneMeshWorld); assert(hResult == S_OK);
         hResult = g_pEffect1->SetMatrix("g_matWorldView", &sceneMeshWorldView); assert(hResult == S_OK);
         hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &sceneMeshWorldViewProj); assert(hResult == S_OK);
         for (DWORD i = 0; i < sceneMesh.numMaterials; i++)
@@ -2002,6 +2014,7 @@ void DrawSceneGeometry(const D3DXMATRIX& View, const D3DXMATRIX& Proj)
         userMeshWorld = userMeshRotation * userMeshTranslation;
         userMeshWorldView = userMeshWorld * View;
         userMeshWorldViewProj = userMeshWorld * View * Proj;
+        hResult = g_pEffect1->SetMatrix("g_matWorld", &userMeshWorld); assert(hResult == S_OK);
         hResult = g_pEffect1->SetMatrix("g_matWorldView", &userMeshWorldView); assert(hResult == S_OK);
         hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &userMeshWorldViewProj); assert(hResult == S_OK);
         for (DWORD i = 0; i < userMesh.numMaterials; i++)
@@ -2028,6 +2041,7 @@ void DrawSceneGeometry(const D3DXMATRIX& View, const D3DXMATRIX& Proj)
             worldView = world * View;
             worldViewProj = world * View * Proj;
 
+            hResult = g_pEffect1->SetMatrix("g_matWorld", &world); assert(hResult == S_OK);
             hResult = g_pEffect1->SetMatrix("g_matWorldView", &worldView); assert(hResult == S_OK);
             hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &worldViewProj); assert(hResult == S_OK);
 
@@ -2260,7 +2274,7 @@ void RenderPass1()
     hResult = g_pEffect1->Begin(&numPass, 0); assert(hResult == S_OK);
     hResult = g_pEffect1->BeginPass(0);       assert(hResult == S_OK);
 
-    hResult = g_pEffect1->SetBool("g_bUseTexture", TRUE); assert(hResult == S_OK);
+    hResult = g_pEffect1->SetBool("g_bUseTexture", g_bUseTexture ? TRUE : FALSE); assert(hResult == S_OK);
     if (g_bUseLambertLighting)
     {
         hResult = g_pEffect1->SetBool("g_bUseLambert", TRUE); assert(hResult == S_OK);

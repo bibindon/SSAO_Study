@@ -1,5 +1,6 @@
 float4x4 g_matWorldViewProj;
 float4x4 g_matWorldView;
+float4x4 g_matWorld;
 float4 g_lightNormal = { -0.3f, -1.0f, -0.5f, 0.0f };
 float3 g_ambient = { 0.3f, 0.3f, 0.3f };
 float g_ssaoDepthRange = 50.0f;
@@ -30,7 +31,7 @@ void VertexShader1(
     float4 clipPosition = mul(inPosition, g_matWorldViewProj);
     outPosition = clipPosition;
     outTexCoord0 = inTexCoord0;
-    outNormal = normalize(inNormal);
+    outNormal = normalize(mul(float4(inNormal, 0.0f), g_matWorld).xyz);
     outLocalPosition = inPosition;
 }
 
