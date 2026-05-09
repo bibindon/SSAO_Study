@@ -135,7 +135,7 @@ bool g_bPrevEscapeToggleKeyDown = false;
 bool g_bMouseCursorVisible = false;
 bool g_bUseLambertLighting = true;
 bool g_bEnableSimpleSsao = true;
-bool g_bEnableSsaoBlur = false;
+bool g_bEnableSsaoBlur = true;
 bool g_bUseLargeSsaoBlur = true;
 bool g_bUseThicknessForSsao = true;
 bool g_bRemoteDesktopCameraMode = false;
@@ -143,13 +143,13 @@ bool g_bAllowStraightUpDown = false;
 bool g_bDepthScaledSampleDistance = false;
 bool g_bAutoScaleSsaoByCenterDepth = false;
 bool g_bSmoothAutoSsaoByCenterDepth = false;
-bool g_bUseFixedSsaoSampleDistance = false;
+bool g_bUseFixedSsaoSampleDistance = true;
 bool g_bHasPreviousMousePosition = false;
 int g_debugViewMode = kDebugViewNone;
 float g_simpleSsaoSampleDistanceMeters = 1.0f;
 float g_autoSsaoSampleDistanceMeters = 1.0f;
 float g_targetAutoSsaoSampleDistanceMeters = 1.0f;
-int g_simpleSsaoSampleCount = 1;
+int g_simpleSsaoSampleCount = 16;
 float g_thicknessScale = 1.0f;
 float g_ssaoDepthRange = kDefaultSsaoDepthRange;
 float g_autoSsaoDepthRange = kDefaultSsaoDepthRange;
@@ -2445,6 +2445,8 @@ void RenderPass2()
     hResult = g_pEffect2->BeginPass(0);           assert(hResult == S_OK);
 
         hResult = g_pEffect2->SetTexture("ssaoTexture", g_pSsaoRenderTarget); assert(hResult == S_OK);
+        hResult = g_pEffect2->SetTexture("depthTexture", g_pDepthRenderTarget); assert(hResult == S_OK);
+        hResult = g_pEffect2->SetTexture("normalTexture", g_pNormalRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->CommitChanges(); assert(hResult == S_OK);
         DrawFullscreenQuad();
 

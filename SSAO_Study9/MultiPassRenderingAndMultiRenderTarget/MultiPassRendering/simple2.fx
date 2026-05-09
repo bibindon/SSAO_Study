@@ -28,48 +28,48 @@ texture texture1;
 sampler textureSampler = sampler_state {
     Texture = (texture1);
     MipFilter = NONE;
-    MinFilter = POINT;
-    MagFilter = POINT;
+    MinFilter = NONE;
+    MagFilter = NONE;
 };
 
 texture depthTexture;
 sampler depthSampler = sampler_state {
     Texture = (depthTexture);
     MipFilter = NONE;
-    MinFilter = POINT;
-    MagFilter = POINT;
+    MinFilter = NONE;
+    MagFilter = NONE;
 };
 
 texture backDepthTexture;
 sampler backDepthSampler = sampler_state {
     Texture = (backDepthTexture);
     MipFilter = NONE;
-    MinFilter = POINT;
-    MagFilter = POINT;
+    MinFilter = NONE;
+    MagFilter = NONE;
 };
 
 texture thicknessTexture;
 sampler thicknessSampler = sampler_state {
     Texture = (thicknessTexture);
     MipFilter = NONE;
-    MinFilter = POINT;
-    MagFilter = POINT;
+    MinFilter = NONE;
+    MagFilter = NONE;
 };
 
 texture normalTexture;
 sampler normalSampler = sampler_state {
     Texture = (normalTexture);
     MipFilter = NONE;
-    MinFilter = POINT;
-    MagFilter = POINT;
+    MinFilter = NONE;
+    MagFilter = NONE;
 };
 
 texture ssaoTexture;
 sampler ssaoSampler = sampler_state {
     Texture = (ssaoTexture);
     MipFilter = NONE;
-    MinFilter = POINT;
-    MagFilter = POINT;
+    MinFilter = NONE;
+    MagFilter = NONE;
 };
 
 float Random01(float2 seed)
@@ -94,6 +94,48 @@ float2 ProjectViewPositionToTexCoord(float3 viewPosition)
                         viewPosition.y * g_projectionScale.y / viewDepthSafe);
     return float2(ndc.x * 0.5f + 0.5f,
                   0.5f - ndc.y * 0.5f);
+}
+
+float ComputeDepthAwareBlurWeight(float centerDepth, float sampleDepth)
+{
+    if (centerDepth >= 0.999f || sampleDepth >= 0.999f)
+    {
+        return 0.0f;
+    }
+
+    float centerDepthMeters = max(centerDepth * g_ssaoDepthRange, 0.001f);
+    float sampleDepthMeters = sampleDepth * g_ssaoDepthRange;
+    float depthDifferenceMeters = abs(sampleDepthMeters - centerDepthMeters);
+
+    // 近距離では少しの差でも別面として扱い、遠距離では許容差を少し広げる。
+    float depthToleranceMeters = max(0.01f, centerDepthMeters * 0.08f);
+    float normalizedDifference = depthDifferenceMeters / depthToleranceMeters;
+    if (normalizedDifference >= 1.0f)
+    {
+        return 0.0f;
+    }
+
+    float closeness = 1.0f - normalizedDifference;
+    return closeness * closeness;
+}
+
+float3 DecodeNormal(float4 encodedNormal)
+{
+    float3 normal = encodedNormal.xyz * 2.0f - 1.0f;
+    return normalize(normal);
+}
+
+float ComputeNormalAwareBlurWeight(float3 centerNormal, float3 sampleNormal)
+{
+    float normalAlignment = dot(centerNormal, sampleNormal);
+    if (normalAlignment <= 0.55f)
+    {
+        return 0.0f;
+    }
+
+    float normalizedDifference = saturate((1.0f - normalAlignment) / 0.45f);
+    float closeness = 1.0f - normalizedDifference;
+    return closeness * closeness;
 }
 
 float2 ComputeOcclusionSample(float2 shiftedTexCoord,
@@ -286,6 +328,8 @@ void PixelShaderSsaoBlur5x5(in float4 inPosition    : POSITION,
     float2 halfPixelOffset = 0.5f / g_screenSize;
     float2 shiftedTexCoord = inTexCood + halfPixelOffset;
     float2 texelSize = 1.0f / g_screenSize;
+    float centerDepth = tex2D(depthSampler, shiftedTexCoord).r;
+    float3 centerNormal = DecodeNormal(tex2D(normalSampler, shiftedTexCoord));
     float weights[5] = { 1.0f, 4.0f, 6.0f, 4.0f, 1.0f };
     float blurredValue = 0.0f;
     float weightSum = 0.0f;
@@ -298,7 +342,11 @@ void PixelShaderSsaoBlur5x5(in float4 inPosition    : POSITION,
         {
             float2 sampleTexCoord = shiftedTexCoord + float2((float)x * texelSize.x, (float)y * texelSize.y);
             sampleTexCoord = saturate(sampleTexCoord);
-            float weight = weights[x + 2] * weights[y + 2];
+            float sampleDepth = tex2D(depthSampler, sampleTexCoord).r;
+            float3 sampleNormal = DecodeNormal(tex2D(normalSampler, sampleTexCoord));
+            float depthWeight = ComputeDepthAwareBlurWeight(centerDepth, sampleDepth);
+            float normalWeight = ComputeNormalAwareBlurWeight(centerNormal, sampleNormal);
+            float weight = weights[x + 2] * weights[y + 2] * depthWeight * normalWeight;
             blurredValue += tex2D(ssaoSampler, sampleTexCoord).r * weight;
             weightSum += weight;
         }
@@ -320,6 +368,8 @@ void PixelShaderSsaoBlur11x11(in float4 inPosition    : POSITION,
     float2 halfPixelOffset = 0.5f / g_screenSize;
     float2 shiftedTexCoord = inTexCood + halfPixelOffset;
     float2 texelSize = 1.0f / g_screenSize;
+    float centerDepth = tex2D(depthSampler, shiftedTexCoord).r;
+    float3 centerNormal = DecodeNormal(tex2D(normalSampler, shiftedTexCoord));
     float weights[11] = { 1.0f, 10.0f, 45.0f, 120.0f, 210.0f, 252.0f, 210.0f, 120.0f, 45.0f, 10.0f, 1.0f };
     float blurredValue = 0.0f;
     float weightSum = 0.0f;
@@ -332,7 +382,11 @@ void PixelShaderSsaoBlur11x11(in float4 inPosition    : POSITION,
         {
             float2 sampleTexCoord = shiftedTexCoord + float2((float)x * texelSize.x, (float)y * texelSize.y);
             sampleTexCoord = saturate(sampleTexCoord);
-            float weight = weights[x + 5] * weights[y + 5];
+            float sampleDepth = tex2D(depthSampler, sampleTexCoord).r;
+            float3 sampleNormal = DecodeNormal(tex2D(normalSampler, sampleTexCoord));
+            float depthWeight = ComputeDepthAwareBlurWeight(centerDepth, sampleDepth);
+            float normalWeight = ComputeNormalAwareBlurWeight(centerNormal, sampleNormal);
+            float weight = weights[x + 5] * weights[y + 5] * depthWeight * normalWeight;
             blurredValue += tex2D(ssaoSampler, sampleTexCoord).r * weight;
             weightSum += weight;
         }
