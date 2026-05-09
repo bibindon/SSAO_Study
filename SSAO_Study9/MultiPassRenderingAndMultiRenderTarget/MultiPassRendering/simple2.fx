@@ -9,6 +9,7 @@ bool g_bUseThicknessForSsao = true;
 bool g_bDepthScaledSampleDistance = false;
 bool g_bEnableThicknessCap = false;
 bool g_bUseFixedSsaoSampleDistance = false;
+bool g_bUseShadowSaturation = false;
 int g_simpleSsaoSampleCount = 1;
 float2 g_screenSize = { 1600.0f, 900.0f };
 float2 g_projectionScale = { 1.0f, 1.0f };
@@ -21,6 +22,7 @@ float g_targetNormalBiasScale = 2.0f;
 float g_targetDepthBiasScale = 1.0f;
 float g_thicknessCap = 0.02f;
 float g_shadowStrength = 1.0f;
+float g_shadowSaturationStrength = 1.0f;
 
 texture texture1;
 sampler textureSampler = sampler_state {
@@ -264,6 +266,14 @@ void PixelShaderComposite(in float4 inPosition    : POSITION,
     float ssaoFactor = tex2D(ssaoSampler, shiftedTexCoord).r;
     float shadowFactor = saturate(1.0f - g_shadowStrength * (1.0f - ssaoFactor));
     workColor.rgb *= shadowFactor;
+    if (g_bUseShadowSaturation)
+    {
+        float shadowAmount = saturate(g_shadowSaturationStrength * (1.0f - ssaoFactor));
+        float luminance = dot(workColor.rgb, float3(0.299f, 0.587f, 0.114f));
+        float3 grayscale = float3(luminance, luminance, luminance);
+        float saturationScale = 1.0f + shadowAmount;
+        workColor.rgb = grayscale + (workColor.rgb - grayscale) * saturationScale;
+    }
     workColor = saturate(workColor);
     outColor = workColor;
 }

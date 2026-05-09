@@ -64,6 +64,9 @@ namespace
     constexpr int kToolDialogFixedSsaoSampleDistanceCheckboxId = 1030;
     constexpr int kToolDialogShadowStrengthEditId = 1031;
     constexpr int kToolDialogApplyShadowStrengthButtonId = 1032;
+    constexpr int kToolDialogSaturateShadowCheckboxId = 1033;
+    constexpr int kToolDialogShadowSaturationStrengthEditId = 1034;
+    constexpr int kToolDialogApplyShadowSaturationStrengthButtonId = 1035;
     constexpr int kDebugViewNone = 0;
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
@@ -158,6 +161,8 @@ float g_sampleDepthBiasDistance = 0.1f;
 bool g_bEnableThicknessCap = false;
 float g_thicknessCapMeters = 1.0f;
 float g_shadowStrength = 1.0f;
+float g_shadowSaturationStrength = 1.0f;
+bool g_bUseShadowSaturation = false;
 float g_cameraYaw = -D3DX_PI * 0.25f;
 float g_cameraPitch = -0.34f;
 D3DXVECTOR3 g_cameraPosition(2.0f, 1.0f, -3.0f);
@@ -192,6 +197,9 @@ HWND g_hSsaoBlur11x11Radio = NULL;
 HWND g_hFixedSsaoSampleDistanceCheckbox = NULL;
 HWND g_hShadowStrengthEdit = NULL;
 HWND g_hApplyShadowStrengthButton = NULL;
+HWND g_hSaturateShadowCheckbox = NULL;
+HWND g_hShadowSaturationStrengthEdit = NULL;
+HWND g_hApplyShadowSaturationStrengthButton = NULL;
 HWND g_hEnableThicknessCapCheckbox = NULL;
 HWND g_hThicknessCapEdit = NULL;
 HWND g_hApplyThicknessCapButton = NULL;
@@ -727,7 +735,7 @@ void CreateToolDialog()
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,
                                    340,
-                                   876,
+                                   972,
                                    g_hWnd,
                                    NULL,
                                    wc.hInstance,
@@ -1357,11 +1365,74 @@ void CreateToolDialog()
     assert(g_hApplyShadowStrengthButton != NULL);
     ApplyToolDialogFont(g_hApplyShadowStrengthButton);
 
+    g_hSaturateShadowCheckbox = CreateWindow(_T("BUTTON"),
+                                             _T("Boost saturation in shadow"),
+                                             WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                                             20,
+                                             644,
+                                             240,
+                                             24,
+                                             g_hToolDialog,
+                                             reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogSaturateShadowCheckboxId)),
+                                             wc.hInstance,
+                                             NULL);
+    assert(g_hSaturateShadowCheckbox != NULL);
+    ApplyToolDialogFont(g_hSaturateShadowCheckbox);
+    if (g_bUseShadowSaturation)
+    {
+        SendMessage(g_hSaturateShadowCheckbox, BM_SETCHECK, BST_CHECKED, 0);
+    }
+    else
+    {
+        SendMessage(g_hSaturateShadowCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
+    }
+
+    HWND hShadowSaturationStrengthLabel = CreateWindow(_T("STATIC"),
+                                                       _T("Shadow saturation:"),
+                                                       WS_CHILD | WS_VISIBLE,
+                                                       20,
+                                                       676,
+                                                       130,
+                                                       20,
+                                                       g_hToolDialog,
+                                                       NULL,
+                                                       wc.hInstance,
+                                                       NULL);
+    ApplyToolDialogFont(hShadowSaturationStrengthLabel);
+
+    g_hShadowSaturationStrengthEdit = CreateWindow(_T("EDIT"),
+                                                   _T("1.00"),
+                                                   WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                                                   160,
+                                                   672,
+                                                   60,
+                                                   24,
+                                                   g_hToolDialog,
+                                                   reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogShadowSaturationStrengthEditId)),
+                                                   wc.hInstance,
+                                                   NULL);
+    assert(g_hShadowSaturationStrengthEdit != NULL);
+    ApplyToolDialogFont(g_hShadowSaturationStrengthEdit);
+
+    g_hApplyShadowSaturationStrengthButton = CreateWindow(_T("BUTTON"),
+                                                          _T("Apply"),
+                                                          WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                                          230,
+                                                          670,
+                                                          60,
+                                                          28,
+                                                          g_hToolDialog,
+                                                          reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogApplyShadowSaturationStrengthButtonId)),
+                                                          wc.hInstance,
+                                                          NULL);
+    assert(g_hApplyShadowSaturationStrengthButton != NULL);
+    ApplyToolDialogFont(g_hApplyShadowSaturationStrengthButton);
+
     g_hEnableThicknessCapCheckbox = CreateWindow(_T("BUTTON"),
                                                  _T("Enable thickness cap"),
                                                  WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                                  20,
-                                                 652,
+                                                 716,
                                                  180,
                                                  24,
                                                  g_hToolDialog,
@@ -1383,7 +1454,7 @@ void CreateToolDialog()
                                            _T("Thickness cap (m):"),
                                            WS_CHILD | WS_VISIBLE,
                                            20,
-                                           684,
+                                           748,
                                            130,
                                            20,
                                            g_hToolDialog,
@@ -1396,7 +1467,7 @@ void CreateToolDialog()
                                        _T("1.00"),
                                        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                        160,
-                                       680,
+                                       744,
                                        60,
                                        24,
                                        g_hToolDialog,
@@ -1410,7 +1481,7 @@ void CreateToolDialog()
                                               _T("Apply"),
                                               WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                               230,
-                                              678,
+                                              742,
                                               60,
                                               28,
                                               g_hToolDialog,
@@ -1435,6 +1506,10 @@ void CreateToolDialog()
     TCHAR shadowStrengthText[64] = { };
     _stprintf_s(shadowStrengthText, _T("%.2f"), g_shadowStrength);
     SetWindowText(g_hShadowStrengthEdit, shadowStrengthText);
+
+    TCHAR shadowSaturationStrengthText[64] = { };
+    _stprintf_s(shadowSaturationStrengthText, _T("%.2f"), g_shadowSaturationStrength);
+    SetWindowText(g_hShadowSaturationStrengthEdit, shadowSaturationStrengthText);
 
     TCHAR normalBiasScaleText[64] = { };
     _stprintf_s(normalBiasScaleText, _T("%.5f"), g_targetNormalBiasScale);
@@ -1824,7 +1899,10 @@ void DrawOverlayText()
         remoteDesktopCameraText = _T("ON");
     }
     _stprintf_s(lines[2], _T("Remote Desktop camera: %s"), remoteDesktopCameraText);
-    _stprintf_s(lines[15], _T("Shadow strength: %.2f"), g_shadowStrength);
+    _stprintf_s(lines[14], _T("Shadow darken: %.2f"), g_shadowStrength);
+    _stprintf_s(lines[15], _T("Shadow saturate: %.2f (%s)"),
+                g_shadowSaturationStrength,
+                g_bUseShadowSaturation ? _T("on") : _T("off"));
 
     for (int i = 0; i < _countof(lines); ++i)
     {
@@ -2328,6 +2406,8 @@ void RenderPass2()
     hResult = g_pEffect2->SetFloat("g_targetNormalBiasScale", g_targetNormalBiasScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_targetDepthBiasScale", g_targetDepthBiasScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_shadowStrength", g_shadowStrength); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloat("g_shadowSaturationStrength", g_shadowSaturationStrength); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetBool("g_bUseShadowSaturation", g_bUseShadowSaturation ? TRUE : FALSE); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("depthTexture", g_pDepthRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("thicknessTexture", g_pThicknessRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("normalTexture", g_pNormalRenderTarget); assert(hResult == S_OK);
@@ -2667,6 +2747,34 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 TCHAR normalizedText[64] = { };
                 _stprintf_s(normalizedText, _T("%.2f"), g_shadowStrength);
                 SetWindowText(g_hShadowStrengthEdit, normalizedText);
+            }
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogSaturateShadowCheckboxId)
+        {
+            g_bUseShadowSaturation = (SendMessage(g_hSaturateShadowCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogApplyShadowSaturationStrengthButtonId)
+        {
+            TCHAR buffer[64] = { };
+            GetWindowText(g_hShadowSaturationStrengthEdit, buffer, _countof(buffer));
+            float shadowSaturationStrength = g_shadowSaturationStrength;
+            if (_stscanf_s(buffer, _T("%f"), &shadowSaturationStrength) == 1)
+            {
+                if (shadowSaturationStrength < 0.0f)
+                {
+                    shadowSaturationStrength = 0.0f;
+                }
+                if (shadowSaturationStrength > 5.0f)
+                {
+                    shadowSaturationStrength = 5.0f;
+                }
+                g_shadowSaturationStrength = shadowSaturationStrength;
+
+                TCHAR normalizedText[64] = { };
+                _stprintf_s(normalizedText, _T("%.2f"), g_shadowSaturationStrength);
+                SetWindowText(g_hShadowSaturationStrengthEdit, normalizedText);
             }
             return 0;
         }
