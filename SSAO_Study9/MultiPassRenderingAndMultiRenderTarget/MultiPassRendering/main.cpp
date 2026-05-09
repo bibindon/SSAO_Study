@@ -61,6 +61,7 @@ namespace
     constexpr int kToolDialogEnableSsaoBlurCheckboxId = 1027;
     constexpr int kToolDialogSsaoBlur5x5RadioId = 1028;
     constexpr int kToolDialogSsaoBlur11x11RadioId = 1029;
+    constexpr int kToolDialogSsaoBlur21x21RadioId = 1036;
     constexpr int kToolDialogFixedSsaoSampleDistanceCheckboxId = 1030;
     constexpr int kToolDialogShadowStrengthEditId = 1031;
     constexpr int kToolDialogApplyShadowStrengthButtonId = 1032;
@@ -136,7 +137,7 @@ bool g_bMouseCursorVisible = false;
 bool g_bUseLambertLighting = true;
 bool g_bEnableSimpleSsao = true;
 bool g_bEnableSsaoBlur = true;
-bool g_bUseLargeSsaoBlur = true;
+int g_ssaoBlurKernelSize = 11;
 bool g_bUseThicknessForSsao = true;
 bool g_bRemoteDesktopCameraMode = false;
 bool g_bAllowStraightUpDown = false;
@@ -194,6 +195,7 @@ HWND g_hSmoothAutoSsaoCheckbox = NULL;
 HWND g_hEnableSsaoBlurCheckbox = NULL;
 HWND g_hSsaoBlur5x5Radio = NULL;
 HWND g_hSsaoBlur11x11Radio = NULL;
+HWND g_hSsaoBlur21x21Radio = NULL;
 HWND g_hFixedSsaoSampleDistanceCheckbox = NULL;
 HWND g_hShadowStrengthEdit = NULL;
 HWND g_hApplyShadowStrengthButton = NULL;
@@ -1291,22 +1293,44 @@ void CreateToolDialog()
                                          NULL);
     assert(g_hSsaoBlur11x11Radio != NULL);
     ApplyToolDialogFont(g_hSsaoBlur11x11Radio);
-    if (g_bUseLargeSsaoBlur)
+
+    g_hSsaoBlur21x21Radio = CreateWindow(_T("BUTTON"),
+                                         _T("21x21 blur"),
+                                         WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON,
+                                         40,
+                                         578,
+                                         120,
+                                         22,
+                                         g_hToolDialog,
+                                         reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogSsaoBlur21x21RadioId)),
+                                         wc.hInstance,
+                                         NULL);
+    assert(g_hSsaoBlur21x21Radio != NULL);
+    ApplyToolDialogFont(g_hSsaoBlur21x21Radio);
+    if (g_ssaoBlurKernelSize >= 21)
+    {
+        SendMessage(g_hSsaoBlur5x5Radio, BM_SETCHECK, BST_UNCHECKED, 0);
+        SendMessage(g_hSsaoBlur11x11Radio, BM_SETCHECK, BST_UNCHECKED, 0);
+        SendMessage(g_hSsaoBlur21x21Radio, BM_SETCHECK, BST_CHECKED, 0);
+    }
+    else if (g_ssaoBlurKernelSize >= 11)
     {
         SendMessage(g_hSsaoBlur5x5Radio, BM_SETCHECK, BST_UNCHECKED, 0);
         SendMessage(g_hSsaoBlur11x11Radio, BM_SETCHECK, BST_CHECKED, 0);
+        SendMessage(g_hSsaoBlur21x21Radio, BM_SETCHECK, BST_UNCHECKED, 0);
     }
     else
     {
         SendMessage(g_hSsaoBlur5x5Radio, BM_SETCHECK, BST_CHECKED, 0);
         SendMessage(g_hSsaoBlur11x11Radio, BM_SETCHECK, BST_UNCHECKED, 0);
+        SendMessage(g_hSsaoBlur21x21Radio, BM_SETCHECK, BST_UNCHECKED, 0);
     }
 
     g_hFixedSsaoSampleDistanceCheckbox = CreateWindow(_T("BUTTON"),
                                                       _T("Use fixed SSAO sample dist"),
                                                       WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                                       20,
-                                                      584,
+                                                      608,
                                                       220,
                                                       24,
                                                       g_hToolDialog,
@@ -1328,7 +1352,7 @@ void CreateToolDialog()
                                              _T("Shadow strength:"),
                                              WS_CHILD | WS_VISIBLE,
                                              20,
-                                             616,
+                                             640,
                                              130,
                                              20,
                                              g_hToolDialog,
@@ -1341,7 +1365,7 @@ void CreateToolDialog()
                                          _T("1.00"),
                                          WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                          160,
-                                         612,
+                                         636,
                                          60,
                                          24,
                                          g_hToolDialog,
@@ -1355,7 +1379,7 @@ void CreateToolDialog()
                                                 _T("Apply"),
                                                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                                 230,
-                                                610,
+                                                634,
                                                 60,
                                                 28,
                                                 g_hToolDialog,
@@ -1369,7 +1393,7 @@ void CreateToolDialog()
                                              _T("Boost saturation in shadow"),
                                              WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                              20,
-                                             644,
+                                             668,
                                              240,
                                              24,
                                              g_hToolDialog,
@@ -1391,7 +1415,7 @@ void CreateToolDialog()
                                                        _T("Shadow saturation:"),
                                                        WS_CHILD | WS_VISIBLE,
                                                        20,
-                                                       676,
+                                                       700,
                                                        130,
                                                        20,
                                                        g_hToolDialog,
@@ -1404,7 +1428,7 @@ void CreateToolDialog()
                                                    _T("1.00"),
                                                    WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                                    160,
-                                                   672,
+                                                   696,
                                                    60,
                                                    24,
                                                    g_hToolDialog,
@@ -1418,7 +1442,7 @@ void CreateToolDialog()
                                                           _T("Apply"),
                                                           WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                                           230,
-                                                          670,
+                                                          694,
                                                           60,
                                                           28,
                                                           g_hToolDialog,
@@ -1432,7 +1456,7 @@ void CreateToolDialog()
                                                  _T("Enable thickness cap"),
                                                  WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                                  20,
-                                                 716,
+                                                 740,
                                                  180,
                                                  24,
                                                  g_hToolDialog,
@@ -1454,7 +1478,7 @@ void CreateToolDialog()
                                            _T("Thickness cap (m):"),
                                            WS_CHILD | WS_VISIBLE,
                                            20,
-                                           748,
+                                           772,
                                            130,
                                            20,
                                            g_hToolDialog,
@@ -1467,7 +1491,7 @@ void CreateToolDialog()
                                        _T("1.00"),
                                        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                        160,
-                                       744,
+                                       768,
                                        60,
                                        24,
                                        g_hToolDialog,
@@ -1481,7 +1505,7 @@ void CreateToolDialog()
                                               _T("Apply"),
                                               WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                               230,
-                                              742,
+                                              766,
                                               60,
                                               28,
                                               g_hToolDialog,
@@ -2431,7 +2455,11 @@ void RenderPass2()
 
         hResult = g_pd3dDevice->BeginScene(); assert(hResult == S_OK);
 
-        if (g_bUseLargeSsaoBlur)
+        if (g_ssaoBlurKernelSize >= 21)
+        {
+            hResult = g_pEffect2->SetTechnique("TechniqueSsaoBlurXLarge"); assert(hResult == S_OK);
+        }
+        else if (g_ssaoBlurKernelSize >= 11)
         {
             hResult = g_pEffect2->SetTechnique("TechniqueSsaoBlurLarge"); assert(hResult == S_OK);
         }
@@ -2716,12 +2744,17 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         }
         if (LOWORD(wParam) == kToolDialogSsaoBlur5x5RadioId)
         {
-            g_bUseLargeSsaoBlur = false;
+            g_ssaoBlurKernelSize = 5;
             return 0;
         }
         if (LOWORD(wParam) == kToolDialogSsaoBlur11x11RadioId)
         {
-            g_bUseLargeSsaoBlur = true;
+            g_ssaoBlurKernelSize = 11;
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogSsaoBlur21x21RadioId)
+        {
+            g_ssaoBlurKernelSize = 21;
             return 0;
         }
         if (LOWORD(wParam) == kToolDialogFixedSsaoSampleDistanceCheckboxId)

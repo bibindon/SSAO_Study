@@ -138,6 +138,13 @@ float ComputeNormalAwareBlurWeight(float3 centerNormal, float3 sampleNormal)
     return closeness * closeness;
 }
 
+float ComputeBlurSampleWeight(float baseWeight, float centerDepth, float sampleDepth, float3 centerNormal, float3 sampleNormal)
+{
+    float depthWeight = ComputeDepthAwareBlurWeight(centerDepth, sampleDepth);
+    float normalWeight = ComputeNormalAwareBlurWeight(centerNormal, sampleNormal);
+    return baseWeight * depthWeight * normalWeight;
+}
+
 float2 ComputeOcclusionSample(float2 shiftedTexCoord,
                               float currentDepth,
                               float3 currentNormal,
@@ -330,7 +337,6 @@ void PixelShaderSsaoBlur5x5(in float4 inPosition    : POSITION,
     float2 texelSize = 1.0f / g_screenSize;
     float centerDepth = tex2D(depthSampler, shiftedTexCoord).r;
     float3 centerNormal = DecodeNormal(tex2D(normalSampler, shiftedTexCoord));
-    float weights[5] = { 1.0f, 4.0f, 6.0f, 4.0f, 1.0f };
     float blurredValue = 0.0f;
     float weightSum = 0.0f;
 
@@ -344,9 +350,7 @@ void PixelShaderSsaoBlur5x5(in float4 inPosition    : POSITION,
             sampleTexCoord = saturate(sampleTexCoord);
             float sampleDepth = tex2D(depthSampler, sampleTexCoord).r;
             float3 sampleNormal = DecodeNormal(tex2D(normalSampler, sampleTexCoord));
-            float depthWeight = ComputeDepthAwareBlurWeight(centerDepth, sampleDepth);
-            float normalWeight = ComputeNormalAwareBlurWeight(centerNormal, sampleNormal);
-            float weight = weights[x + 2] * weights[y + 2] * depthWeight * normalWeight;
+            float weight = ComputeBlurSampleWeight(1.0f, centerDepth, sampleDepth, centerNormal, sampleNormal);
             blurredValue += tex2D(ssaoSampler, sampleTexCoord).r * weight;
             weightSum += weight;
         }
@@ -370,7 +374,6 @@ void PixelShaderSsaoBlur11x11(in float4 inPosition    : POSITION,
     float2 texelSize = 1.0f / g_screenSize;
     float centerDepth = tex2D(depthSampler, shiftedTexCoord).r;
     float3 centerNormal = DecodeNormal(tex2D(normalSampler, shiftedTexCoord));
-    float weights[11] = { 1.0f, 10.0f, 45.0f, 120.0f, 210.0f, 252.0f, 210.0f, 120.0f, 45.0f, 10.0f, 1.0f };
     float blurredValue = 0.0f;
     float weightSum = 0.0f;
 
@@ -384,9 +387,44 @@ void PixelShaderSsaoBlur11x11(in float4 inPosition    : POSITION,
             sampleTexCoord = saturate(sampleTexCoord);
             float sampleDepth = tex2D(depthSampler, sampleTexCoord).r;
             float3 sampleNormal = DecodeNormal(tex2D(normalSampler, sampleTexCoord));
-            float depthWeight = ComputeDepthAwareBlurWeight(centerDepth, sampleDepth);
-            float normalWeight = ComputeNormalAwareBlurWeight(centerNormal, sampleNormal);
-            float weight = weights[x + 5] * weights[y + 5] * depthWeight * normalWeight;
+            float weight = ComputeBlurSampleWeight(1.0f, centerDepth, sampleDepth, centerNormal, sampleNormal);
+            blurredValue += tex2D(ssaoSampler, sampleTexCoord).r * weight;
+            weightSum += weight;
+        }
+    }
+
+    float ssaoFactor = 1.0f;
+    if (weightSum > 0.0f)
+    {
+        ssaoFactor = blurredValue / weightSum;
+    }
+    outColor = float4(ssaoFactor, ssaoFactor, ssaoFactor, 1.0f);
+}
+
+void PixelShaderSsaoBlur21x21(in float4 inPosition    : POSITION,
+                              in float2 inTexCood     : TEXCOORD0,
+
+                              out float4 outColor     : COLOR)
+{
+    float2 halfPixelOffset = 0.5f / g_screenSize;
+    float2 shiftedTexCoord = inTexCood + halfPixelOffset;
+    float2 texelSize = 1.0f / g_screenSize;
+    float centerDepth = tex2D(depthSampler, shiftedTexCoord).r;
+    float3 centerNormal = DecodeNormal(tex2D(normalSampler, shiftedTexCoord));
+    float blurredValue = 0.0f;
+    float weightSum = 0.0f;
+
+    [loop]
+    for (int y = -10; y <= 10; ++y)
+    {
+        [loop]
+        for (int x = -10; x <= 10; ++x)
+        {
+            float2 sampleTexCoord = shiftedTexCoord + float2((float)x * texelSize.x, (float)y * texelSize.y);
+            sampleTexCoord = saturate(sampleTexCoord);
+            float sampleDepth = tex2D(depthSampler, sampleTexCoord).r;
+            float3 sampleNormal = DecodeNormal(tex2D(normalSampler, sampleTexCoord));
+            float weight = ComputeBlurSampleWeight(1.0f, centerDepth, sampleDepth, centerNormal, sampleNormal);
             blurredValue += tex2D(ssaoSampler, sampleTexCoord).r * weight;
             weightSum += weight;
         }
@@ -491,6 +529,17 @@ technique TechniqueSsaoBlurLarge
 
         VertexShader = compile vs_3_0 VertexShader1();
         PixelShader = compile ps_3_0 PixelShaderSsaoBlur11x11();
+   }
+}
+
+technique TechniqueSsaoBlurXLarge
+{
+    pass Pass1
+    {
+        CullMode = NONE;
+
+        VertexShader = compile vs_3_0 VertexShader1();
+        PixelShader = compile ps_3_0 PixelShaderSsaoBlur21x21();
    }
 }
 
