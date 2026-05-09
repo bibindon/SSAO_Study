@@ -62,6 +62,8 @@ namespace
     constexpr int kToolDialogSsaoBlur5x5RadioId = 1028;
     constexpr int kToolDialogSsaoBlur11x11RadioId = 1029;
     constexpr int kToolDialogFixedSsaoSampleDistanceCheckboxId = 1030;
+    constexpr int kToolDialogShadowStrengthEditId = 1031;
+    constexpr int kToolDialogApplyShadowStrengthButtonId = 1032;
     constexpr int kDebugViewNone = 0;
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
@@ -155,6 +157,7 @@ float g_depthCompareDistance = 0.0f;
 float g_sampleDepthBiasDistance = 0.1f;
 bool g_bEnableThicknessCap = false;
 float g_thicknessCapMeters = 1.0f;
+float g_shadowStrength = 1.0f;
 float g_cameraYaw = -D3DX_PI * 0.25f;
 float g_cameraPitch = -0.34f;
 D3DXVECTOR3 g_cameraPosition(2.0f, 1.0f, -3.0f);
@@ -187,6 +190,8 @@ HWND g_hEnableSsaoBlurCheckbox = NULL;
 HWND g_hSsaoBlur5x5Radio = NULL;
 HWND g_hSsaoBlur11x11Radio = NULL;
 HWND g_hFixedSsaoSampleDistanceCheckbox = NULL;
+HWND g_hShadowStrengthEdit = NULL;
+HWND g_hApplyShadowStrengthButton = NULL;
 HWND g_hEnableThicknessCapCheckbox = NULL;
 HWND g_hThicknessCapEdit = NULL;
 HWND g_hApplyThicknessCapButton = NULL;
@@ -722,7 +727,7 @@ void CreateToolDialog()
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,
                                    340,
-                                   812,
+                                   876,
                                    g_hWnd,
                                    NULL,
                                    wc.hInstance,
@@ -1311,11 +1316,52 @@ void CreateToolDialog()
         SendMessage(g_hFixedSsaoSampleDistanceCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
     }
 
+    HWND hShadowStrengthLabel = CreateWindow(_T("STATIC"),
+                                             _T("Shadow strength:"),
+                                             WS_CHILD | WS_VISIBLE,
+                                             20,
+                                             616,
+                                             130,
+                                             20,
+                                             g_hToolDialog,
+                                             NULL,
+                                             wc.hInstance,
+                                             NULL);
+    ApplyToolDialogFont(hShadowStrengthLabel);
+
+    g_hShadowStrengthEdit = CreateWindow(_T("EDIT"),
+                                         _T("1.00"),
+                                         WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                                         160,
+                                         612,
+                                         60,
+                                         24,
+                                         g_hToolDialog,
+                                         reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogShadowStrengthEditId)),
+                                         wc.hInstance,
+                                         NULL);
+    assert(g_hShadowStrengthEdit != NULL);
+    ApplyToolDialogFont(g_hShadowStrengthEdit);
+
+    g_hApplyShadowStrengthButton = CreateWindow(_T("BUTTON"),
+                                                _T("Apply"),
+                                                WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                                230,
+                                                610,
+                                                60,
+                                                28,
+                                                g_hToolDialog,
+                                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogApplyShadowStrengthButtonId)),
+                                                wc.hInstance,
+                                                NULL);
+    assert(g_hApplyShadowStrengthButton != NULL);
+    ApplyToolDialogFont(g_hApplyShadowStrengthButton);
+
     g_hEnableThicknessCapCheckbox = CreateWindow(_T("BUTTON"),
                                                  _T("Enable thickness cap"),
                                                  WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                                  20,
-                                                 620,
+                                                 652,
                                                  180,
                                                  24,
                                                  g_hToolDialog,
@@ -1337,7 +1383,7 @@ void CreateToolDialog()
                                            _T("Thickness cap (m):"),
                                            WS_CHILD | WS_VISIBLE,
                                            20,
-                                           652,
+                                           684,
                                            130,
                                            20,
                                            g_hToolDialog,
@@ -1350,7 +1396,7 @@ void CreateToolDialog()
                                        _T("1.00"),
                                        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                        160,
-                                       648,
+                                       680,
                                        60,
                                        24,
                                        g_hToolDialog,
@@ -1364,7 +1410,7 @@ void CreateToolDialog()
                                               _T("Apply"),
                                               WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                               230,
-                                              646,
+                                              678,
                                               60,
                                               28,
                                               g_hToolDialog,
@@ -1385,6 +1431,10 @@ void CreateToolDialog()
     TCHAR sampleCountText[64] = { };
     _stprintf_s(sampleCountText, _T("%d"), g_simpleSsaoSampleCount);
     SetWindowText(g_hSampleCountEdit, sampleCountText);
+
+    TCHAR shadowStrengthText[64] = { };
+    _stprintf_s(shadowStrengthText, _T("%.2f"), g_shadowStrength);
+    SetWindowText(g_hShadowStrengthEdit, shadowStrengthText);
 
     TCHAR normalBiasScaleText[64] = { };
     _stprintf_s(normalBiasScaleText, _T("%.5f"), g_targetNormalBiasScale);
@@ -1773,7 +1823,8 @@ void DrawOverlayText()
     {
         remoteDesktopCameraText = _T("ON");
     }
-    _stprintf_s(lines[15], _T("Remote Desktop camera: %s"), remoteDesktopCameraText);
+    _stprintf_s(lines[2], _T("Remote Desktop camera: %s"), remoteDesktopCameraText);
+    _stprintf_s(lines[15], _T("Shadow strength: %.2f"), g_shadowStrength);
 
     for (int i = 0; i < _countof(lines); ++i)
     {
@@ -2276,6 +2327,7 @@ void RenderPass2()
     hResult = g_pEffect2->SetFloat("g_sampleDepthBiasThreshold", g_sampleDepthBiasDistance / activeSsaoDepthRange); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_targetNormalBiasScale", g_targetNormalBiasScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_targetDepthBiasScale", g_targetDepthBiasScale); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloat("g_shadowStrength", g_shadowStrength); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("depthTexture", g_pDepthRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("thicknessTexture", g_pThicknessRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("normalTexture", g_pNormalRenderTarget); assert(hResult == S_OK);
@@ -2593,6 +2645,29 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (LOWORD(wParam) == kToolDialogFixedSsaoSampleDistanceCheckboxId)
         {
             g_bUseFixedSsaoSampleDistance = (SendMessage(g_hFixedSsaoSampleDistanceCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogApplyShadowStrengthButtonId)
+        {
+            TCHAR buffer[64] = { };
+            GetWindowText(g_hShadowStrengthEdit, buffer, _countof(buffer));
+            float shadowStrength = g_shadowStrength;
+            if (_stscanf_s(buffer, _T("%f"), &shadowStrength) == 1)
+            {
+                if (shadowStrength < 0.0f)
+                {
+                    shadowStrength = 0.0f;
+                }
+                if (shadowStrength > 5.0f)
+                {
+                    shadowStrength = 5.0f;
+                }
+                g_shadowStrength = shadowStrength;
+
+                TCHAR normalizedText[64] = { };
+                _stprintf_s(normalizedText, _T("%.2f"), g_shadowStrength);
+                SetWindowText(g_hShadowStrengthEdit, normalizedText);
+            }
             return 0;
         }
         if (LOWORD(wParam) == kToolDialogEnableThicknessCapCheckboxId)

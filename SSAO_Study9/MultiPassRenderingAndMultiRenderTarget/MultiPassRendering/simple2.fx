@@ -20,6 +20,7 @@ float g_sampleDepthBiasThreshold = 1.0f;
 float g_targetNormalBiasScale = 2.0f;
 float g_targetDepthBiasScale = 1.0f;
 float g_thicknessCap = 0.02f;
+float g_shadowStrength = 1.0f;
 
 texture texture1;
 sampler textureSampler = sampler_state {
@@ -261,7 +262,8 @@ void PixelShaderComposite(in float4 inPosition    : POSITION,
     float2 shiftedTexCoord = inTexCood + halfPixelOffset;
     float4 workColor = tex2D(textureSampler, shiftedTexCoord);
     float ssaoFactor = tex2D(ssaoSampler, shiftedTexCoord).r;
-    workColor.rgb *= ssaoFactor;
+    float shadowFactor = saturate(1.0f - g_shadowStrength * (1.0f - ssaoFactor));
+    workColor.rgb *= shadowFactor;
     workColor = saturate(workColor);
     outColor = workColor;
 }
