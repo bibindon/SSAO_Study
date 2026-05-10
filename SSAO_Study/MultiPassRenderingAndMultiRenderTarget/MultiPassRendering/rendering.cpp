@@ -224,6 +224,14 @@ void UpdateAutoSsaoParametersFromCenterDepth()
             hResult = g_pCenterDepthReadbackSurface->LockRect(&lockedRect, NULL, D3DLOCK_READONLY);
             assert(hResult == S_OK);
 
+            // 静的解析向けにも、読み戻しポインタが有効であることを明示しておく。
+            if (lockedRect.pBits == NULL)
+            {
+                hResult = g_pCenterDepthReadbackSurface->UnlockRect();
+                assert(hResult == S_OK);
+                continue;
+            }
+
             const float sampleDepthMeters = *reinterpret_cast<const float*>(lockedRect.pBits);
             hResult = g_pCenterDepthReadbackSurface->UnlockRect();
             assert(hResult == S_OK);
