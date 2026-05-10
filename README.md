@@ -1,4 +1,7 @@
-﻿# SSAO_Study
+
+https://github.com/user-attachments/assets/f81537c3-a208-4f8c-832a-a20ac2a77f3e
+ 
+ # SSAO_Study
 
 ## 概要
 
