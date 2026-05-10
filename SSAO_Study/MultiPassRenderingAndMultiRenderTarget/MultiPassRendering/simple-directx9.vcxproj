@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -149,6 +149,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="d3d_resources.cpp" />
+    <ClCompile Include="tool_dialog.cpp" />
+    <ClCompile Include="camera_input.cpp" />
+    <ClCompile Include="rendering.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="app_shared.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="simple.fx">
