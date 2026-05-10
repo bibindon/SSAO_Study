@@ -1,4 +1,7 @@
-﻿# SSAO_Study
+
+https://github.com/user-attachments/assets/f81537c3-a208-4f8c-832a-a20ac2a77f3e
+ 
+ # SSAO_Study
 
 DirectX 9 ベースで SSAO(Screen Space Ambient Occlusion) を試すための学習用サンプルです。  
 シーンを一度そのまま描画するだけでなく、深度、法線、背面深度、厚みといった中間情報を別テクスチャへ出力し、その結果を使って SSAO を計算して最後に合成します。
