@@ -125,6 +125,8 @@ HFONT g_hToolDialogFont = NULL;
 std::vector<UserMeshInstance> g_userMeshes;
 std::vector<UserMeshInstance> g_sceneMeshes;
 
+// Win32 アプリケーションの入口です。
+// 初期化後は、入力更新 -> ジオメトリ描画 -> ポストプロセス描画、という順で毎フレーム回します。
 int WINAPI _tWinMain(_In_ HINSTANCE hInstance,
                             _In_opt_ HINSTANCE hPrevInstance,
                             _In_ LPTSTR lpCmdLine,
@@ -211,6 +213,8 @@ int WINAPI _tWinMain(_In_ HINSTANCE hInstance,
 
 LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+// 最小限のウィンドウメッセージ処理です。
+// 本サンプルでは入力の大半をポーリングで処理しているため、ここでは終了処理が主な役目です。
 LRESULT WINAPI MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     switch (msg)

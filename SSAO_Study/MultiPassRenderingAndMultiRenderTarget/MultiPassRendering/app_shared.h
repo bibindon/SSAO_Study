@@ -18,10 +18,14 @@
 #include <map>
 #include <vector>
 
+// COM オブジェクトは参照カウント方式なので、使い終わったら Release が必要です。
+// 毎回 if 文を書く代わりに、このマクロで「NULL なら何もしない / そうでなければ解放」をまとめています。
 #define SAFE_RELEASE(p) { if (p) { (p)->Release(); (p) = NULL; } }
 
 namespace
 {
+    // ここにある値は、アプリ全体で使う「実験用の基本設定」です。
+    // シェーダー初学者の視点では、こうした値が「どの単位系で考えるか」の土台になります。
     constexpr int kRenderWidth = 1600;
     constexpr int kRenderHeight = 900;
     constexpr float kCameraMoveSpeed = 6.0f;
@@ -85,6 +89,9 @@ namespace
     constexpr float kAutoSsaoMaxSampleDistanceMeters = 3.75f;
 }
 
+// ユーザーが読み込んだメッシュも、最初から置いてあるメッシュも、
+// 描画時には「メッシュ本体 + マテリアル + テクスチャ + 配置情報」という共通の形で扱えます。
+// そのため、描画しやすい単位としてこの構造体にまとめています。
 struct UserMeshInstance
 {
     LPD3DXMESH mesh = NULL;
@@ -95,18 +102,27 @@ struct UserMeshInstance
     float yaw = 0.0f;
 };
 
+// フルスクリーンクアッドは、ポストプロセス用に画面全体を 2 枚の三角形で覆うための頂点です。
+// POSITION はすでにクリップ空間(-1..1)で持ち、TEXCOORD はテクスチャ参照先を表します。
 struct QuadVertex
 {
     float x, y, z, w;
     float u, v;
 };
 
+// ここから下は複数の .cpp で共有するグローバル状態です。
+// 本サンプルでは「学習しやすさ」と「DirectX9 のサンプルらしい見通し」を優先して
+// 明示的な共有状態としてまとめています。
+
+// Direct3D の中核オブジェクト群
 extern LPDIRECT3D9 g_pD3D;
 extern LPDIRECT3DDEVICE9 g_pd3dDevice;
 extern LPD3DXFONT g_pFont;
 extern LPD3DXMESH g_pMesh;
 extern LPD3DXMESH g_pLargeCubeMesh;
 extern LPD3DXMESH g_pPlateMesh;
+
+// メッシュごとのマテリアルとテクスチャ
 extern std::vector<D3DMATERIAL9> g_pMaterials;
 extern std::vector<LPDIRECT3DTEXTURE9> g_pTextures;
 extern DWORD g_dwNumMaterials;
@@ -116,10 +132,16 @@ extern DWORD g_dwLargeCubeNumMaterials;
 extern std::vector<D3DMATERIAL9> g_pPlateMaterials;
 extern std::vector<LPDIRECT3DTEXTURE9> g_pPlateTextures;
 extern DWORD g_dwPlateNumMaterials;
+
+// 同じテクスチャを何度も読み込まないようにする簡易キャッシュ
 extern std::map<std::wstring, LPDIRECT3DTEXTURE9> g_textureCache;
+
+// ジオメトリ描画用エフェクトとポストプロセス用エフェクト
 extern LPD3DXEFFECT g_pEffect1;
 extern LPD3DXEFFECT g_pEffect2;
 extern bool g_bClose;
+
+// MRT と後段ポストプロセスで使う中間テクスチャ群
 extern LPDIRECT3DTEXTURE9 g_pRenderTarget;
 extern LPDIRECT3DTEXTURE9 g_pDepthRenderTarget;
 extern LPDIRECT3DTEXTURE9 g_pRawDepthRenderTarget;
@@ -130,9 +152,13 @@ extern LPDIRECT3DTEXTURE9 g_pSsaoRenderTarget;
 extern LPDIRECT3DTEXTURE9 g_pSsaoBlurRenderTarget;
 extern LPDIRECT3DTEXTURE9 g_pCenterDepthResolveTexture;
 extern LPDIRECT3DSURFACE9 g_pCenterDepthReadbackSurface;
+
+// 画面全体描画用の宣言と、デバッグテキスト描画用スプライト
 extern LPDIRECT3DVERTEXDECLARATION9 g_pQuadDecl;
 extern LPD3DXSPRITE g_pSprite;
 extern HWND g_hWnd;
+
+// デバッグ表示やトグル入力の状態
 extern bool g_bShowDebugSprite;
 extern bool g_bPrevDepthInfoKeyDown;
 extern bool g_bPrevNormalInfoKeyDown;
@@ -145,6 +171,8 @@ extern bool g_bPrevSimpleSsaoToggleKeyDown;
 extern bool g_bPrevTextureToggleKeyDown;
 extern bool g_bPrevEscapeToggleKeyDown;
 extern bool g_bMouseCursorVisible;
+
+// 描画・SSAO の各種設定値
 extern bool g_bUseLambertLighting;
 extern bool g_bUseTexture;
 extern bool g_bEnableSimpleSsao;
@@ -176,10 +204,14 @@ extern float g_thicknessCapMeters;
 extern float g_shadowStrength;
 extern float g_shadowSaturationStrength;
 extern bool g_bUseShadowSaturation;
+
+// カメラ状態
 extern float g_cameraYaw;
 extern float g_cameraPitch;
 extern D3DXVECTOR3 g_cameraPosition;
 extern POINT g_previousMousePosition;
+
+// 設定ダイアログの各ウィンドウハンドル
 extern HWND g_hToolDialog;
 extern HWND g_hOpenMeshButton;
 extern HWND g_hSsaoSampleEdit;
@@ -218,9 +250,14 @@ extern HWND g_hEnableThicknessCapCheckbox;
 extern HWND g_hThicknessCapEdit;
 extern HWND g_hApplyThicknessCapButton;
 extern HFONT g_hToolDialogFont;
+
+// シーンに最初からあるメッシュと、ユーザーが後から読み込んだメッシュ
 extern std::vector<UserMeshInstance> g_userMeshes;
 extern std::vector<UserMeshInstance> g_sceneMeshes;
 
+// ここから下は実装ファイルごとに分かれた処理の宣言です。
+// 「何を初期化するか」「何を描画するか」「どこで入力を処理するか」を追うと、
+// アプリ全体の流れが見えやすくなります。
 void TextDraw(LPD3DXFONT pFont, TCHAR* text, int X, int Y);
 void InitD3D(HWND hWnd);
 void Cleanup();

@@ -1,3 +1,16 @@
+// -----------------------------------------------------------------------------
+// simple2.fx
+//
+// このファイルはポストプロセス側です。
+// 前段の simple.fx が出力した「深度」「法線」「背面深度」「カラー」を読み、
+// thickness 計算、SSAO 計算、ぼかし、最終合成を行います。
+//
+// シェーダー初学者向けの見どころ:
+// - 深度からビュー空間位置を復元する処理
+// - 法線方向へサンプルを飛ばして遮蔽を調べる処理
+// - 深度差と法線差を使ったエッジ保持ぼかし
+// -----------------------------------------------------------------------------
+
 float4x4 g_matWorldViewProj;
 float4 g_lightNormal = { -0.3f, -1.0f, -0.5f, 0.0f };
 float3 g_ambient = { 0.3f, 0.3f, 0.3f };
@@ -11,8 +24,14 @@ bool g_bEnableThicknessCap = false;
 bool g_bUseFixedSsaoSampleDistance = false;
 bool g_bUseShadowSaturation = false;
 int g_simpleSsaoSampleCount = 1;
+
+// 画面サイズです。half-pixel 補正や 1 texel 分の移動量計算に使います。
 float2 g_screenSize = { 1600.0f, 900.0f };
+
+// 透視投影の X/Y スケールです。
+// 深度からビュー空間座標を復元するときに必要です。
 float2 g_projectionScale = { 1.0f, 1.0f };
+
 float g_simpleSsaoSampleDistanceMeters = 1.0f;
 float g_thicknessScale = 1.0f;
 float g_ssaoDepthRange = 50.0f;
@@ -72,11 +91,15 @@ sampler ssaoSampler = sampler_state {
     MagFilter = NONE;
 };
 
+// 疑似乱数です。
+// 画面上の位置とサンプル番号から、毎回同じ値を返す簡易ノイズ源として使います。
 float Random01(float2 seed)
 {
     return frac(sin(dot(seed, float2(12.9898f, 78.233f))) * 43758.5453f);
 }
 
+// 深度テクスチャと UV からビュー空間位置を再構築します。
+// SSAO では「ピクセルが 3D 空間のどこにあるか」を知りたいので、この処理が重要です。
 float3 ReconstructViewPosition(float2 texCoord, float currentDepth)
 {
     float viewDepthMeters = currentDepth * g_ssaoDepthRange;
@@ -87,6 +110,8 @@ float3 ReconstructViewPosition(float2 texCoord, float currentDepth)
                   viewDepthMeters);
 }
 
+// ビュー空間位置を再びスクリーン UV へ戻します。
+// 「法線方向へ少し進んだ点が画面のどこに写るか」を知るために使います。
 float2 ProjectViewPositionToTexCoord(float3 viewPosition)
 {
     float viewDepthSafe = max(viewPosition.z, 0.0001f);
@@ -96,6 +121,8 @@ float2 ProjectViewPositionToTexCoord(float3 viewPosition)
                   0.5f - ndc.y * 0.5f);
 }
 
+// 深度差に応じたぼかし重みを作ります。
+// 深度が大きく違うピクセルを強く混ぜると輪郭がにじむため、差が大きいほど重みを小さくします。
 float ComputeDepthAwareBlurWeight(float centerDepth, float sampleDepth)
 {
     if (centerDepth >= 0.999f || sampleDepth >= 0.999f)
@@ -107,7 +134,7 @@ float ComputeDepthAwareBlurWeight(float centerDepth, float sampleDepth)
     float sampleDepthMeters = sampleDepth * g_ssaoDepthRange;
     float depthDifferenceMeters = abs(sampleDepthMeters - centerDepthMeters);
 
-    // 近距離では少しの差でも別面として扱い、遠距離では許容差を少し広げる。
+    // 遠景ほど少し大きめの深度差を許容し、近景では厳しめに判定します。
     float depthToleranceMeters = max(0.01f, centerDepthMeters * 0.08f);
     float normalizedDifference = depthDifferenceMeters / depthToleranceMeters;
     if (normalizedDifference >= 1.0f)
@@ -119,12 +146,14 @@ float ComputeDepthAwareBlurWeight(float centerDepth, float sampleDepth)
     return closeness * closeness;
 }
 
+// 0..1 に保存されている法線を -1..1 に戻します。
 float3 DecodeNormal(float4 encodedNormal)
 {
     float3 normal = encodedNormal.xyz * 2.0f - 1.0f;
     return normalize(normal);
 }
 
+// 法線の向きが大きく違うピクセル同士を混ぜにくくするための重みです。
 float ComputeNormalAwareBlurWeight(float3 centerNormal, float3 sampleNormal)
 {
     float normalAlignment = dot(centerNormal, sampleNormal);
@@ -138,6 +167,7 @@ float ComputeNormalAwareBlurWeight(float3 centerNormal, float3 sampleNormal)
     return closeness * closeness;
 }
 
+// 深度と法線の両方を見た総合ぼかし重みです。
 float ComputeBlurSampleWeight(float baseWeight, float centerDepth, float sampleDepth, float3 centerNormal, float3 sampleNormal)
 {
     float depthWeight = ComputeDepthAwareBlurWeight(centerDepth, sampleDepth);
@@ -145,6 +175,8 @@ float ComputeBlurSampleWeight(float baseWeight, float centerDepth, float sampleD
     return baseWeight * depthWeight * normalWeight;
 }
 
+// 1 回分の遮蔽サンプルを評価します。
+// 現在ピクセルの法線方向へ少し進んだ点を画面に投影し、その場所の深度と比較します。
 float2 ComputeOcclusionSample(float2 shiftedTexCoord,
                               float currentDepth,
                               float3 currentNormal,
@@ -164,6 +196,7 @@ float2 ComputeOcclusionSample(float2 shiftedTexCoord,
     {
         return float2(0.0f, 0.0f);
     }
+
     float4 sampleTexCoordLod = float4(sampleTexCoord, 0.0f, 0.0f);
     float sampleDepth = tex2Dlod(depthSampler, sampleTexCoordLod).r;
     if (sampleDepth >= 0.999f)
@@ -171,20 +204,27 @@ float2 ComputeOcclusionSample(float2 shiftedTexCoord,
         return float2(0.0f, 0.0f);
     }
 
+    // サンプル点が「理想的にはこの深度に見えるはず」という予測値です。
     float expectedSampleDepth = saturate(sampleViewPosition.z / g_ssaoDepthRange);
+
+    // 法線がカメラ方向に近いほど自己遮蔽しやすいので、少し余裕を持たせます。
     float targetNormalDepthBiasFactor = saturate(abs(currentNormal.z)) * g_targetNormalBiasScale;
     float work = (currentDepth - expectedSampleDepth);
-    float sampleDepthBias = (work) * targetNormalDepthBiasFactor * g_targetDepthBiasScale;
+    float sampleDepthBias = work * targetNormalDepthBiasFactor * g_targetDepthBiasScale;
     float adjustedSampleDepth = max(0.0f, sampleDepth + sampleDepthBias);
+
     float sampleThickness = tex2Dlod(thicknessSampler, sampleTexCoordLod).r;
     float frontDepthWithMargin = adjustedSampleDepth - g_depthCompareThreshold;
     float backDepthWithMargin = adjustedSampleDepth + g_depthCompareThreshold;
+
     if (g_bUseThicknessForSsao)
     {
+        // 厚みを使う場合は、背面側へ余裕を広げて「物体の内部感」を少し反映させます。
         backDepthWithMargin += sampleThickness * g_thicknessScale;
     }
     else
     {
+        // 厚みを使わない場合の簡易フォールバックです。
         float fallbackThickness = (1.0f / g_ssaoDepthRange) * currentDepth;
         backDepthWithMargin += fallbackThickness * g_thicknessScale;
     }
@@ -194,9 +234,13 @@ float2 ComputeOcclusionSample(float2 shiftedTexCoord,
     {
         occluded = 1.0f;
     }
+
+    // x: 遮蔽されたか
+    // y: そもそも有効サンプルだったか
     return float2(occluded, 1.0f);
 }
 
+// 画面全体ポストプロセスでは、頂点はすでに clip space なのでそのまま出します。
 void VertexShader1(in  float4 inPosition  : POSITION,
                    in  float2 inTexCood   : TEXCOORD0,
 
@@ -207,6 +251,11 @@ void VertexShader1(in  float4 inPosition  : POSITION,
     outTexCood = inTexCood;
 }
 
+// 現在ピクセルの SSAO 係数を計算します。
+// 1. 深度と法線を読む
+// 2. 深度からビュー空間位置を復元
+// 3. 法線方向へサンプル点を飛ばす
+// 4. どれだけ遮蔽されたかを平均して明るさ係数へ変換
 float ComputeSsaoFactor(float2 shiftedTexCoord)
 {
     float currentDepth = tex2D(depthSampler, shiftedTexCoord).r;
@@ -222,9 +271,11 @@ float ComputeSsaoFactor(float2 shiftedTexCoord)
             float sampleDistanceMeters = g_simpleSsaoSampleDistanceMeters;
             if (g_bDepthScaledSampleDistance)
             {
+                // 近距離ほどサンプル半径を少し広げ、手前の変化を拾いやすくする調整です。
                 float depthDistanceScale = 1.0f + saturate(1.0f - currentDepth);
                 sampleDistanceMeters *= depthDistanceScale;
             }
+
             if (g_simpleSsaoSampleCount <= 1)
             {
                 float2 occlusionSample = ComputeOcclusionSample(shiftedTexCoord,
@@ -249,10 +300,11 @@ float ComputeSsaoFactor(float2 shiftedTexCoord)
                     {
                         float sampleIndexFloat = (float)sampleIndex;
                         float randomValue = 0.0f;
-                        float distanceScale = 0.f;;
+                        float distanceScale = 0.0f;
 
                         if (g_bUseFixedSsaoSampleDistance)
                         {
+                            // 固定配置では 0..1 を立方で偏らせ、近いサンプルをやや多めにします。
                             distanceScale = 1.0f;
                             if (g_simpleSsaoSampleCount > 1)
                             {
@@ -262,12 +314,13 @@ float ComputeSsaoFactor(float2 shiftedTexCoord)
                         }
                         else
                         {
+                            // ランダム配置では各ピクセルで少しずつ異なる方向・距離の揺らぎを持たせます。
                             randomValue = Random01(shiftedTexCoord * g_screenSize + float2(sampleIndexFloat * 13.37f,
                                                                                                  sampleIndexFloat * 7.91f));
                             distanceScale = randomValue * randomValue * randomValue;
                         }
 
-                        // 0にならないようにする。
+                        // 完全に 0 へ寄ると中心付近しか見なくなるので、深度依存の最小距離を少し足しています。
                         distanceScale += (0.1 * currentDepth);
 
                         float2 occlusionSample = ComputeOcclusionSample(shiftedTexCoord,
@@ -298,12 +351,14 @@ void PixelShaderSsao(in float4 inPosition    : POSITION,
 
                      out float4 outColor     : COLOR)
 {
+    // DirectX9 では half-pixel 補正を入れてサンプリング位置を texel 中心へ寄せるのが定番です。
     float2 halfPixelOffset = 0.5f / g_screenSize;
     float2 shiftedTexCoord = inTexCood + halfPixelOffset;
     float ssaoFactor = ComputeSsaoFactor(shiftedTexCoord);
     outColor = float4(ssaoFactor, ssaoFactor, ssaoFactor, 1.0f);
 }
 
+// 元カラーと SSAO 結果を合成します。
 void PixelShaderComposite(in float4 inPosition    : POSITION,
                           in float2 inTexCood     : TEXCOORD0,
 
@@ -313,20 +368,26 @@ void PixelShaderComposite(in float4 inPosition    : POSITION,
     float2 shiftedTexCoord = inTexCood + halfPixelOffset;
     float4 workColor = tex2D(textureSampler, shiftedTexCoord);
     float ssaoFactor = tex2D(ssaoSampler, shiftedTexCoord).r;
+
+    // ssaoFactor が 1 に近いほど明るく、0 に近いほど暗くなるように変換します。
     float shadowFactor = saturate(1.0f - g_shadowStrength * (1.0f - ssaoFactor));
     workColor.rgb *= shadowFactor;
+
     if (g_bUseShadowSaturation)
     {
+        // 影部分だけ彩度を少し持ち上げる、見た目重視の演出です。
         float shadowAmount = saturate(g_shadowSaturationStrength * (1.0f - ssaoFactor));
         float luminance = dot(workColor.rgb, float3(0.299f, 0.587f, 0.114f));
         float3 grayscale = float3(luminance, luminance, luminance);
         float saturationScale = 1.0f + shadowAmount;
         workColor.rgb = grayscale + (workColor.rgb - grayscale) * saturationScale;
     }
+
     workColor = saturate(workColor);
     outColor = workColor;
 }
 
+// 5x5 の比較的軽いぼかしです。
 void PixelShaderSsaoBlur5x5(in float4 inPosition    : POSITION,
                             in float2 inTexCood     : TEXCOORD0,
 
@@ -364,6 +425,7 @@ void PixelShaderSsaoBlur5x5(in float4 inPosition    : POSITION,
     outColor = float4(ssaoFactor, ssaoFactor, ssaoFactor, 1.0f);
 }
 
+// 11x11 のぼかしです。ノイズは減りますが、そのぶん計算量は増えます。
 void PixelShaderSsaoBlur11x11(in float4 inPosition    : POSITION,
                               in float2 inTexCood     : TEXCOORD0,
 
@@ -401,6 +463,7 @@ void PixelShaderSsaoBlur11x11(in float4 inPosition    : POSITION,
     outColor = float4(ssaoFactor, ssaoFactor, ssaoFactor, 1.0f);
 }
 
+// 21x21 のさらに強いぼかしです。
 void PixelShaderSsaoBlur21x21(in float4 inPosition    : POSITION,
                               in float2 inTexCood     : TEXCOORD0,
 
@@ -438,6 +501,7 @@ void PixelShaderSsaoBlur21x21(in float4 inPosition    : POSITION,
     outColor = float4(ssaoFactor, ssaoFactor, ssaoFactor, 1.0f);
 }
 
+// 深度・法線・厚みなどのデバッグ表示用です。
 void PixelShaderDebug(in float4 inPosition    : POSITION,
                       in float2 inTexCood     : TEXCOORD0,
 
@@ -454,6 +518,7 @@ void PixelShaderDebug(in float4 inPosition    : POSITION,
     }
 }
 
+// 前面深度と背面深度の差から thickness を求めます。
 void PixelShaderThickness(in float4 inPosition : POSITION,
                           in float2 inTexCood  : TEXCOORD0,
 
@@ -470,6 +535,7 @@ void PixelShaderThickness(in float4 inPosition : POSITION,
         thickness = saturate(backDepth - frontDepth);
         if (g_bEnableThicknessCap && thickness > g_thicknessCap)
         {
+            // あまりに大きい thickness はノイズ源になりやすいため、必要に応じて無効化します。
             thickness = 0.0f;
         }
     }
