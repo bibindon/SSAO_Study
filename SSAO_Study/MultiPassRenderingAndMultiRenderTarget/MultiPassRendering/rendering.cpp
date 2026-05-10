@@ -1,5 +1,5 @@
 ﻿#include "app_shared.h"
-// 画面左上に現在の操作方法や調整値を表示します。
+// 操作方法や調整値のオーバーレイ表示。
 void DrawOverlayText()
 {
     const float activeDepthRange = GetActiveSsaoDepthRange();
@@ -43,8 +43,7 @@ void DrawOverlayText()
     }
 }
 
-// シーン内の全ジオメトリを描画します。
-// 重要なのは「どのメッシュでも最終的には World / View / Proj を設定して同じシェーダーへ流す」ことです。
+// シーン内の全ジオメトリを描画する。
 void DrawSceneGeometry(const D3DXMATRIX& View, const D3DXMATRIX& Proj)
 {
     HRESULT hResult = E_FAIL;
@@ -157,7 +156,7 @@ void DrawSceneGeometry(const D3DXMATRIX& View, const D3DXMATRIX& Proj)
     }
 }
 
-// 自動調整 ON のときは現在の自動値、OFF のときは手動値を返します。
+// 現在有効な SSAO サンプル距離を返す。
 float GetActiveSsaoSampleDistanceMeters()
 {
     if (g_bAutoScaleSsaoByCenterDepth)
@@ -168,7 +167,7 @@ float GetActiveSsaoSampleDistanceMeters()
     return g_simpleSsaoSampleDistanceMeters;
 }
 
-// 深度範囲もサンプル距離と同じく、自動値と手動値を切り替えます。
+// 現在有効な SSAO 深度範囲を返す。
 float GetActiveSsaoDepthRange()
 {
     if (g_bAutoScaleSsaoByCenterDepth)
@@ -179,8 +178,7 @@ float GetActiveSsaoDepthRange()
     return g_ssaoDepthRange;
 }
 
-// 画面中央付近の深度を読んで、SSAO の距離パラメータを自動調整します。
-// 「近い物体を見ているときは短い距離を重視し、遠景なら少し広い距離を見る」という考え方です。
+// 画面中央付近の深度から SSAO の距離パラメータを自動調整する。
 void UpdateAutoSsaoParametersFromCenterDepth()
 {
     if (!g_bAutoScaleSsaoByCenterDepth || g_pCenterDepthResolveTexture == NULL || g_pCenterDepthReadbackSurface == NULL)
@@ -197,7 +195,7 @@ void UpdateAutoSsaoParametersFromCenterDepth()
     hResult = g_pCenterDepthResolveTexture->GetSurfaceLevel(0, &pResolveSurface);
     assert(hResult == S_OK);
 
-    // 中央の 1 点だけだと偶然外れ値を引くことがあるため、中央寄りの複数点を見ます。
+    // 中央寄りの複数点を見る。
     const float sampleFractions[4] = { 0.2f, 0.4f, 0.6f, 0.8f };
 
     float nearestDepthMeters = kCameraFarPlane;
@@ -215,7 +213,7 @@ void UpdateAutoSsaoParametersFromCenterDepth()
                 sampleX + 1,
                 sampleY + 1
             };
-            // 必要な 1 ピクセルだけ 1x1 テクスチャへ解決してから CPU 側へ読み戻します。
+            // 1 ピクセルだけ 1x1 テクスチャへ解決して読み戻す。
             hResult = g_pd3dDevice->StretchRect(pDepthSurface, &sampleRect, pResolveSurface, NULL, D3DTEXF_POINT);
             assert(hResult == S_OK);
 
@@ -323,15 +321,13 @@ void UpdateAutoSsaoParametersFromCenterDepth()
     }
 }
 
-// 第 1 パスです。
-// ジオメトリを描き、MRT へカラー、深度、法線、実深度を出力したあと、
-// 背面だけを描いて back depth も作ります。
+// 第 1 パス。カラー、深度、法線、実深度、背面深度を作る。
 void RenderPass1()
 {
     HRESULT hResult = E_FAIL;
     const float activeSsaoDepthRange = GetActiveSsaoDepthRange();
 
-    // 既存のバックバッファを後で戻せるよう保存します。
+    // 元のバックバッファを保存。
     LPDIRECT3DSURFACE9 pOldRT0 = NULL;
     hResult = g_pd3dDevice->GetRenderTarget(0, &pOldRT0);
     assert(hResult == S_OK);
@@ -348,13 +344,13 @@ void RenderPass1()
     hResult = g_pRawDepthRenderTarget->GetSurfaceLevel(0, &pRT3); assert(hResult == S_OK);
     hResult = g_pBackDepthRenderTarget->GetSurfaceLevel(0, &pRT4); assert(hResult == S_OK);
 
-    // ここで複数レンダーターゲットを一斉に有効化します。
+    // 複数レンダーターゲットを有効化。
     hResult = g_pd3dDevice->SetRenderTarget(0, pRT0); assert(hResult == S_OK);
     hResult = g_pd3dDevice->SetRenderTarget(1, pRT1); assert(hResult == S_OK);
     hResult = g_pd3dDevice->SetRenderTarget(2, pRT2); assert(hResult == S_OK);
     hResult = g_pd3dDevice->SetRenderTarget(3, pRT3); assert(hResult == S_OK);
 
-    // カメラの View 行列と射影行列を組み立てます。
+    // View / Projection 行列を組み立てる。
     D3DXMATRIX View, Proj;
 
     D3DXMatrixPerspectiveFovLH(&Proj,
@@ -378,7 +374,7 @@ void RenderPass1()
 
     hResult = g_pd3dDevice->BeginScene(); assert(hResult == S_OK);
 
-    // simple.fx の TechniqueMRT は、1 回の描画で複数の中間情報を書き出します。
+    // MRT で中間情報を書き出す。
     hResult = g_pEffect1->SetTechnique("TechniqueMRT");
     assert(hResult == S_OK);
 
@@ -402,7 +398,7 @@ void RenderPass1()
     hResult = g_pEffect1->End();     assert(hResult == S_OK);
     hResult = g_pd3dDevice->EndScene(); assert(hResult == S_OK);
 
-    // いったん MRT を解除し、次は背面深度専用の描画へ切り替えます。
+    // MRT を解除し、背面深度用の描画へ切り替える。
     hResult = g_pd3dDevice->SetRenderTarget(2, NULL); assert(hResult == S_OK);
     hResult = g_pd3dDevice->SetRenderTarget(1, NULL); assert(hResult == S_OK);
     hResult = g_pd3dDevice->SetRenderTarget(3, NULL); assert(hResult == S_OK);
@@ -429,7 +425,7 @@ void RenderPass1()
 
     hResult = g_pd3dDevice->EndScene(); assert(hResult == S_OK);
 
-    // 最後にバックバッファへ戻しておきます。
+    // バックバッファへ戻す。
     hResult = g_pd3dDevice->SetRenderTarget(2, NULL);   assert(hResult == S_OK);
     hResult = g_pd3dDevice->SetRenderTarget(1, NULL);   assert(hResult == S_OK);
     hResult = g_pd3dDevice->SetRenderTarget(0, pOldRT0); assert(hResult == S_OK);
@@ -442,11 +438,7 @@ void RenderPass1()
     SAFE_RELEASE(pOldRT0);
 }
 
-// 第 2 パスです。
-// 1. thickness を作る
-// 2. SSAO を計算する
-// 3. 必要ならぼかす
-// 4. 元カラーへ合成する
+// 第 2 パス。thickness、SSAO、ぼかし、最終合成を行う。
 void RenderPass2()
 {
     HRESULT hResult = E_FAIL;
@@ -457,7 +449,7 @@ void RenderPass2()
     LPDIRECT3DSURFACE9 pSsaoRT = NULL;
     LPDIRECT3DSURFACE9 pSsaoBlurRT = NULL;
 
-    // まずは thickness を作るパスから始めます。
+    // まず thickness を作る。
     hResult = g_pd3dDevice->GetRenderTarget(0, &pOldRT0); assert(hResult == S_OK);
     hResult = g_pThicknessRenderTarget->GetSurfaceLevel(0, &pThicknessRT); assert(hResult == S_OK);
     hResult = g_pd3dDevice->SetRenderTarget(0, pThicknessRT); assert(hResult == S_OK);
@@ -517,7 +509,7 @@ void RenderPass2()
     hResult = g_pEffect2->Begin(&ssaoNumPass, 0); assert(hResult == S_OK);
     hResult = g_pEffect2->BeginPass(0);           assert(hResult == S_OK);
 
-    // ここから SSAO 本体のパラメータをシェーダーへ渡します。
+    // SSAO 用パラメータをシェーダーへ渡す。
     if (g_bEnableSimpleSsao)
     {
         hResult = g_pEffect2->SetBool("g_bEnableSimpleSsao", TRUE); assert(hResult == S_OK);
@@ -550,7 +542,7 @@ void RenderPass2()
     {
         hResult = g_pEffect2->SetBool("g_bUseFixedSsaoSampleDistance", FALSE); assert(hResult == S_OK);
     }
-    // 深度からビュー空間位置を復元するため、投影行列のスケール相当値も渡します。
+    // 深度復元用に投影スケールを渡す。
     const float verticalFovRadians = D3DXToRadian(45.0f);
     const float projectionScaleY = 1.0f / tanf(verticalFovRadians * 0.5f);
     const float projectionScaleX = projectionScaleY / (static_cast<float>(kRenderWidth) / static_cast<float>(kRenderHeight));
@@ -577,7 +569,7 @@ void RenderPass2()
     hResult = g_pEffect2->End();     assert(hResult == S_OK);
     hResult = g_pd3dDevice->EndScene(); assert(hResult == S_OK);
 
-    // SSAO はサンプルベースなのでノイズが出やすく、必要なら後段でぼかします。
+    // 必要なら SSAO を後段でぼかす。
     if (g_bEnableSsaoBlur)
     {
         hResult = g_pSsaoBlurRenderTarget->GetSurfaceLevel(0, &pSsaoBlurRT); assert(hResult == S_OK);
@@ -629,7 +621,7 @@ void RenderPass2()
                                   1.0f, 0);
     assert(hResult == S_OK);
 
-    // ここからはフルスクリーンクアッドだけを描くので Z テストは不要です。
+    // ここからはフルスクリーンクアッドのみなので Z テストは不要。
     hResult = g_pd3dDevice->SetRenderState(D3DRS_ZENABLE, FALSE);
     assert(hResult == S_OK);
 
@@ -657,7 +649,7 @@ void RenderPass2()
     hResult = g_pEffect2->EndPass(); assert(hResult == S_OK);
     hResult = g_pEffect2->End();     assert(hResult == S_OK);
 
-    // 深度や法線などの中間テクスチャを確認できるデバッグ表示です。
+    // 中間テクスチャのデバッグ表示。
     if (g_bShowDebugSprite)
     {
         D3DVIEWPORT9 oldViewport;
@@ -720,13 +712,12 @@ void RenderPass2()
     SAFE_RELEASE(pOldRT0);
 }
 
-// 画面全体を覆う板ポリゴンです。
-// ポストプロセス系シェーダーは、この 4 頂点だけを描いて「各ピクセルでテクスチャを読む」構成になります。
+// 画面全体を覆うフルスクリーンクアッド。
 void DrawFullscreenQuad()
 {
     QuadVertex v[4] { };
 
-    // DirectX9 の half-pixel 問題を避けるため、UV を texel 中心へ少しだけ寄せています。
+    // UV を texel 中心へ少し寄せる。
     float du = 0.5f / static_cast<float>(kRenderWidth);
     float dv = 0.5f / static_cast<float>(kRenderHeight);
 

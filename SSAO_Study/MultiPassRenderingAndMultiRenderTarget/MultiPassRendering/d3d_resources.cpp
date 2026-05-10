@@ -1,8 +1,6 @@
 ﻿#include "app_shared.h"
 
-// 画面左上へ短い説明文を描く補助関数です。
-// SSAO のようにパラメータ依存の見た目が大きい処理では、
-// 実行中に値を確認できるだけでもかなり理解しやすくなります。
+// 画面左上へ説明文字列を描く補助関数。
 void TextDraw(LPD3DXFONT pFont, TCHAR* text, int X, int Y)
 {
     RECT rect = { X, Y, 0, 0 };
@@ -17,18 +15,16 @@ void TextDraw(LPD3DXFONT pFont, TCHAR* text, int X, int Y)
     assert((int)hResult >= 0);
 }
 
-// Direct3D デバイス、メッシュ、エフェクト、レンダーターゲットをまとめて初期化します。
-// 「実際の 3D 描画に必要な素材」と「あとで SSAO 計算に使う中間画像」の両方をここで準備します。
+// Direct3D デバイス、メッシュ、エフェクト、レンダーターゲットをまとめて初期化する。
 void InitD3D(HWND hWnd)
 {
     HRESULT hResult = E_FAIL;
 
-    // Direct3D9 の入口です。以後のデバイス生成はこのオブジェクト経由で行います。
+    // Direct3D9 の入口。
     g_pD3D = Direct3DCreate9(D3D_SDK_VERSION);
     assert(g_pD3D != NULL);
 
-    // バックバッファと深度バッファの基本設定です。
-    // この解像度が、後段のスクリーンスペース UV 計算の前提になります。
+    // バックバッファと深度バッファの基本設定。
     D3DPRESENT_PARAMETERS d3dpp;
     ZeroMemory(&d3dpp, sizeof(d3dpp));
     d3dpp.Windowed = TRUE;
@@ -46,7 +42,7 @@ void InitD3D(HWND hWnd)
     d3dpp.FullScreen_RefreshRateInHz = D3DPRESENT_RATE_DEFAULT;
     d3dpp.PresentationInterval = D3DPRESENT_INTERVAL_DEFAULT;
 
-    // まずは GPU による頂点処理を有効にしてデバイスを作成します。
+    // まずはハードウェア頂点処理でデバイスを作成。
     hResult = g_pD3D->CreateDevice(D3DADAPTER_DEFAULT,
                                    D3DDEVTYPE_HAL,
                                    hWnd,
@@ -56,7 +52,7 @@ void InitD3D(HWND hWnd)
 
     if (FAILED(hResult))
     {
-        // 失敗した場合は、より互換性の高いソフトウェア頂点処理へフォールバックします。
+        // 失敗時はソフトウェア頂点処理へフォールバック。
         hResult = g_pD3D->CreateDevice(D3DADAPTER_DEFAULT,
                                        D3DDEVTYPE_HAL,
                                        hWnd,
@@ -66,7 +62,7 @@ void InitD3D(HWND hWnd)
         assert(hResult == S_OK);
     }
 
-    // デバッグ用の文字列描画フォントです。
+    // デバッグ表示用フォント。
     hResult = D3DXCreateFont(g_pd3dDevice,
                              20,
                              0,
@@ -81,8 +77,7 @@ void InitD3D(HWND hWnd)
                              &g_pFont);
     assert(hResult == S_OK);
 
-    // シーンに置くメッシュ群を読み込みます。
-    // メッシュ本体と、そのメッシュが使うテクスチャもあわせて準備します。
+    // シーン用メッシュ群を読み込む。
     LoadMeshWithTextures(_T("resource\\small_cube.x"), &g_pMesh, g_pMaterials, g_pTextures, &g_dwNumMaterials);
     LoadMeshWithTextures(_T("resource\\large_cube_inside.x"), &g_pLargeCubeMesh, g_pLargeCubeMaterials, g_pLargeCubeTextures, &g_dwLargeCubeNumMaterials);
     LoadMeshWithTextures(_T("resource\\plate.x"), &g_pPlateMesh, g_pPlateMaterials, g_pPlateTextures, &g_dwPlateNumMaterials);
@@ -99,8 +94,7 @@ void InitD3D(HWND hWnd)
     LoadSceneMeshInstance(_T("resource\\cube_red.x"), D3DXVECTOR3(6.8f, 8.3f, 9.0f), 0.0f);
     LoadSceneMeshInstance(_T("resource\\cube_green.x"), D3DXVECTOR3(-4.0f, 8.2f, -9.0f), 0.0f);
 
-    // simple.fx はジオメトリ描画用です。
-    // ここでは色を描くだけでなく、深度や法線も MRT へ出力します。
+    // simple.fx はジオメトリ描画用。
     hResult = D3DXCreateEffectFromFile(g_pd3dDevice,
                                        _T("simple.fx"),
                                        NULL,
@@ -111,8 +105,7 @@ void InitD3D(HWND hWnd)
                                        NULL);
     assert(hResult == S_OK);
 
-    // simple2.fx はポストプロセス用です。
-    // thickness 計算、SSAO、本ぼかし、最終合成はこちら側で行います。
+    // simple2.fx はポストプロセス用。
     hResult = D3DXCreateEffectFromFile(g_pd3dDevice,
                                        _T("simple2.fx"),
                                        NULL,
@@ -123,7 +116,7 @@ void InitD3D(HWND hWnd)
                                        NULL);
     assert(hResult == S_OK);
 
-    // 最終合成前のベースカラーです。
+    // 最終合成前のベースカラー。
     hResult = D3DXCreateTexture(g_pd3dDevice,
                                 kRenderWidth, kRenderHeight,
                                 1,
@@ -133,7 +126,7 @@ void InitD3D(HWND hWnd)
                                 &g_pRenderTarget);
     assert(hResult == S_OK);
 
-    // 0..1 に正規化した前面深度です。
+    // 0..1 に正規化した前面深度。
     hResult = D3DXCreateTexture(g_pd3dDevice,
                                 kRenderWidth, kRenderHeight,
                                 1,
@@ -143,7 +136,7 @@ void InitD3D(HWND hWnd)
                                 &g_pDepthRenderTarget);
     assert(hResult == S_OK);
 
-    // ビュー空間での実深度です。中心深度の自動調整に使います。
+    // ビュー空間の実深度。中心深度の自動調整に使う。
     hResult = D3DXCreateTexture(g_pd3dDevice,
                                 kRenderWidth, kRenderHeight,
                                 1,
@@ -153,7 +146,7 @@ void InitD3D(HWND hWnd)
                                 &g_pRawDepthRenderTarget);
     assert(hResult == S_OK);
 
-    // 背面深度です。前面深度との差を取ることで thickness を近似できます。
+    // 背面深度。前面深度との差で thickness を作る。
     hResult = D3DXCreateTexture(g_pd3dDevice,
                                 kRenderWidth, kRenderHeight,
                                 1,
@@ -163,7 +156,7 @@ void InitD3D(HWND hWnd)
                                 &g_pBackDepthRenderTarget);
     assert(hResult == S_OK);
 
-    // 法線は -1..1 の成分を持つため、精度が落ちにくいフォーマットで保存します。
+    // 法線保存用テクスチャ。
     hResult = D3DXCreateTexture(g_pd3dDevice,
                                 kRenderWidth, kRenderHeight,
                                 1,
@@ -173,7 +166,7 @@ void InitD3D(HWND hWnd)
                                 &g_pNormalRenderTarget);
     assert(hResult == S_OK);
 
-    // 背面深度と前面深度から計算する厚みテクスチャの保存先です。
+    // thickness の保存先。
     hResult = D3DXCreateTexture(g_pd3dDevice,
                                 kRenderWidth, kRenderHeight,
                                 1,
@@ -183,7 +176,7 @@ void InitD3D(HWND hWnd)
                                 &g_pThicknessRenderTarget);
     assert(hResult == S_OK);
 
-    // SSAO の一次結果です。まだサンプルノイズが残る想定です。
+    // SSAO の一次結果。
     hResult = D3DXCreateTexture(g_pd3dDevice,
                                 kRenderWidth, kRenderHeight,
                                 1,
@@ -193,7 +186,7 @@ void InitD3D(HWND hWnd)
                                 &g_pSsaoRenderTarget);
     assert(hResult == S_OK);
 
-    // ぼかし後の SSAO 結果です。
+    // ぼかし後の SSAO 結果。
     hResult = D3DXCreateTexture(g_pd3dDevice,
                                 kRenderWidth, kRenderHeight,
                                 1,
@@ -203,7 +196,7 @@ void InitD3D(HWND hWnd)
                                 &g_pSsaoBlurRenderTarget);
     assert(hResult == S_OK);
 
-    // 1x1 の深度サンプルを CPU 側へ読むための一時テクスチャです。
+    // 1x1 の深度読み戻し用テクスチャ。
     hResult = D3DXCreateTexture(g_pd3dDevice,
                                 1, 1,
                                 1,
@@ -213,7 +206,7 @@ void InitD3D(HWND hWnd)
                                 &g_pCenterDepthResolveTexture);
     assert(hResult == S_OK);
 
-    // GPU から CPU へ読み戻すには system memory 側の面が必要です。
+    // CPU 側へ読み戻すための system memory surface。
     hResult = g_pd3dDevice->CreateOffscreenPlainSurface(1,
                                                         1,
                                                         D3DFMT_R32F,
@@ -222,7 +215,7 @@ void InitD3D(HWND hWnd)
                                                         NULL);
     assert(hResult == S_OK);
 
-    // ポストプロセス用のフルスクリーンクアッド頂点レイアウトです。
+    // フルスクリーンクアッドの頂点レイアウト。
     D3DVERTEXELEMENT9 elems[] =
     {
         { 0,  0, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0 },
@@ -232,18 +225,17 @@ void InitD3D(HWND hWnd)
     hResult = g_pd3dDevice->CreateVertexDeclaration(elems, &g_pQuadDecl);
     assert(hResult == S_OK);
 
-    // テキストなど 2D オーバーレイ用のスプライト
+    // 2D オーバーレイ用スプライト。
     hResult = D3DXCreateSprite(g_pd3dDevice, &g_pSprite);
     assert(hResult == S_OK);
 
-    // 起動直後はマウスルック前提でカーソルを隠します。
+    // 起動時はカーソルを隠す。
     while (ShowCursor(FALSE) >= 0)
     {
     }
 }
 
-// 生成したリソースをすべて解放します。
-// DirectX9 のサンプルでは「生成した順番と対応関係を自分で把握して返す」こと自体が重要な基礎です。
+// 生成したリソースを解放する。
 void Cleanup()
 {
     for (auto& entry : g_textureCache)
@@ -295,8 +287,7 @@ void Cleanup()
     SAFE_RELEASE(g_pD3D);
 }
 
-// .x メッシュと、そのメッシュが参照するテクスチャを一緒に読み込みます。
-// サブメッシュごとのマテリアル対応もここで組み立てます。
+// .x メッシュと参照テクスチャをまとめて読み込む。
 void LoadMeshWithTextures(const TCHAR* meshPath,
                           LPD3DXMESH* ppMesh,
                           std::vector<D3DMATERIAL9>& materials,
@@ -317,7 +308,7 @@ void LoadMeshWithTextures(const TCHAR* meshPath,
                                 ppMesh);
     assert(hResult == S_OK);
 
-    // .x ファイル内部のマテリアル配列です。
+    // .x ファイル内のマテリアル配列。
     D3DXMATERIAL* d3dxMaterials = (D3DXMATERIAL*)pD3DXMtrlBuffer->GetBufferPointer();
     materials.resize(*pNumMaterials);
     textures.resize(*pNumMaterials);
@@ -328,7 +319,7 @@ void LoadMeshWithTextures(const TCHAR* meshPath,
         materials[i].Ambient = materials[i].Diffuse;
         textures[i] = NULL;
 
-        // 相対パスのテクスチャ名でも読めるよう、メッシュ位置から解決します。
+        // 相対パスはメッシュ位置基準で解決。
         std::wstring texturePath = ResolveTexturePath(meshPathW, d3dxMaterials[i].pTextureFilename);
         if (!texturePath.empty())
         {
@@ -341,7 +332,7 @@ void LoadMeshWithTextures(const TCHAR* meshPath,
     assert(hResult == S_OK);
 }
 
-// パス文字列からディレクトリ部分だけを取り出します。
+// パスからディレクトリ部分を取り出す。
 std::wstring GetDirectoryFromPath(const std::wstring& path)
 {
     const size_t pos = path.find_last_of(L"\\/");
@@ -352,7 +343,7 @@ std::wstring GetDirectoryFromPath(const std::wstring& path)
     return path.substr(0, pos + 1);
 }
 
-// .x ファイルが持つテクスチャ名を、実際に読み込めるパスへ変換します。
+// .x 内のテクスチャ名を実ファイルパスへ変換する。
 std::wstring ResolveTexturePath(const std::wstring& meshPath, const char* textureFilename)
 {
     if (!textureFilename || !textureFilename[0])
@@ -374,7 +365,7 @@ std::wstring ResolveTexturePath(const std::wstring& meshPath, const char* textur
     return GetDirectoryFromPath(meshPath) + texturePath;
 }
 
-// 同じテクスチャを複数メッシュが参照しても、GPU には 1 回だけロードするようにしています。
+// テクスチャの簡易キャッシュ。
 LPDIRECT3DTEXTURE9 LoadTextureCached(const std::wstring& texturePath)
 {
     auto it = g_textureCache.find(texturePath);
@@ -392,7 +383,7 @@ LPDIRECT3DTEXTURE9 LoadTextureCached(const std::wstring& texturePath)
     return pTexture;
 }
 
-// メッシュ本体と、それに対応する CPU 側配列をまとめて空にします。
+// メッシュ本体と対応配列をまとめて空にする。
 void ReleaseMeshOnly(LPD3DXMESH* ppMesh,
                      std::vector<D3DMATERIAL9>& materials,
                      std::vector<LPDIRECT3DTEXTURE9>& textures,
@@ -404,7 +395,7 @@ void ReleaseMeshOnly(LPD3DXMESH* ppMesh,
     *pNumMaterials = 0;
 }
 
-// ダイアログ内コントロールへ共通フォントを適用します。
+// ダイアログ内コントロールへ共通フォントを適用する。
 void ApplyToolDialogFont(HWND controlHandle)
 {
     if (controlHandle != NULL && g_hToolDialogFont != NULL)

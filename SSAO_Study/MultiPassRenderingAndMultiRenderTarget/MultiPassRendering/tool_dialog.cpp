@@ -1,6 +1,5 @@
 ﻿#include "app_shared.h"
-// 各種 SSAO パラメータを実行中に調整するためのダイアログを作ります。
-// シェーダー初学者にとっては「C++ 側の UI から HLSL の定数値を動かす例」として見ると分かりやすいです。
+// 実行中に SSAO パラメータを調整するためのダイアログ。
 void CreateToolDialog()
 {
     if (g_hToolDialog)
@@ -56,7 +55,7 @@ void CreateToolDialog()
         }
     }
 
-    // 以降のコントロールは、ほぼそのままシェーダーパラメータへ対応しています。
+    // 以降のコントロールは、ほぼそのままシェーダーパラメータに対応する。
     g_hOpenMeshButton = CreateWindow(_T("BUTTON"),
                                      _T("Open X File"),
                                      WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
@@ -843,7 +842,7 @@ void CreateToolDialog()
     SetWindowText(g_hThicknessCapEdit, thicknessCapText);
 }
 
-// ダイアログの表示/非表示を切り替えます。
+// ダイアログの表示/非表示を切り替える。
 void ToggleToolDialog()
 {
     CreateToolDialog();
@@ -864,7 +863,7 @@ void ToggleToolDialog()
     }
 }
 
-// .x メッシュを読み込み、現在視線の先へ配置します。
+// .x メッシュを読み込み、現在視線の先へ配置する。
 void OpenMeshFileDialog()
 {
     OPENFILENAME ofn = { };
@@ -896,8 +895,7 @@ void OpenMeshFileDialog()
     g_userMeshes.push_back(userMesh);
 }
 
-// ダイアログ内の各ボタン、チェックボックス、入力欄のイベント処理です。
-// ここで更新した値は、次フレーム以降の描画でシェーダーへ渡されます。
+// ダイアログ内コントロールのイベント処理。
 LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     switch (msg)

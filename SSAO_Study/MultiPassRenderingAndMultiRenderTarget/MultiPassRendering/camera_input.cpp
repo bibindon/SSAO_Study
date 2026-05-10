@@ -1,6 +1,5 @@
 ﻿#include "app_shared.h"
-// 読み込んだメッシュを「今見ている方向の少し先」に置きます。
-// 学習用サンプルとして、すぐ目の前にモデルを出せるようにしてあります。
+// 読み込んだメッシュを現在視線の少し先に置く。
 void PlaceUserMeshAtCurrentLookTarget(UserMeshInstance& userMesh)
 {
     D3DXVECTOR3 forward(sinf(g_cameraYaw) * cosf(g_cameraPitch),
@@ -24,8 +23,7 @@ void LoadSceneMeshInstance(const TCHAR* meshPath, const D3DXVECTOR3& position, f
     g_sceneMeshes.push_back(sceneMesh);
 }
 
-// マウス追跡の基準点をリセットします。
-// 相対移動扱いの入力では、古い位置との差分が残ると視点が急に飛ぶことがあります。
+// マウス追跡の基準点をリセットする。
 void ResetMouseLookTracking()
 {
     g_bHasPreviousMousePosition = false;
@@ -33,7 +31,7 @@ void ResetMouseLookTracking()
     g_previousMousePosition.y = 0;
 }
 
-// カーソルの表示状態と、マウスルックの内部状態を同期します。
+// カーソル表示状態とマウスルック状態を同期する。
 void SetMouseCursorVisible(bool visible)
 {
     if (g_bMouseCursorVisible == visible)
@@ -58,15 +56,14 @@ void SetMouseCursorVisible(bool visible)
     ResetMouseLookTracking();
 }
 
-// キーボードとマウス入力から、カメラやデバッグ表示の状態を更新します。
-// 描画パラメータの切り替えもここでまとめて処理しています。
+// 入力からカメラやデバッグ表示の状態を更新する。
 void UpdateInputAndCamera()
 {
     const float deltaTime = 1.0f / 60.0f;
     float maxPitch = kMaxPitch;
     if (g_bAllowStraightUpDown)
     {
-        // 真上・真下にかなり近い方向まで見られるよう、通常より広い角度制限にします。
+        // 角度制限を少し緩める。
         maxPitch = kExtendedMaxPitch;
     }
     const HWND foregroundWindow = GetForegroundWindow();
@@ -83,7 +80,7 @@ void UpdateInputAndCamera()
     const bool textureToggleKeyDown = (GetAsyncKeyState('6') & 0x8000) != 0;
     const bool escapeToggleKeyDown = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
 
-    // ダイアログ編集中はゲーム的な入力を止めます。
+    // ダイアログ編集中はカメラ更新を止める。
     if (isToolDialogActive)
     {
         g_bPrevDepthInfoKeyDown = depthInfoKeyDown;
@@ -196,14 +193,14 @@ void UpdateInputAndCamera()
     }
     g_bPrevTextureToggleKeyDown = textureToggleKeyDown;
 
-    // メインウィンドウが非アクティブな間は視点更新を行いません。
+    // メインウィンドウが非アクティブな間は視点更新を止める。
     if (!isMainWindowActive)
     {
         ResetMouseLookTracking();
         return;
     }
 
-    // カーソル非表示時だけ FPS 風のマウスルックを有効にします。
+    // カーソル非表示時だけマウスルックを有効にする。
     if (!g_bMouseCursorVisible)
     {
         POINT mousePos;
@@ -211,8 +208,7 @@ void UpdateInputAndCamera()
         {
             if (g_bRemoteDesktopCameraMode)
             {
-                // リモートデスクトップ環境ではカーソル中央固定が扱いづらいことがあるため、
-                // 前フレームとの差分を見る方式へ切り替えます。
+                // リモートデスクトップ向けの相対移動モード。
                 if (g_bHasPreviousMousePosition)
                 {
                     const LONG deltaX = mousePos.x - g_previousMousePosition.x;
@@ -235,8 +231,7 @@ void UpdateInputAndCamera()
             }
             else
             {
-                // ローカル実行では毎フレームカーソルを中央へ戻し、
-                // 「中央からどれだけずれたか」を回転量として使います。
+                // ローカル実行ではカーソルを中央へ戻し、その差分を回転量に使う。
                 RECT clientRect = { };
                 if (GetClientRect(g_hWnd, &clientRect))
                 {
@@ -269,7 +264,7 @@ void UpdateInputAndCamera()
         }
     }
 
-    // yaw と pitch から前方向ベクトルを組み立てます。
+    // yaw と pitch から前方向ベクトルを組み立てる。
     D3DXVECTOR3 forward(sinf(g_cameraYaw) * cosf(g_cameraPitch),
                         sinf(g_cameraPitch),
                         cosf(g_cameraYaw) * cosf(g_cameraPitch));
@@ -288,7 +283,7 @@ void UpdateInputAndCamera()
     if (GetAsyncKeyState('E') & 0x8000) { move.y += 1.0f; }
     if (GetAsyncKeyState('Q') & 0x8000) { move.y -= 1.0f; }
 
-    // WASD / EQ に応じて移動ベクトルを作ります。
+    // WASD / EQ から移動ベクトルを作る。
     if (D3DXVec3LengthSq(&move) > 0.0f)
     {
         const bool isShiftHeld = ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0);
@@ -303,7 +298,7 @@ void UpdateInputAndCamera()
             moveSpeedScale = kCameraSlowMoveScale;
         }
 
-        // 斜め移動だけ速くならないように正規化してから速度を掛けます。
+        // 斜め移動だけ速くならないように正規化する。
         D3DXVec3Normalize(&move, &move);
         g_cameraPosition += move * (kCameraMoveSpeed * moveSpeedScale * deltaTime);
     }
