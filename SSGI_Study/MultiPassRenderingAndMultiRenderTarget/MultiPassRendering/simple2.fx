@@ -110,6 +110,43 @@ float2 ProjectViewPositionToTexCoord(float3 viewPosition)
                   0.5f - ndc.y * 0.5f);
 }
 
+// 法線を基準に、ビュー空間の接線基底を作る。
+void BuildViewSpaceBasis(float3 normal, out float3 tangent, out float3 bitangent)
+{
+    float3 helperAxis = float3(0.0f, 0.0f, 1.0f);
+    if (abs(normal.z) > 0.999f)
+    {
+        helperAxis = float3(1.0f, 0.0f, 0.0f);
+    }
+
+    tangent = cross(helperAxis, normal);
+    tangent = normalize(tangent);
+    bitangent = cross(normal, tangent);
+    bitangent = normalize(bitangent);
+}
+
+// 法線半球上のランダム方向をビュー空間で返す。
+float3 SampleRandomHemisphereDirection(float3 normal, float2 randomPair)
+{
+    const float kTwoPi = 6.2831853f;
+    float azimuth = kTwoPi * randomPair.x;
+    float cosTheta = randomPair.y;
+    float sinTheta = sqrt(saturate(1.0f - cosTheta * cosTheta));
+
+    float3 localDirection = float3(cos(azimuth) * sinTheta,
+                                   sin(azimuth) * sinTheta,
+                                   cosTheta);
+
+    float3 tangent = float3(0.0f, 0.0f, 0.0f);
+    float3 bitangent = float3(0.0f, 0.0f, 0.0f);
+    BuildViewSpaceBasis(normal, tangent, bitangent);
+
+    float3 worldDirection = tangent * localDirection.x +
+                            bitangent * localDirection.y +
+                            normal * localDirection.z;
+    return normalize(worldDirection);
+}
+
 // 深度差ベースのぼかし重み。
 float ComputeDepthAwareBlurWeight(float centerDepth, float sampleDepth)
 {
@@ -167,6 +204,7 @@ void ComputeOcclusionSample(float2 shiftedTexCoord,
                             float currentDepth,
                             float3 currentNormal,
                             float3 currentViewPosition,
+                            float3 sampleDirection,
                             float sampleDistanceMeters,
                             float distanceScale,
                             out float occluded,
@@ -178,7 +216,7 @@ void ComputeOcclusionSample(float2 shiftedTexCoord,
     hitColor = float3(0.0f, 0.0f, 0.0f);
 
     float sampleDistanceMetersScaled = sampleDistanceMeters * distanceScale;
-    float3 sampleViewPosition = currentViewPosition + currentNormal * sampleDistanceMetersScaled;
+    float3 sampleViewPosition = currentViewPosition + sampleDirection * sampleDistanceMetersScaled;
     if (sampleViewPosition.z <= 0.0f)
     {
         return;
@@ -262,10 +300,14 @@ void ComputeSsaoData(float2 shiftedTexCoord,
                 float occluded = 0.0f;
                 float valid = 0.0f;
                 float3 hitColor = float3(0.0f, 0.0f, 0.0f);
+                float2 randomPair = float2(Random01(shiftedTexCoord * g_screenSize + float2(17.0f, 59.4f)),
+                                           Random01(shiftedTexCoord * g_screenSize + float2(83.1f, 11.7f)));
+                float3 sampleDirection = SampleRandomHemisphereDirection(currentNormal, randomPair);
                 ComputeOcclusionSample(shiftedTexCoord,
                                        currentDepth,
                                        currentNormal,
                                        currentViewPosition,
+                                       sampleDirection,
                                        sampleDistanceMeters,
                                        1.0f,
                                        occluded,
@@ -286,8 +328,13 @@ void ComputeSsaoData(float2 shiftedTexCoord,
                 for (int sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
                 {
                     float sampleIndexFloat = (float)sampleIndex;
+                    float2 sampleSeed = shiftedTexCoord * g_screenSize + float2(sampleIndexFloat * 13.37f,
+                                                                                sampleIndexFloat * 7.91f);
                     float randomValue = 0.0f;
                     float distanceScale = 0.f;;
+                    float2 randomPair = float2(Random01(sampleSeed + float2(17.0f, 59.4f)),
+                                               Random01(sampleSeed + float2(83.1f, 11.7f)));
+                    float3 sampleDirection = SampleRandomHemisphereDirection(currentNormal, randomPair);
 
                     if (g_bUseFixedSsaoSampleDistance)
                     {
@@ -300,8 +347,7 @@ void ComputeSsaoData(float2 shiftedTexCoord,
                     }
                     else
                     {
-                        randomValue = Random01(shiftedTexCoord * g_screenSize + float2(sampleIndexFloat * 13.37f,
-                                                                                             sampleIndexFloat * 7.91f));
+                        randomValue = Random01(sampleSeed);
                         distanceScale = randomValue * randomValue * randomValue;
                     }
 
@@ -314,6 +360,7 @@ void ComputeSsaoData(float2 shiftedTexCoord,
                                            currentDepth,
                                            currentNormal,
                                            currentViewPosition,
+                                           sampleDirection,
                                            sampleDistanceMeters,
                                            distanceScale,
                                            occluded,
