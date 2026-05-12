@@ -60,12 +60,6 @@ void SetMouseCursorVisible(bool visible)
 void UpdateInputAndCamera()
 {
     const float deltaTime = 1.0f / 60.0f;
-    float maxPitch = kMaxPitch;
-    if (g_bAllowStraightUpDown)
-    {
-        // 角度制限を少し緩める。
-        maxPitch = kExtendedMaxPitch;
-    }
     const HWND foregroundWindow = GetForegroundWindow();
     const bool isMainWindowActive = (foregroundWindow == g_hWnd);
     const bool isToolDialogActive = (g_hToolDialog != NULL && foregroundWindow == g_hToolDialog);
@@ -208,13 +202,13 @@ void UpdateInputAndCamera()
 
                     g_cameraYaw += static_cast<float>(deltaX) * kMouseSensitivity * kRemoteDesktopMouseSensitivityScale;
                     g_cameraPitch -= static_cast<float>(deltaY) * kMouseSensitivity * kRemoteDesktopMouseSensitivityScale;
-                    if (g_cameraPitch < -maxPitch)
+                    if (g_cameraPitch < -kMaxPitch)
                     {
-                        g_cameraPitch = -maxPitch;
+                        g_cameraPitch = -kMaxPitch;
                     }
-                    if (g_cameraPitch > maxPitch)
+                    if (g_cameraPitch > kMaxPitch)
                     {
-                        g_cameraPitch = maxPitch;
+                        g_cameraPitch = kMaxPitch;
                     }
                 }
 
@@ -240,13 +234,13 @@ void UpdateInputAndCamera()
 
                     g_cameraYaw += static_cast<float>(deltaX) * kMouseSensitivity;
                     g_cameraPitch -= static_cast<float>(deltaY) * kMouseSensitivity;
-                    if (g_cameraPitch < -maxPitch)
+                    if (g_cameraPitch < -kMaxPitch)
                     {
-                        g_cameraPitch = -maxPitch;
+                        g_cameraPitch = -kMaxPitch;
                     }
-                    if (g_cameraPitch > maxPitch)
+                    if (g_cameraPitch > kMaxPitch)
                     {
-                        g_cameraPitch = maxPitch;
+                        g_cameraPitch = kMaxPitch;
                     }
 
                     SetCursorPos(screenCenter.x, screenCenter.y);

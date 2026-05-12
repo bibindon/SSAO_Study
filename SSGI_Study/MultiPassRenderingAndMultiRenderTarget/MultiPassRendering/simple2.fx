@@ -527,6 +527,7 @@ void PixelShaderSsaoBlur5x5(in float4 inPosition    : POSITION,
     float2 texelSize = 1.0f / g_screenSize;
     float centerDepth = tex2D(depthSampler, shiftedTexCoord).r;
     float3 centerNormal = DecodeNormal(tex2D(normalSampler, shiftedTexCoord));
+    float4 centerSsaoData = tex2D(ssaoSampler, shiftedTexCoord);
     float4 blurredValue = float4(0.0f, 0.0f, 0.0f, 0.0f);
     float weightSum = 0.0f;
 
@@ -546,7 +547,7 @@ void PixelShaderSsaoBlur5x5(in float4 inPosition    : POSITION,
         }
     }
 
-    float4 ssaoData = float4(0.0f, 0.0f, 0.0f, 1.0f);
+    float4 ssaoData = centerSsaoData;
     if (weightSum > 0.0f)
     {
         ssaoData = blurredValue / weightSum;
@@ -565,6 +566,7 @@ void PixelShaderSsaoBlur11x11(in float4 inPosition    : POSITION,
     float2 texelSize = 1.0f / g_screenSize;
     float centerDepth = tex2D(depthSampler, shiftedTexCoord).r;
     float3 centerNormal = DecodeNormal(tex2D(normalSampler, shiftedTexCoord));
+    float4 centerSsaoData = tex2D(ssaoSampler, shiftedTexCoord);
     float4 blurredValue = float4(0.0f, 0.0f, 0.0f, 0.0f);
     float weightSum = 0.0f;
 
@@ -584,7 +586,7 @@ void PixelShaderSsaoBlur11x11(in float4 inPosition    : POSITION,
         }
     }
 
-    float4 ssaoData = float4(0.0f, 0.0f, 0.0f, 1.0f);
+    float4 ssaoData = centerSsaoData;
     if (weightSum > 0.0f)
     {
         ssaoData = blurredValue / weightSum;
@@ -603,6 +605,7 @@ void PixelShaderSsaoBlur21x21(in float4 inPosition    : POSITION,
     float2 texelSize = 1.0f / g_screenSize;
     float centerDepth = tex2D(depthSampler, shiftedTexCoord).r;
     float3 centerNormal = DecodeNormal(tex2D(normalSampler, shiftedTexCoord));
+    float4 centerSsaoData = tex2D(ssaoSampler, shiftedTexCoord);
     float4 blurredValue = float4(0.0f, 0.0f, 0.0f, 0.0f);
     float weightSum = 0.0f;
 
@@ -622,7 +625,7 @@ void PixelShaderSsaoBlur21x21(in float4 inPosition    : POSITION,
         }
     }
 
-    float4 ssaoData = float4(0.0f, 0.0f, 0.0f, 1.0f);
+    float4 ssaoData = centerSsaoData;
     if (weightSum > 0.0f)
     {
         ssaoData = blurredValue / weightSum;

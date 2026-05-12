@@ -431,33 +431,11 @@ void CreateToolDialog()
     assert(g_hApplyDepthCompareDistanceButton != NULL);
     ApplyToolDialogFont(g_hApplyDepthCompareDistanceButton);
 
-    g_hAllowStraightUpDownCheckbox = CreateWindow(_T("BUTTON"),
-                                                  _T("Allow straight up/down"),
-                                                  WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-                                                  20,
-                                                  366,
-                                                  200,
-                                                  24,
-                                                  g_hToolDialog,
-                                                  reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogAllowStraightUpDownCheckboxId)),
-                                                  wc.hInstance,
-                                                  NULL);
-    assert(g_hAllowStraightUpDownCheckbox != NULL);
-    ApplyToolDialogFont(g_hAllowStraightUpDownCheckbox);
-    if (g_bAllowStraightUpDown)
-    {
-        SendMessage(g_hAllowStraightUpDownCheckbox, BM_SETCHECK, BST_CHECKED, 0);
-    }
-    else
-    {
-        SendMessage(g_hAllowStraightUpDownCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
-    }
-
     HWND hDepthBiasDistanceLabel = CreateWindow(_T("STATIC"),
                                                 _T("Depth bias dist:"),
                                                 WS_CHILD | WS_VISIBLE,
                                                 20,
-                                                398,
+                                                366,
                                                 130,
                                                 20,
                                                 g_hToolDialog,
@@ -470,7 +448,7 @@ void CreateToolDialog()
                                             _T("0.10"),
                                             WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                             160,
-                                            394,
+                                            362,
                                             60,
                                             24,
                                             g_hToolDialog,
@@ -484,7 +462,7 @@ void CreateToolDialog()
                                                    _T("Apply"),
                                                    WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                                    230,
-                                                   392,
+                                                   360,
                                                    60,
                                                    28,
                                                    g_hToolDialog,
@@ -1074,11 +1052,6 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         {
             g_bRemoteDesktopCameraMode = (SendMessage(g_hRemoteDesktopCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
             ResetMouseLookTracking();
-            return 0;
-        }
-        if (LOWORD(wParam) == kToolDialogAllowStraightUpDownCheckboxId)
-        {
-            g_bAllowStraightUpDown = (SendMessage(g_hAllowStraightUpDownCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
             return 0;
         }
         if (LOWORD(wParam) == kToolDialogDepthScaledSampleDistanceCheckboxId)
