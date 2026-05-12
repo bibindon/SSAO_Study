@@ -11,12 +11,10 @@ float3 g_ambient = { 0.3f, 0.3f, 0.3f };
 
 bool g_bUseTexture = true;
 bool g_bSingleChannelInput = false;
-bool g_bEnableSimpleSsao = true;
 bool g_bUseThicknessForSsao = true;
 bool g_bDepthScaledSampleDistance = false;
 bool g_bEnableThicknessCap = false;
 bool g_bUseFixedSsaoSampleDistance = false;
-bool g_bUseShadowSaturation = false;
 bool g_bLockSsaoRandomDirections = false;
 
 // half-pixel 補正や texel サイズ計算に使う。
@@ -33,8 +31,6 @@ float g_sampleDepthBiasThreshold = 1.0f;
 float g_targetNormalBiasScale = 2.0f;
 float g_targetDepthBiasScale = 1.0f;
 float g_thicknessCap = 0.02f;
-float g_shadowStrength = 1.0f;
-float g_shadowSaturationStrength = 1.0f;
 float g_indirectLightStrength = 1.0f;
 float g_indirectLightMaxContribution = 1.0f;
 
@@ -278,19 +274,17 @@ void VertexShader1(in  float4 inPosition  : POSITION,
 // 現在ピクセルの SSAO 係数を計算する。
 void ComputeSsaoData(float2 shiftedTexCoord,
                      int sampleCount,
-                     out float ssaoFactor,
+                     out float indirectLightFactor,
                      out float3 indirectColor)
 {
     float currentDepth = tex2D(depthSampler, shiftedTexCoord).r;
     float3 currentNormal = tex2D(normalSampler, shiftedTexCoord).xyz * 2.0f - 1.0f;
     currentNormal = normalize(currentNormal);
     indirectColor = float3(0.0f, 0.0f, 0.0f);
-    ssaoFactor = 1.0f;
+    indirectLightFactor = 0.0f;
 
-    if (g_bEnableSimpleSsao)
+    if (currentDepth < 0.999f)
     {
-        if (currentDepth < 0.999f)
-        {
             float3 currentViewPosition = ReconstructViewPosition(shiftedTexCoord, currentDepth);
             float sampleDistanceMeters = g_simpleSsaoSampleDistanceMeters;
             if (g_bDepthScaledSampleDistance)
@@ -327,7 +321,7 @@ void ComputeSsaoData(float2 shiftedTexCoord,
                                        hitColor);
                 if (valid > 0.5f && occluded > 0.5f)
                 {
-                    ssaoFactor = 0.0f;
+                    indirectLightFactor = 1.0f;
                     indirectColor = hitColor;
                 }
             }
@@ -396,28 +390,26 @@ void ComputeSsaoData(float2 shiftedTexCoord,
 
                 if (validSampleCount > 0.0f)
                 {
-                    float occlusionRate = occlusionCount / validSampleCount;
-                    ssaoFactor = 1.0f - occlusionRate;
+                    indirectLightFactor = occlusionCount / validSampleCount;
                 }
                 if (occlusionCount > 0.0f)
                 {
                     indirectColor = occlusionColorSum / occlusionCount;
                 }
             }
-        }
     }
 
-    ssaoFactor = saturate(ssaoFactor);
+    indirectLightFactor = saturate(indirectLightFactor);
 }
 
 void WriteSsaoOutput(float2 shiftedTexCoord,
                      int sampleCount,
                      out float4 outColor)
 {
-    float ssaoFactor = 1.0f;
+    float indirectLightFactor = 0.0f;
     float3 indirectColor = float3(0.0f, 0.0f, 0.0f);
-    ComputeSsaoData(shiftedTexCoord, sampleCount, ssaoFactor, indirectColor);
-    outColor = float4(indirectColor, ssaoFactor);
+    ComputeSsaoData(shiftedTexCoord, sampleCount, indirectLightFactor, indirectColor);
+    outColor = float4(indirectColor, indirectLightFactor);
 }
 
 void PixelShaderSsao4(in float4 inPosition    : POSITION,
@@ -480,23 +472,14 @@ void PixelShaderComposite(in float4 inPosition    : POSITION,
     float2 shiftedTexCoord = inTexCood + halfPixelOffset;
     float4 workColor = tex2D(textureSampler, shiftedTexCoord);
     float4 ssaoData = tex2D(ssaoSampler, shiftedTexCoord);
-    float ssaoFactor = ssaoData.a;
+    float indirectLightFactor = ssaoData.a;
     float3 indirectColor = ssaoData.rgb;
-    float shadowAmount = saturate(g_shadowStrength * (1.0f - ssaoFactor));
-    float indirectLightAmount = saturate(g_indirectLightStrength * shadowAmount);
+    float indirectLightAmount = saturate(g_indirectLightStrength * indirectLightFactor);
     if (indirectLightAmount > g_indirectLightMaxContribution)
     {
         indirectLightAmount = g_indirectLightMaxContribution;
     }
-    workColor.rgb = workColor.rgb * ssaoFactor + indirectColor * indirectLightAmount;
-    if (g_bUseShadowSaturation)
-    {
-        float saturationAmount = saturate(g_shadowSaturationStrength * (1.0f - ssaoFactor));
-        float luminance = dot(workColor.rgb, float3(0.299f, 0.587f, 0.114f));
-        float3 grayscale = float3(luminance, luminance, luminance);
-        float saturationScale = 1.0f + saturationAmount;
-        workColor.rgb = grayscale + (workColor.rgb - grayscale) * saturationScale;
-    }
+    workColor.rgb += indirectColor * indirectLightAmount;
     workColor = saturate(workColor);
     outColor = workColor;
 }

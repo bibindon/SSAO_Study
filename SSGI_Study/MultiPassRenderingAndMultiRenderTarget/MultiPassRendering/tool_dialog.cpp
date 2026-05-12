@@ -1,5 +1,5 @@
 ﻿#include "app_shared.h"
-// 実行中に SSAO パラメータを調整するためのダイアログ。
+// 実行中に間接光パラメータを調整するためのダイアログ。
 void CreateToolDialog()
 {
     if (g_hToolDialog)
@@ -71,7 +71,7 @@ void CreateToolDialog()
     ApplyToolDialogFont(g_hOpenMeshButton);
 
     HWND hSsaoSampleLabel = CreateWindow(_T("STATIC"),
-                                         _T("SSAO sample dist (m):"),
+                                             _T("GI sample dist (m):"),
                                          WS_CHILD | WS_VISIBLE,
                                          20,
                                          72,
@@ -112,7 +112,7 @@ void CreateToolDialog()
     ApplyToolDialogFont(g_hApplySsaoButton);
 
     HWND hSampleCountLabel = CreateWindow(_T("STATIC"),
-                                          _T("SSAO sample count:"),
+                                          _T("GI sample count:"),
                                           WS_CHILD | WS_VISIBLE,
                                           20,
                                           104,
@@ -178,7 +178,7 @@ void CreateToolDialog()
     ApplyToolDialogFont(g_hApplySampleCountButton);
 
     HWND hSsaoDepthRangeLabel = CreateWindow(_T("STATIC"),
-                                             _T("SSAO depth range (m):"),
+                                             _T("GI depth range (m):"),
                                              WS_CHILD | WS_VISIBLE,
                                              20,
                                              136,
@@ -219,7 +219,7 @@ void CreateToolDialog()
     ApplyToolDialogFont(g_hApplySsaoDepthRangeButton);
 
     g_hUseThicknessCheckbox = CreateWindow(_T("BUTTON"),
-                                           _T("Use thickness for SSAO"),
+                                           _T("Use thickness for GI"),
                                            WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                            20,
                                            170,
@@ -490,7 +490,7 @@ void CreateToolDialog()
     ApplyToolDialogFont(g_hApplyDepthBiasDistanceButton);
 
     g_hDepthScaledSampleDistanceCheckbox = CreateWindow(_T("BUTTON"),
-                                                        _T("Scale sample dist by depth"),
+                                                        _T("Scale GI sample dist by depth"),
                                                         WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                                         20,
                                                         430,
@@ -512,7 +512,7 @@ void CreateToolDialog()
     }
 
     g_hAutoScaleSsaoByCenterCheckbox = CreateWindow(_T("BUTTON"),
-                                                    _T("Auto scale SSAO by center depth"),
+                                                    _T("Auto scale GI by center depth"),
                                                     WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                                     20,
                                                     462,
@@ -534,7 +534,7 @@ void CreateToolDialog()
     }
 
     g_hSmoothAutoSsaoCheckbox = CreateWindow(_T("BUTTON"),
-                                             _T("Smooth auto SSAO change (0.5s)"),
+                                             _T("Smooth auto GI change (0.5s)"),
                                              WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                              20,
                                              494,
@@ -556,7 +556,7 @@ void CreateToolDialog()
     }
 
     g_hEnableSsaoBlurCheckbox = CreateWindow(_T("BUTTON"),
-                                             _T("Enable SSAO blur"),
+                                             _T("Enable GI blur"),
                                              WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                              20,
                                              526,
@@ -638,7 +638,7 @@ void CreateToolDialog()
     }
 
     g_hFixedSsaoSampleDistanceCheckbox = CreateWindow(_T("BUTTON"),
-                                                      _T("Use fixed SSAO sample dist"),
+                                                      _T("Use fixed GI sample dist"),
                                                       WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                                       20,
                                                       608,
@@ -659,115 +659,11 @@ void CreateToolDialog()
         SendMessage(g_hFixedSsaoSampleDistanceCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
     }
 
-    HWND hShadowStrengthLabel = CreateWindow(_T("STATIC"),
-                                             _T("Shadow strength:"),
-                                             WS_CHILD | WS_VISIBLE,
-                                             20,
-                                             640,
-                                             130,
-                                             20,
-                                             g_hToolDialog,
-                                             NULL,
-                                             wc.hInstance,
-                                             NULL);
-    ApplyToolDialogFont(hShadowStrengthLabel);
-
-    g_hShadowStrengthEdit = CreateWindow(_T("EDIT"),
-                                         _T("1.00"),
-                                         WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
-                                         160,
-                                         636,
-                                         60,
-                                         24,
-                                         g_hToolDialog,
-                                         reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogShadowStrengthEditId)),
-                                         wc.hInstance,
-                                         NULL);
-    assert(g_hShadowStrengthEdit != NULL);
-    ApplyToolDialogFont(g_hShadowStrengthEdit);
-
-    g_hApplyShadowStrengthButton = CreateWindow(_T("BUTTON"),
-                                                _T("Apply"),
-                                                WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-                                                230,
-                                                634,
-                                                60,
-                                                28,
-                                                g_hToolDialog,
-                                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogApplyShadowStrengthButtonId)),
-                                                wc.hInstance,
-                                                NULL);
-    assert(g_hApplyShadowStrengthButton != NULL);
-    ApplyToolDialogFont(g_hApplyShadowStrengthButton);
-
-    g_hSaturateShadowCheckbox = CreateWindow(_T("BUTTON"),
-                                             _T("Boost saturation in shadow"),
-                                             WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-                                             20,
-                                             668,
-                                             240,
-                                             24,
-                                             g_hToolDialog,
-                                             reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogSaturateShadowCheckboxId)),
-                                             wc.hInstance,
-                                             NULL);
-    assert(g_hSaturateShadowCheckbox != NULL);
-    ApplyToolDialogFont(g_hSaturateShadowCheckbox);
-    if (g_bUseShadowSaturation)
-    {
-        SendMessage(g_hSaturateShadowCheckbox, BM_SETCHECK, BST_CHECKED, 0);
-    }
-    else
-    {
-        SendMessage(g_hSaturateShadowCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
-    }
-
-    HWND hShadowSaturationStrengthLabel = CreateWindow(_T("STATIC"),
-                                                       _T("Shadow saturation:"),
-                                                       WS_CHILD | WS_VISIBLE,
-                                                       20,
-                                                       700,
-                                                       130,
-                                                       20,
-                                                       g_hToolDialog,
-                                                       NULL,
-                                                       wc.hInstance,
-                                                       NULL);
-    ApplyToolDialogFont(hShadowSaturationStrengthLabel);
-
-    g_hShadowSaturationStrengthEdit = CreateWindow(_T("EDIT"),
-                                                   _T("1.00"),
-                                                   WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
-                                                   160,
-                                                   696,
-                                                   60,
-                                                   24,
-                                                   g_hToolDialog,
-                                                   reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogShadowSaturationStrengthEditId)),
-                                                   wc.hInstance,
-                                                   NULL);
-    assert(g_hShadowSaturationStrengthEdit != NULL);
-    ApplyToolDialogFont(g_hShadowSaturationStrengthEdit);
-
-    g_hApplyShadowSaturationStrengthButton = CreateWindow(_T("BUTTON"),
-                                                          _T("Apply"),
-                                                          WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-                                                          230,
-                                                          694,
-                                                          60,
-                                                          28,
-                                                          g_hToolDialog,
-                                                          reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogApplyShadowSaturationStrengthButtonId)),
-                                                          wc.hInstance,
-                                                          NULL);
-    assert(g_hApplyShadowSaturationStrengthButton != NULL);
-    ApplyToolDialogFont(g_hApplyShadowSaturationStrengthButton);
-
     HWND hIndirectLightStrengthLabel = CreateWindow(_T("STATIC"),
                                                     _T("Indirect light:"),
                                                     WS_CHILD | WS_VISIBLE,
                                                     20,
-                                                    732,
+                                                    640,
                                                     130,
                                                     20,
                                                     g_hToolDialog,
@@ -780,7 +676,7 @@ void CreateToolDialog()
                                                 _T("1.00"),
                                                 WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                                 160,
-                                                728,
+                                                636,
                                                 60,
                                                 24,
                                                 g_hToolDialog,
@@ -794,7 +690,7 @@ void CreateToolDialog()
                                                        _T("Apply"),
                                                        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                                        230,
-                                                       726,
+                                                       634,
                                                        60,
                                                        28,
                                                        g_hToolDialog,
@@ -808,7 +704,7 @@ void CreateToolDialog()
                                                    _T("Keep random dirs fixed"),
                                                    WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                                    20,
-                                                   760,
+                                                   668,
                                                    220,
                                                    24,
                                                    g_hToolDialog,
@@ -830,7 +726,7 @@ void CreateToolDialog()
                                                            _T("Indirect light max:"),
                                                            WS_CHILD | WS_VISIBLE,
                                                            20,
-                                                           792,
+                                                           700,
                                                            130,
                                                            20,
                                                            g_hToolDialog,
@@ -843,7 +739,7 @@ void CreateToolDialog()
                                                        _T("1.00"),
                                                        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                                        160,
-                                                       788,
+                                                       696,
                                                        60,
                                                        24,
                                                        g_hToolDialog,
@@ -857,7 +753,7 @@ void CreateToolDialog()
                                                               _T("Apply"),
                                                               WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                                               230,
-                                                              786,
+                                                              694,
                                                               60,
                                                               28,
                                                               g_hToolDialog,
@@ -871,7 +767,7 @@ void CreateToolDialog()
                                                  _T("Enable thickness cap"),
                                                  WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                                  20,
-                                                 822,
+                                                 732,
                                                  180,
                                                  24,
                                                  g_hToolDialog,
@@ -893,7 +789,7 @@ void CreateToolDialog()
                                            _T("Thickness cap (m):"),
                                            WS_CHILD | WS_VISIBLE,
                                            20,
-                                           854,
+                                           764,
                                            130,
                                            20,
                                            g_hToolDialog,
@@ -906,7 +802,7 @@ void CreateToolDialog()
                                        _T("1.00"),
                                        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                        160,
-                                       850,
+                                       760,
                                        60,
                                        24,
                                        g_hToolDialog,
@@ -920,7 +816,7 @@ void CreateToolDialog()
                                               _T("Apply"),
                                               WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                               230,
-                                              848,
+                                              758,
                                               60,
                                               28,
                                               g_hToolDialog,
@@ -949,14 +845,6 @@ void CreateToolDialog()
     TCHAR indirectLightMaxContributionText[64] = { };
     _stprintf_s(indirectLightMaxContributionText, _T("%.2f"), g_indirectLightMaxContribution);
     SetWindowText(g_hIndirectLightMaxContributionEdit, indirectLightMaxContributionText);
-
-    TCHAR shadowStrengthText[64] = { };
-    _stprintf_s(shadowStrengthText, _T("%.2f"), g_shadowStrength);
-    SetWindowText(g_hShadowStrengthEdit, shadowStrengthText);
-
-    TCHAR shadowSaturationStrengthText[64] = { };
-    _stprintf_s(shadowSaturationStrengthText, _T("%.2f"), g_shadowSaturationStrength);
-    SetWindowText(g_hShadowSaturationStrengthEdit, shadowSaturationStrengthText);
 
     TCHAR normalBiasScaleText[64] = { };
     _stprintf_s(normalBiasScaleText, _T("%.5f"), g_targetNormalBiasScale);
@@ -1207,60 +1095,9 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             g_bUseFixedSsaoSampleDistance = (SendMessage(g_hFixedSsaoSampleDistanceCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
             return 0;
         }
-        if (LOWORD(wParam) == kToolDialogApplyShadowStrengthButtonId)
-        {
-            TCHAR buffer[64] = { };
-            GetWindowText(g_hShadowStrengthEdit, buffer, _countof(buffer));
-            float shadowStrength = g_shadowStrength;
-            if (_stscanf_s(buffer, _T("%f"), &shadowStrength) == 1)
-            {
-                if (shadowStrength < 0.0f)
-                {
-                    shadowStrength = 0.0f;
-                }
-                if (shadowStrength > 5.0f)
-                {
-                    shadowStrength = 5.0f;
-                }
-                g_shadowStrength = shadowStrength;
-
-                TCHAR normalizedText[64] = { };
-                _stprintf_s(normalizedText, _T("%.2f"), g_shadowStrength);
-                SetWindowText(g_hShadowStrengthEdit, normalizedText);
-            }
-            return 0;
-        }
-        if (LOWORD(wParam) == kToolDialogSaturateShadowCheckboxId)
-        {
-            g_bUseShadowSaturation = (SendMessage(g_hSaturateShadowCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
-            return 0;
-        }
         if (LOWORD(wParam) == kToolDialogLockRandomDirectionsCheckboxId)
         {
             g_bLockSsaoRandomDirections = (SendMessage(g_hLockRandomDirectionsCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
-            return 0;
-        }
-        if (LOWORD(wParam) == kToolDialogApplyShadowSaturationStrengthButtonId)
-        {
-            TCHAR buffer[64] = { };
-            GetWindowText(g_hShadowSaturationStrengthEdit, buffer, _countof(buffer));
-            float shadowSaturationStrength = g_shadowSaturationStrength;
-            if (_stscanf_s(buffer, _T("%f"), &shadowSaturationStrength) == 1)
-            {
-                if (shadowSaturationStrength < 0.0f)
-                {
-                    shadowSaturationStrength = 0.0f;
-                }
-                if (shadowSaturationStrength > 5.0f)
-                {
-                    shadowSaturationStrength = 5.0f;
-                }
-                g_shadowSaturationStrength = shadowSaturationStrength;
-
-                TCHAR normalizedText[64] = { };
-                _stprintf_s(normalizedText, _T("%.2f"), g_shadowSaturationStrength);
-                SetWindowText(g_hShadowSaturationStrengthEdit, normalizedText);
-            }
             return 0;
         }
         if (LOWORD(wParam) == kToolDialogApplyIndirectLightStrengthButtonId)

@@ -76,7 +76,6 @@ void UpdateInputAndCamera()
     const bool cursorToggleKeyDown = (GetAsyncKeyState('2') & 0x8000) != 0;
     const bool lambertToggleKeyDown = (GetAsyncKeyState('3') & 0x8000) != 0;
     const bool dialogToggleKeyDown = (GetAsyncKeyState('4') & 0x8000) != 0;
-    const bool simpleSsaoToggleKeyDown = (GetAsyncKeyState('5') & 0x8000) != 0;
     const bool textureToggleKeyDown = (GetAsyncKeyState('6') & 0x8000) != 0;
     const bool escapeToggleKeyDown = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
 
@@ -90,7 +89,6 @@ void UpdateInputAndCamera()
         g_bPrevCursorToggleKeyDown = cursorToggleKeyDown;
         g_bPrevLambertToggleKeyDown = lambertToggleKeyDown;
         g_bPrevDialogToggleKeyDown = dialogToggleKeyDown;
-        g_bPrevSimpleSsaoToggleKeyDown = simpleSsaoToggleKeyDown;
         g_bPrevTextureToggleKeyDown = textureToggleKeyDown;
         g_bPrevEscapeToggleKeyDown = escapeToggleKeyDown;
         ResetMouseLookTracking();
@@ -180,12 +178,6 @@ void UpdateInputAndCamera()
         ToggleToolDialog();
     }
     g_bPrevDialogToggleKeyDown = dialogToggleKeyDown;
-
-    if (simpleSsaoToggleKeyDown && !g_bPrevSimpleSsaoToggleKeyDown)
-    {
-        g_bEnableSimpleSsao = !g_bEnableSimpleSsao;
-    }
-    g_bPrevSimpleSsaoToggleKeyDown = simpleSsaoToggleKeyDown;
 
     if (textureToggleKeyDown && !g_bPrevTextureToggleKeyDown)
     {

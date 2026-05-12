@@ -5,9 +5,9 @@ void DrawOverlayText()
     const float activeDepthRange = GetActiveSsaoDepthRange();
     const float activeSampleDistanceMeters = GetActiveSsaoSampleDistanceMeters();
     const float fps = 60.0f;
-    TCHAR lines[16][128] =
+    TCHAR lines[17][128] =
     {
-        _T("SSAO sample controls"),
+        _T("Indirect light controls"),
         _T(""),
         _T("W/A/S/D: move"),
         _T("E / Q: move up / down"),
@@ -19,23 +19,24 @@ void DrawOverlayText()
         _T("2 / Esc: toggle mouse cursor"),
         _T("3: toggle lambert lighting"),
         _T("4: toggle mesh dialog"),
-        _T("5: toggle simple SSAO"),
         _T("6: toggle texture"),
+        _T(""),
+        _T(""),
         _T(""),
         _T(""),
     };
     _stprintf_s(lines[1], _T("FPS: %.1f"), fps);
-    _stprintf_s(lines[13], _T("SSAO depth range: %.1f m"), activeDepthRange);
-    _stprintf_s(lines[14], _T("SSAO sample dist: %.2f m"), activeSampleDistanceMeters);
     const TCHAR* remoteDesktopCameraText = _T("OFF");
     if (g_bRemoteDesktopCameraMode)
     {
         remoteDesktopCameraText = _T("ON");
     }
     _stprintf_s(lines[2], _T("Remote Desktop camera: %s"), remoteDesktopCameraText);
-    _stprintf_s(lines[11], _T("Texture: %s"), g_bUseTexture ? _T("on") : _T("off"));
-    _stprintf_s(lines[12], _T("Shadow darken: %.2f"), g_shadowStrength);
-    _stprintf_s(lines[15], _T("Shadow saturate: %.2f (%s)"), g_shadowSaturationStrength, g_bUseShadowSaturation ? _T("on") : _T("off"));
+    _stprintf_s(lines[12], _T("Texture: %s"), g_bUseTexture ? _T("on") : _T("off"));
+    _stprintf_s(lines[13], _T("GI depth range: %.1f m"), activeDepthRange);
+    _stprintf_s(lines[14], _T("GI sample dist: %.2f m"), activeSampleDistanceMeters);
+    _stprintf_s(lines[15], _T("Indirect light: %.2f"), g_indirectLightStrength);
+    _stprintf_s(lines[16], _T("Indirect max: %.2f"), g_indirectLightMaxContribution);
 
     for (int i = 0; i < _countof(lines); ++i)
     {
@@ -128,7 +129,7 @@ void DrawSceneGeometry(const D3DXMATRIX& View, const D3DXMATRIX& Proj)
 
 }
 
-// 現在有効な SSAO サンプル距離を返す。
+// 現在有効な GI サンプル距離を返す。
 float GetActiveSsaoSampleDistanceMeters()
 {
     if (g_bAutoScaleSsaoByCenterDepth)
@@ -139,7 +140,7 @@ float GetActiveSsaoSampleDistanceMeters()
     return g_simpleSsaoSampleDistanceMeters;
 }
 
-// 現在有効な SSAO 深度範囲を返す。
+// 現在有効な GI 深度範囲を返す。
 float GetActiveSsaoDepthRange()
 {
     if (g_bAutoScaleSsaoByCenterDepth)
@@ -150,7 +151,7 @@ float GetActiveSsaoDepthRange()
     return g_ssaoDepthRange;
 }
 
-// 画面中央付近の深度から SSAO の距離パラメータを自動調整する。
+// 画面中央付近の深度から GI の距離パラメータを自動調整する。
 void UpdateAutoSsaoParametersFromCenterDepth()
 {
     if (!g_bAutoScaleSsaoByCenterDepth || g_pCenterDepthResolveTexture == NULL || g_pCenterDepthReadbackSurface == NULL)
@@ -418,7 +419,7 @@ void RenderPass1()
     SAFE_RELEASE(pOldRT0);
 }
 
-// 第 2 パス。thickness、SSAO、ぼかし、最終合成を行う。
+// 第 2 パス。thickness、間接光、ぼかし、最終合成を行う。
 void RenderPass2()
 {
     HRESULT hResult = E_FAIL;
@@ -508,15 +509,6 @@ void RenderPass2()
     hResult = g_pEffect2->Begin(&ssaoNumPass, 0); assert(hResult == S_OK);
     hResult = g_pEffect2->BeginPass(0);           assert(hResult == S_OK);
 
-    // SSAO 用パラメータをシェーダーへ渡す。
-    if (g_bEnableSimpleSsao)
-    {
-        hResult = g_pEffect2->SetBool("g_bEnableSimpleSsao", TRUE); assert(hResult == S_OK);
-    }
-    else
-    {
-        hResult = g_pEffect2->SetBool("g_bEnableSimpleSsao", FALSE); assert(hResult == S_OK);
-    }
     if (g_bUseThicknessForSsao)
     {
         hResult = g_pEffect2->SetBool("g_bUseThicknessForSsao", TRUE); assert(hResult == S_OK);
@@ -554,18 +546,8 @@ void RenderPass2()
     hResult = g_pEffect2->SetFloat("g_sampleDepthBiasThreshold", g_sampleDepthBiasDistance / activeSsaoDepthRange); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_targetNormalBiasScale", g_targetNormalBiasScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_targetDepthBiasScale", g_targetDepthBiasScale); assert(hResult == S_OK);
-    hResult = g_pEffect2->SetFloat("g_shadowStrength", g_shadowStrength); assert(hResult == S_OK);
-    hResult = g_pEffect2->SetFloat("g_shadowSaturationStrength", g_shadowSaturationStrength); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_indirectLightStrength", g_indirectLightStrength); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_indirectLightMaxContribution", g_indirectLightMaxContribution); assert(hResult == S_OK);
-    if (g_bUseShadowSaturation)
-    {
-        hResult = g_pEffect2->SetBool("g_bUseShadowSaturation", TRUE); assert(hResult == S_OK);
-    }
-    else
-    {
-        hResult = g_pEffect2->SetBool("g_bUseShadowSaturation", FALSE); assert(hResult == S_OK);
-    }
     if (g_bLockSsaoRandomDirections)
     {
         hResult = g_pEffect2->SetBool("g_bLockSsaoRandomDirections", TRUE); assert(hResult == S_OK);
@@ -585,7 +567,7 @@ void RenderPass2()
     hResult = g_pEffect2->End();     assert(hResult == S_OK);
     hResult = g_pd3dDevice->EndScene(); assert(hResult == S_OK);
 
-    // 必要なら SSAO を後段でぼかす。
+    // 必要なら間接光を後段でぼかす。
     if (g_bEnableSsaoBlur)
     {
         hResult = g_pSsaoBlurRenderTarget->GetSurfaceLevel(0, &pSsaoBlurRT); assert(hResult == S_OK);

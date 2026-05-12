@@ -68,11 +68,6 @@ namespace
     constexpr int kToolDialogSsaoBlur11x11RadioId = 1029;
     constexpr int kToolDialogSsaoBlur21x21RadioId = 1036;
     constexpr int kToolDialogFixedSsaoSampleDistanceCheckboxId = 1030;
-    constexpr int kToolDialogShadowStrengthEditId = 1031;
-    constexpr int kToolDialogApplyShadowStrengthButtonId = 1032;
-    constexpr int kToolDialogSaturateShadowCheckboxId = 1033;
-    constexpr int kToolDialogShadowSaturationStrengthEditId = 1034;
-    constexpr int kToolDialogApplyShadowSaturationStrengthButtonId = 1035;
     constexpr int kToolDialogIndirectLightStrengthEditId = 1037;
     constexpr int kToolDialogApplyIndirectLightStrengthButtonId = 1038;
     constexpr int kToolDialogLockRandomDirectionsCheckboxId = 1039;
@@ -168,15 +163,13 @@ extern bool g_bPrevBackDepthInfoKeyDown;
 extern bool g_bPrevCursorToggleKeyDown;
 extern bool g_bPrevLambertToggleKeyDown;
 extern bool g_bPrevDialogToggleKeyDown;
-extern bool g_bPrevSimpleSsaoToggleKeyDown;
 extern bool g_bPrevTextureToggleKeyDown;
 extern bool g_bPrevEscapeToggleKeyDown;
 extern bool g_bMouseCursorVisible;
 
-// 描画・SSAO の各種設定値
+// 描画・間接光の各種設定値
 extern bool g_bUseLambertLighting;
 extern bool g_bUseTexture;
-extern bool g_bEnableSimpleSsao;
 extern bool g_bEnableSsaoBlur;
 extern int g_ssaoBlurKernelSize;
 extern bool g_bUseThicknessForSsao;
@@ -202,11 +195,8 @@ extern float g_depthCompareDistance;
 extern float g_sampleDepthBiasDistance;
 extern bool g_bEnableThicknessCap;
 extern float g_thicknessCapMeters;
-extern float g_shadowStrength;
-extern float g_shadowSaturationStrength;
 extern float g_indirectLightStrength;
 extern float g_indirectLightMaxContribution;
-extern bool g_bUseShadowSaturation;
 extern bool g_bLockSsaoRandomDirections;
 
 // カメラ状態
@@ -245,11 +235,6 @@ extern HWND g_hSsaoBlur5x5Radio;
 extern HWND g_hSsaoBlur11x11Radio;
 extern HWND g_hSsaoBlur21x21Radio;
 extern HWND g_hFixedSsaoSampleDistanceCheckbox;
-extern HWND g_hShadowStrengthEdit;
-extern HWND g_hApplyShadowStrengthButton;
-extern HWND g_hSaturateShadowCheckbox;
-extern HWND g_hShadowSaturationStrengthEdit;
-extern HWND g_hApplyShadowSaturationStrengthButton;
 extern HWND g_hIndirectLightStrengthEdit;
 extern HWND g_hApplyIndirectLightStrengthButton;
 extern HWND g_hLockRandomDirectionsCheckbox;
