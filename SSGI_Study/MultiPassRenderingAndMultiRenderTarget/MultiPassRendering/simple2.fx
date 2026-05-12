@@ -16,6 +16,7 @@ bool g_bDepthScaledSampleDistance = false;
 bool g_bEnableThicknessCap = false;
 bool g_bUseFixedSsaoSampleDistance = false;
 bool g_bLockSsaoRandomDirections = false;
+bool g_bUseFixedSingleSamplePattern = false;
 
 // half-pixel 補正や texel サイズ計算に使う。
 float2 g_screenSize = { 1600.0f, 900.0f };
@@ -33,7 +34,6 @@ float g_targetDepthBiasScale = 1.0f;
 float g_thicknessCap = 0.02f;
 float g_indirectLightStrength = 1.0f;
 float g_indirectLightMaxContribution = 1.0f;
-int g_indirectLightBlendMode = 0;
 
 texture texture1;
 sampler textureSampler = sampler_state {
@@ -299,15 +299,36 @@ void ComputeSsaoData(float2 shiftedTexCoord,
                 float valid = 0.0f;
                 float3 hitColor = float3(0.0f, 0.0f, 0.0f);
                 float2 randomPair = float2(0.0f, 0.0f);
-                if (g_bLockSsaoRandomDirections)
+                float sampleDistanceScale = 1.0f;
+                if (g_bUseFixedSingleSamplePattern)
                 {
                     randomPair = float2(Random01(float2(17.0f, 59.4f)),
                                         Random01(float2(83.1f, 11.7f)));
                 }
                 else
                 {
-                    randomPair = float2(Random01(shiftedTexCoord * g_screenSize + float2(17.0f, 59.4f)),
-                                        Random01(shiftedTexCoord * g_screenSize + float2(83.1f, 11.7f)));
+                    float2 sampleSeed = shiftedTexCoord * g_screenSize;
+                    if (g_bLockSsaoRandomDirections)
+                    {
+                        randomPair = float2(Random01(sampleSeed + float2(17.0f, 59.4f)),
+                                            Random01(sampleSeed + float2(83.1f, 11.7f)));
+                    }
+                    else
+                    {
+                        randomPair = float2(Random01(sampleSeed + float2(currentDepth * 173.0f, currentDepth * 59.0f)),
+                                            Random01(sampleSeed + float2(currentDepth * 83.0f, currentDepth * 117.0f)));
+                    }
+
+                    if (g_bUseFixedSsaoSampleDistance)
+                    {
+                        sampleDistanceScale = 1.0f;
+                    }
+                    else
+                    {
+                        float randomDistance = Random01(sampleSeed + float2(currentDepth * 41.0f, currentDepth * 97.0f));
+                        sampleDistanceScale = randomDistance * randomDistance * randomDistance;
+                        sampleDistanceScale += (0.1 * currentDepth);
+                    }
                 }
                 float3 sampleDirection = SampleRandomHemisphereDirection(currentNormal, randomPair);
                 ComputeOcclusionSample(shiftedTexCoord,
@@ -316,7 +337,7 @@ void ComputeSsaoData(float2 shiftedTexCoord,
                                        currentViewPosition,
                                        sampleDirection,
                                        sampleDistanceMeters,
-                                       1.0f,
+                                       sampleDistanceScale,
                                        occluded,
                                        valid,
                                        hitColor);
@@ -413,6 +434,16 @@ void WriteSsaoOutput(float2 shiftedTexCoord,
     outColor = float4(indirectColor, indirectLightFactor);
 }
 
+void PixelShaderSsao1(in float4 inPosition    : POSITION,
+                      in float2 inTexCood     : TEXCOORD0,
+
+                      out float4 outColor     : COLOR)
+{
+    float2 halfPixelOffset = 0.5f / g_screenSize;
+    float2 shiftedTexCoord = inTexCood + halfPixelOffset;
+    WriteSsaoOutput(shiftedTexCoord, 1, outColor);
+}
+
 void PixelShaderSsao4(in float4 inPosition    : POSITION,
                       in float2 inTexCood     : TEXCOORD0,
 
@@ -480,15 +511,7 @@ void PixelShaderComposite(in float4 inPosition    : POSITION,
     {
         indirectLightAmount = g_indirectLightMaxContribution;
     }
-    if (g_indirectLightBlendMode == 1)
-    {
-        float3 multipliedIndirectColor = workColor.rgb * indirectColor;
-        workColor.rgb = workColor.rgb + (multipliedIndirectColor - workColor.rgb) * indirectLightAmount;
-    }
-    else
-    {
-        workColor.rgb = workColor.rgb + (indirectColor - workColor.rgb) * indirectLightAmount;
-    }
+    workColor.rgb = workColor.rgb + (indirectColor - workColor.rgb) * indirectLightAmount;
     workColor = saturate(workColor);
     outColor = workColor;
 }
@@ -646,6 +669,17 @@ void PixelShaderThickness(in float4 inPosition : POSITION,
     }
 
     outColor = float4(thickness, 0.0f, 0.0f, 1.0f);
+}
+
+technique TechniqueSsao1
+{
+    pass Pass1
+    {
+        CullMode = NONE;
+
+        VertexShader = compile vs_3_0 VertexShader1();
+        PixelShader = compile ps_3_0 PixelShaderSsao1();
+   }
 }
 
 technique TechniqueSsao4

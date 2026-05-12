@@ -484,7 +484,11 @@ void RenderPass2()
 
     hResult = g_pd3dDevice->BeginScene(); assert(hResult == S_OK);
 
-    if (g_simpleSsaoSampleCount <= 4)
+    if (g_simpleSsaoSampleCount <= 1)
+    {
+        hResult = g_pEffect2->SetTechnique("TechniqueSsao1"); assert(hResult == S_OK);
+    }
+    else if (g_simpleSsaoSampleCount <= 4)
     {
         hResult = g_pEffect2->SetTechnique("TechniqueSsao4"); assert(hResult == S_OK);
     }
@@ -548,7 +552,6 @@ void RenderPass2()
     hResult = g_pEffect2->SetFloat("g_targetDepthBiasScale", g_targetDepthBiasScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_indirectLightStrength", g_indirectLightStrength); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_indirectLightMaxContribution", g_indirectLightMaxContribution); assert(hResult == S_OK);
-    hResult = g_pEffect2->SetInt("g_indirectLightBlendMode", g_indirectLightBlendMode); assert(hResult == S_OK);
     if (g_bLockSsaoRandomDirections)
     {
         hResult = g_pEffect2->SetBool("g_bLockSsaoRandomDirections", TRUE); assert(hResult == S_OK);
@@ -556,6 +559,14 @@ void RenderPass2()
     else
     {
         hResult = g_pEffect2->SetBool("g_bLockSsaoRandomDirections", FALSE); assert(hResult == S_OK);
+    }
+    if (g_bUseFixedSingleSamplePattern)
+    {
+        hResult = g_pEffect2->SetBool("g_bUseFixedSingleSamplePattern", TRUE); assert(hResult == S_OK);
+    }
+    else
+    {
+        hResult = g_pEffect2->SetBool("g_bUseFixedSingleSamplePattern", FALSE); assert(hResult == S_OK);
     }
     hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("depthTexture", g_pDepthRenderTarget); assert(hResult == S_OK);

@@ -137,30 +137,35 @@ void CreateToolDialog()
                                       NULL);
     assert(g_hSampleCountEdit != NULL);
     ApplyToolDialogFont(g_hSampleCountEdit);
+    SendMessage(g_hSampleCountEdit, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(_T("1")));
     SendMessage(g_hSampleCountEdit, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(_T("4")));
     SendMessage(g_hSampleCountEdit, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(_T("8")));
     SendMessage(g_hSampleCountEdit, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(_T("16")));
     SendMessage(g_hSampleCountEdit, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(_T("32")));
     SendMessage(g_hSampleCountEdit, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(_T("64")));
-    if (g_simpleSsaoSampleCount <= 4)
+    if (g_simpleSsaoSampleCount <= 1)
     {
         SendMessage(g_hSampleCountEdit, CB_SETCURSEL, 0, 0);
     }
-    else if (g_simpleSsaoSampleCount <= 8)
+    else if (g_simpleSsaoSampleCount <= 4)
     {
         SendMessage(g_hSampleCountEdit, CB_SETCURSEL, 1, 0);
     }
-    else if (g_simpleSsaoSampleCount <= 16)
+    else if (g_simpleSsaoSampleCount <= 8)
     {
         SendMessage(g_hSampleCountEdit, CB_SETCURSEL, 2, 0);
     }
-    else if (g_simpleSsaoSampleCount <= 32)
+    else if (g_simpleSsaoSampleCount <= 16)
     {
         SendMessage(g_hSampleCountEdit, CB_SETCURSEL, 3, 0);
     }
-    else
+    else if (g_simpleSsaoSampleCount <= 32)
     {
         SendMessage(g_hSampleCountEdit, CB_SETCURSEL, 4, 0);
+    }
+    else
+    {
+        SendMessage(g_hSampleCountEdit, CB_SETCURSEL, 5, 0);
     }
 
     g_hApplySampleCountButton = CreateWindow(_T("BUTTON"),
@@ -722,55 +727,26 @@ void CreateToolDialog()
         SendMessage(g_hLockRandomDirectionsCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
     }
 
-    HWND hIndirectBlendLabel = CreateWindow(_T("STATIC"),
-                                            _T("Indirect blend:"),
-                                            WS_CHILD | WS_VISIBLE,
-                                            20,
-                                            700,
-                                            130,
-                                            20,
-                                            g_hToolDialog,
-                                            NULL,
-                                            wc.hInstance,
-                                            NULL);
-    ApplyToolDialogFont(hIndirectBlendLabel);
-
-    g_hIndirectBlendLerpRadio = CreateWindow(_T("BUTTON"),
-                                             _T("Lerp"),
-                                             WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON,
-                                             160,
-                                             698,
-                                             70,
-                                             22,
-                                             g_hToolDialog,
-                                             reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogIndirectBlendLerpRadioId)),
-                                             wc.hInstance,
-                                             NULL);
-    assert(g_hIndirectBlendLerpRadio != NULL);
-    ApplyToolDialogFont(g_hIndirectBlendLerpRadio);
-
-    g_hIndirectBlendMultiplyRadio = CreateWindow(_T("BUTTON"),
-                                                 _T("Multiply"),
-                                                 WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON,
-                                                 230,
-                                                 698,
-                                                 90,
-                                                 22,
-                                                 g_hToolDialog,
-                                                 reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogIndirectBlendMultiplyRadioId)),
-                                                 wc.hInstance,
-                                                 NULL);
-    assert(g_hIndirectBlendMultiplyRadio != NULL);
-    ApplyToolDialogFont(g_hIndirectBlendMultiplyRadio);
-    if (g_indirectLightBlendMode == 1)
+    g_hFixedSingleSampleCheckbox = CreateWindow(_T("BUTTON"),
+                                                _T("Fix single-sample dir/dist"),
+                                                WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                                                20,
+                                                700,
+                                                220,
+                                                24,
+                                                g_hToolDialog,
+                                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogFixedSingleSampleCheckboxId)),
+                                                wc.hInstance,
+                                                NULL);
+    assert(g_hFixedSingleSampleCheckbox != NULL);
+    ApplyToolDialogFont(g_hFixedSingleSampleCheckbox);
+    if (g_bUseFixedSingleSamplePattern)
     {
-        SendMessage(g_hIndirectBlendLerpRadio, BM_SETCHECK, BST_UNCHECKED, 0);
-        SendMessage(g_hIndirectBlendMultiplyRadio, BM_SETCHECK, BST_CHECKED, 0);
+        SendMessage(g_hFixedSingleSampleCheckbox, BM_SETCHECK, BST_CHECKED, 0);
     }
     else
     {
-        SendMessage(g_hIndirectBlendLerpRadio, BM_SETCHECK, BST_CHECKED, 0);
-        SendMessage(g_hIndirectBlendMultiplyRadio, BM_SETCHECK, BST_UNCHECKED, 0);
+        SendMessage(g_hFixedSingleSampleCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
     }
 
     HWND hIndirectLightMaxContributionLabel = CreateWindow(_T("STATIC"),
@@ -983,21 +959,25 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             const LRESULT selectedIndex = SendMessage(g_hSampleCountEdit, CB_GETCURSEL, 0, 0);
             if (selectedIndex == 0)
             {
-                g_simpleSsaoSampleCount = 4;
+                g_simpleSsaoSampleCount = 1;
             }
             else if (selectedIndex == 1)
             {
-                g_simpleSsaoSampleCount = 8;
+                g_simpleSsaoSampleCount = 4;
             }
             else if (selectedIndex == 2)
             {
-                g_simpleSsaoSampleCount = 16;
+                g_simpleSsaoSampleCount = 8;
             }
             else if (selectedIndex == 3)
             {
-                g_simpleSsaoSampleCount = 32;
+                g_simpleSsaoSampleCount = 16;
             }
             else if (selectedIndex == 4)
+            {
+                g_simpleSsaoSampleCount = 32;
+            }
+            else if (selectedIndex == 5)
             {
                 g_simpleSsaoSampleCount = 64;
             }
@@ -1036,17 +1016,21 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             {
                 if (selectedIndex == 0)
                 {
-                    sampleCount = 4;
+                    sampleCount = 1;
                 }
                 else if (selectedIndex == 1)
                 {
-                    sampleCount = 8;
+                    sampleCount = 4;
                 }
                 else if (selectedIndex == 2)
                 {
-                    sampleCount = 16;
+                    sampleCount = 8;
                 }
                 else if (selectedIndex == 3)
+                {
+                    sampleCount = 16;
+                }
+                else if (selectedIndex == 4)
                 {
                     sampleCount = 32;
                 }
@@ -1141,16 +1125,6 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             g_ssaoBlurKernelSize = 21;
             return 0;
         }
-        if (LOWORD(wParam) == kToolDialogIndirectBlendLerpRadioId)
-        {
-            g_indirectLightBlendMode = 0;
-            return 0;
-        }
-        if (LOWORD(wParam) == kToolDialogIndirectBlendMultiplyRadioId)
-        {
-            g_indirectLightBlendMode = 1;
-            return 0;
-        }
         if (LOWORD(wParam) == kToolDialogFixedSsaoSampleDistanceCheckboxId)
         {
             g_bUseFixedSsaoSampleDistance = (SendMessage(g_hFixedSsaoSampleDistanceCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
@@ -1159,6 +1133,11 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (LOWORD(wParam) == kToolDialogLockRandomDirectionsCheckboxId)
         {
             g_bLockSsaoRandomDirections = (SendMessage(g_hLockRandomDirectionsCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogFixedSingleSampleCheckboxId)
+        {
+            g_bUseFixedSingleSamplePattern = (SendMessage(g_hFixedSingleSampleCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
             return 0;
         }
         if (LOWORD(wParam) == kToolDialogApplyIndirectLightStrengthButtonId)

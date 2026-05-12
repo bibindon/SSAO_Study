@@ -73,8 +73,7 @@ namespace
     constexpr int kToolDialogLockRandomDirectionsCheckboxId = 1039;
     constexpr int kToolDialogIndirectLightMaxContributionEditId = 1040;
     constexpr int kToolDialogApplyIndirectLightMaxContributionButtonId = 1041;
-    constexpr int kToolDialogIndirectBlendLerpRadioId = 1042;
-    constexpr int kToolDialogIndirectBlendMultiplyRadioId = 1043;
+    constexpr int kToolDialogFixedSingleSampleCheckboxId = 1042;
     constexpr int kDebugViewNone = 0;
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
@@ -199,8 +198,8 @@ extern bool g_bEnableThicknessCap;
 extern float g_thicknessCapMeters;
 extern float g_indirectLightStrength;
 extern float g_indirectLightMaxContribution;
-extern int g_indirectLightBlendMode;
 extern bool g_bLockSsaoRandomDirections;
+extern bool g_bUseFixedSingleSamplePattern;
 
 // カメラ状態
 extern float g_cameraYaw;
@@ -241,10 +240,9 @@ extern HWND g_hFixedSsaoSampleDistanceCheckbox;
 extern HWND g_hIndirectLightStrengthEdit;
 extern HWND g_hApplyIndirectLightStrengthButton;
 extern HWND g_hLockRandomDirectionsCheckbox;
+extern HWND g_hFixedSingleSampleCheckbox;
 extern HWND g_hIndirectLightMaxContributionEdit;
 extern HWND g_hApplyIndirectLightMaxContributionButton;
-extern HWND g_hIndirectBlendLerpRadio;
-extern HWND g_hIndirectBlendMultiplyRadio;
 extern HWND g_hEnableThicknessCapCheckbox;
 extern HWND g_hThicknessCapEdit;
 extern HWND g_hApplyThicknessCapButton;
