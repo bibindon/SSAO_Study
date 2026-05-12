@@ -483,7 +483,26 @@ void RenderPass2()
 
     hResult = g_pd3dDevice->BeginScene(); assert(hResult == S_OK);
 
-    hResult = g_pEffect2->SetTechnique("TechniqueSsao"); assert(hResult == S_OK);
+    if (g_simpleSsaoSampleCount <= 4)
+    {
+        hResult = g_pEffect2->SetTechnique("TechniqueSsao4"); assert(hResult == S_OK);
+    }
+    else if (g_simpleSsaoSampleCount <= 8)
+    {
+        hResult = g_pEffect2->SetTechnique("TechniqueSsao8"); assert(hResult == S_OK);
+    }
+    else if (g_simpleSsaoSampleCount <= 16)
+    {
+        hResult = g_pEffect2->SetTechnique("TechniqueSsao16"); assert(hResult == S_OK);
+    }
+    else if (g_simpleSsaoSampleCount <= 32)
+    {
+        hResult = g_pEffect2->SetTechnique("TechniqueSsao32"); assert(hResult == S_OK);
+    }
+    else
+    {
+        hResult = g_pEffect2->SetTechnique("TechniqueSsao64"); assert(hResult == S_OK);
+    }
 
     UINT ssaoNumPass = 0;
     hResult = g_pEffect2->Begin(&ssaoNumPass, 0); assert(hResult == S_OK);
@@ -528,7 +547,6 @@ void RenderPass2()
     const float projectionScaleX = projectionScaleY / (static_cast<float>(kRenderWidth) / static_cast<float>(kRenderHeight));
     float projectionScale[2] = { projectionScaleX, projectionScaleY };
     hResult = g_pEffect2->SetFloat("g_simpleSsaoSampleDistanceMeters", activeSsaoSampleDistanceMeters); assert(hResult == S_OK);
-    hResult = g_pEffect2->SetInt("g_simpleSsaoSampleCount", g_simpleSsaoSampleCount); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloatArray("g_projectionScale", projectionScale, 2); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_thicknessScale", g_thicknessScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_ssaoDepthRange", activeSsaoDepthRange); assert(hResult == S_OK);

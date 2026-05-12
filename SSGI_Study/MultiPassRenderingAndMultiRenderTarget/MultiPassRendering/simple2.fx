@@ -17,7 +17,6 @@ bool g_bDepthScaledSampleDistance = false;
 bool g_bEnableThicknessCap = false;
 bool g_bUseFixedSsaoSampleDistance = false;
 bool g_bUseShadowSaturation = false;
-int g_simpleSsaoSampleCount = 1;
 
 // half-pixel 補正や texel サイズ計算に使う。
 float2 g_screenSize = { 1600.0f, 900.0f };
@@ -237,6 +236,7 @@ void VertexShader1(in  float4 inPosition  : POSITION,
 
 // 現在ピクセルの SSAO 係数を計算する。
 void ComputeSsaoData(float2 shiftedTexCoord,
+                     int sampleCount,
                      out float ssaoFactor,
                      out float3 indirectColor)
 {
@@ -257,7 +257,7 @@ void ComputeSsaoData(float2 shiftedTexCoord,
                 float depthDistanceScale = 1.0f + saturate(1.0f - currentDepth);
                 sampleDistanceMeters *= depthDistanceScale;
             }
-            if (g_simpleSsaoSampleCount <= 1)
+            if (sampleCount <= 1)
             {
                 float occluded = 0.0f;
                 float valid = 0.0f;
@@ -283,48 +283,45 @@ void ComputeSsaoData(float2 shiftedTexCoord,
                 float validSampleCount = 0.0f;
                 float3 occlusionColorSum = float3(0.0f, 0.0f, 0.0f);
                 [loop]
-                for (int sampleIndex = 0; sampleIndex < 128; ++sampleIndex)
+                for (int sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
                 {
-                    if (sampleIndex < g_simpleSsaoSampleCount)
+                    float sampleIndexFloat = (float)sampleIndex;
+                    float randomValue = 0.0f;
+                    float distanceScale = 0.f;;
+
+                    if (g_bUseFixedSsaoSampleDistance)
                     {
-                        float sampleIndexFloat = (float)sampleIndex;
-                        float randomValue = 0.0f;
-                        float distanceScale = 0.f;;
-
-                        if (g_bUseFixedSsaoSampleDistance)
+                        distanceScale = 1.0f;
+                        if (sampleCount > 1)
                         {
-                            distanceScale = 1.0f;
-                            if (g_simpleSsaoSampleCount > 1)
-                            {
-                                float fixedDistanceU = sampleIndexFloat / (float)(g_simpleSsaoSampleCount - 1);
-                                distanceScale = fixedDistanceU * fixedDistanceU * fixedDistanceU;
-                            }
+                            float fixedDistanceU = sampleIndexFloat / (float)(sampleCount - 1);
+                            distanceScale = fixedDistanceU * fixedDistanceU * fixedDistanceU;
                         }
-                        else
-                        {
-                            randomValue = Random01(shiftedTexCoord * g_screenSize + float2(sampleIndexFloat * 13.37f,
-                                                                                                 sampleIndexFloat * 7.91f));
-                            distanceScale = randomValue * randomValue * randomValue;
-                        }
-
-                        distanceScale += (0.1 * currentDepth);
-
-                        float occluded = 0.0f;
-                        float valid = 0.0f;
-                        float3 hitColor = float3(0.0f, 0.0f, 0.0f);
-                        ComputeOcclusionSample(shiftedTexCoord,
-                                               currentDepth,
-                                               currentNormal,
-                                               currentViewPosition,
-                                               sampleDistanceMeters,
-                                               distanceScale,
-                                               occluded,
-                                               valid,
-                                               hitColor);
-                        occlusionCount += occluded;
-                        validSampleCount += valid;
-                        occlusionColorSum += hitColor * occluded;
                     }
+                    else
+                    {
+                        randomValue = Random01(shiftedTexCoord * g_screenSize + float2(sampleIndexFloat * 13.37f,
+                                                                                             sampleIndexFloat * 7.91f));
+                        distanceScale = randomValue * randomValue * randomValue;
+                    }
+
+                    distanceScale += (0.1 * currentDepth);
+
+                    float occluded = 0.0f;
+                    float valid = 0.0f;
+                    float3 hitColor = float3(0.0f, 0.0f, 0.0f);
+                    ComputeOcclusionSample(shiftedTexCoord,
+                                           currentDepth,
+                                           currentNormal,
+                                           currentViewPosition,
+                                           sampleDistanceMeters,
+                                           distanceScale,
+                                           occluded,
+                                           valid,
+                                           hitColor);
+                    occlusionCount += occluded;
+                    validSampleCount += valid;
+                    occlusionColorSum += hitColor * occluded;
                 }
 
                 if (validSampleCount > 0.0f)
@@ -343,17 +340,64 @@ void ComputeSsaoData(float2 shiftedTexCoord,
     ssaoFactor = saturate(ssaoFactor);
 }
 
-void PixelShaderSsao(in float4 inPosition    : POSITION,
-                     in float2 inTexCood     : TEXCOORD0,
+void WriteSsaoOutput(float2 shiftedTexCoord,
+                     int sampleCount,
+                     out float4 outColor)
+{
+    float ssaoFactor = 1.0f;
+    float3 indirectColor = float3(0.0f, 0.0f, 0.0f);
+    ComputeSsaoData(shiftedTexCoord, sampleCount, ssaoFactor, indirectColor);
+    outColor = float4(indirectColor, ssaoFactor);
+}
 
-                     out float4 outColor     : COLOR)
+void PixelShaderSsao4(in float4 inPosition    : POSITION,
+                      in float2 inTexCood     : TEXCOORD0,
+
+                      out float4 outColor     : COLOR)
 {
     float2 halfPixelOffset = 0.5f / g_screenSize;
     float2 shiftedTexCoord = inTexCood + halfPixelOffset;
-    float ssaoFactor = 1.0f;
-    float3 indirectColor = float3(0.0f, 0.0f, 0.0f);
-    ComputeSsaoData(shiftedTexCoord, ssaoFactor, indirectColor);
-    outColor = float4(indirectColor, ssaoFactor);
+    WriteSsaoOutput(shiftedTexCoord, 4, outColor);
+}
+
+void PixelShaderSsao8(in float4 inPosition    : POSITION,
+                      in float2 inTexCood     : TEXCOORD0,
+
+                      out float4 outColor     : COLOR)
+{
+    float2 halfPixelOffset = 0.5f / g_screenSize;
+    float2 shiftedTexCoord = inTexCood + halfPixelOffset;
+    WriteSsaoOutput(shiftedTexCoord, 8, outColor);
+}
+
+void PixelShaderSsao16(in float4 inPosition   : POSITION,
+                       in float2 inTexCood    : TEXCOORD0,
+
+                       out float4 outColor    : COLOR)
+{
+    float2 halfPixelOffset = 0.5f / g_screenSize;
+    float2 shiftedTexCoord = inTexCood + halfPixelOffset;
+    WriteSsaoOutput(shiftedTexCoord, 16, outColor);
+}
+
+void PixelShaderSsao32(in float4 inPosition   : POSITION,
+                       in float2 inTexCood    : TEXCOORD0,
+
+                       out float4 outColor    : COLOR)
+{
+    float2 halfPixelOffset = 0.5f / g_screenSize;
+    float2 shiftedTexCoord = inTexCood + halfPixelOffset;
+    WriteSsaoOutput(shiftedTexCoord, 32, outColor);
+}
+
+void PixelShaderSsao64(in float4 inPosition   : POSITION,
+                       in float2 inTexCood    : TEXCOORD0,
+
+                       out float4 outColor    : COLOR)
+{
+    float2 halfPixelOffset = 0.5f / g_screenSize;
+    float2 shiftedTexCoord = inTexCood + halfPixelOffset;
+    WriteSsaoOutput(shiftedTexCoord, 64, outColor);
 }
 
 // 元カラーと SSAO を合成する。
@@ -537,14 +581,58 @@ void PixelShaderThickness(in float4 inPosition : POSITION,
     outColor = float4(thickness, 0.0f, 0.0f, 1.0f);
 }
 
-technique TechniqueSsao
+technique TechniqueSsao4
 {
     pass Pass1
     {
         CullMode = NONE;
 
         VertexShader = compile vs_3_0 VertexShader1();
-        PixelShader = compile ps_3_0 PixelShaderSsao();
+        PixelShader = compile ps_3_0 PixelShaderSsao4();
+   }
+}
+
+technique TechniqueSsao8
+{
+    pass Pass1
+    {
+        CullMode = NONE;
+
+        VertexShader = compile vs_3_0 VertexShader1();
+        PixelShader = compile ps_3_0 PixelShaderSsao8();
+   }
+}
+
+technique TechniqueSsao16
+{
+    pass Pass1
+    {
+        CullMode = NONE;
+
+        VertexShader = compile vs_3_0 VertexShader1();
+        PixelShader = compile ps_3_0 PixelShaderSsao16();
+   }
+}
+
+technique TechniqueSsao32
+{
+    pass Pass1
+    {
+        CullMode = NONE;
+
+        VertexShader = compile vs_3_0 VertexShader1();
+        PixelShader = compile ps_3_0 PixelShaderSsao32();
+   }
+}
+
+technique TechniqueSsao64
+{
+    pass Pass1
+    {
+        CullMode = NONE;
+
+        VertexShader = compile vs_3_0 VertexShader1();
+        PixelShader = compile ps_3_0 PixelShaderSsao64();
    }
 }
 

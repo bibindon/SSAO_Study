@@ -124,19 +124,44 @@ void CreateToolDialog()
                                           NULL);
     ApplyToolDialogFont(hSampleCountLabel);
 
-    g_hSampleCountEdit = CreateWindow(_T("EDIT"),
-                                      _T("1"),
-                                      WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+    g_hSampleCountEdit = CreateWindow(_T("COMBOBOX"),
+                                      NULL,
+                                      WS_CHILD | WS_VISIBLE | WS_VSCROLL | CBS_DROPDOWNLIST,
                                       160,
                                       100,
-                                      60,
-                                      24,
+                                      80,
+                                      120,
                                       g_hToolDialog,
                                       reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogSampleCountEditId)),
                                       wc.hInstance,
                                       NULL);
     assert(g_hSampleCountEdit != NULL);
     ApplyToolDialogFont(g_hSampleCountEdit);
+    SendMessage(g_hSampleCountEdit, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(_T("4")));
+    SendMessage(g_hSampleCountEdit, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(_T("8")));
+    SendMessage(g_hSampleCountEdit, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(_T("16")));
+    SendMessage(g_hSampleCountEdit, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(_T("32")));
+    SendMessage(g_hSampleCountEdit, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(_T("64")));
+    if (g_simpleSsaoSampleCount <= 4)
+    {
+        SendMessage(g_hSampleCountEdit, CB_SETCURSEL, 0, 0);
+    }
+    else if (g_simpleSsaoSampleCount <= 8)
+    {
+        SendMessage(g_hSampleCountEdit, CB_SETCURSEL, 1, 0);
+    }
+    else if (g_simpleSsaoSampleCount <= 16)
+    {
+        SendMessage(g_hSampleCountEdit, CB_SETCURSEL, 2, 0);
+    }
+    else if (g_simpleSsaoSampleCount <= 32)
+    {
+        SendMessage(g_hSampleCountEdit, CB_SETCURSEL, 3, 0);
+    }
+    else
+    {
+        SendMessage(g_hSampleCountEdit, CB_SETCURSEL, 4, 0);
+    }
 
     g_hApplySampleCountButton = CreateWindow(_T("BUTTON"),
                                              _T("Apply"),
@@ -902,6 +927,31 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
     {
     case WM_COMMAND:
     {
+        if (LOWORD(wParam) == kToolDialogSampleCountEditId && HIWORD(wParam) == CBN_SELCHANGE)
+        {
+            const LRESULT selectedIndex = SendMessage(g_hSampleCountEdit, CB_GETCURSEL, 0, 0);
+            if (selectedIndex == 0)
+            {
+                g_simpleSsaoSampleCount = 4;
+            }
+            else if (selectedIndex == 1)
+            {
+                g_simpleSsaoSampleCount = 8;
+            }
+            else if (selectedIndex == 2)
+            {
+                g_simpleSsaoSampleCount = 16;
+            }
+            else if (selectedIndex == 3)
+            {
+                g_simpleSsaoSampleCount = 32;
+            }
+            else if (selectedIndex == 4)
+            {
+                g_simpleSsaoSampleCount = 64;
+            }
+            return 0;
+        }
         if (LOWORD(wParam) == kToolDialogButtonId)
         {
             OpenMeshFileDialog();
@@ -929,23 +979,31 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (LOWORD(wParam) == kToolDialogApplySampleCountButtonId)
         {
             TCHAR buffer[64] = { };
-            GetWindowText(g_hSampleCountEdit, buffer, _countof(buffer));
+            const LRESULT selectedIndex = SendMessage(g_hSampleCountEdit, CB_GETCURSEL, 0, 0);
             int sampleCount = g_simpleSsaoSampleCount;
-            if (_stscanf_s(buffer, _T("%d"), &sampleCount) == 1)
+            if (selectedIndex != CB_ERR)
             {
-                if (sampleCount < 1)
+                if (selectedIndex == 0)
                 {
-                    sampleCount = 1;
+                    sampleCount = 4;
                 }
-                if (sampleCount > 128)
+                else if (selectedIndex == 1)
                 {
-                    sampleCount = 128;
+                    sampleCount = 8;
+                }
+                else if (selectedIndex == 2)
+                {
+                    sampleCount = 16;
+                }
+                else if (selectedIndex == 3)
+                {
+                    sampleCount = 32;
+                }
+                else
+                {
+                    sampleCount = 64;
                 }
                 g_simpleSsaoSampleCount = sampleCount;
-
-                TCHAR normalizedText[64] = { };
-                _stprintf_s(normalizedText, _T("%d"), g_simpleSsaoSampleCount);
-                SetWindowText(g_hSampleCountEdit, normalizedText);
             }
             return 0;
         }
