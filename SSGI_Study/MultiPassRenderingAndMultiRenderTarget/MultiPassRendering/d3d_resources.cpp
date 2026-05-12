@@ -1,5 +1,51 @@
 ﻿#include "app_shared.h"
 
+namespace
+{
+    struct ScenePlacement
+    {
+        const TCHAR* meshPath;
+        D3DXVECTOR3 position;
+        float yaw;
+    };
+
+    void PopulateSceneMeshes()
+    {
+        const ScenePlacement scenePlacements[] =
+        {
+            { _T("resource\\cube_red.x"), D3DXVECTOR3(-8.5f, 0.5f, -8.0f), 0.15f },
+            { _T("resource\\sphere_orange.x"), D3DXVECTOR3(-5.8f, 1.2f, -7.4f), 0.0f },
+            { _T("resource\\cube_green.x"), D3DXVECTOR3(-2.5f, 0.5f, -8.6f), -0.25f },
+            { _T("resource\\sphere_pink.x"), D3DXVECTOR3(1.0f, 1.2f, -7.0f), 0.0f },
+            { _T("resource\\cube_blue.x"), D3DXVECTOR3(5.0f, 0.5f, -8.4f), 0.45f },
+            { _T("resource\\cube_white.x"), D3DXVECTOR3(8.2f, 0.5f, -6.3f), -0.35f },
+            { _T("resource\\sphere_yellowgreen.x"), D3DXVECTOR3(-8.0f, 1.2f, -2.8f), 0.0f },
+            { _T("resource\\cube_black.x"), D3DXVECTOR3(-4.0f, 0.5f, -2.0f), 0.2f },
+            { _T("resource\\sphere_orange.x"), D3DXVECTOR3(0.0f, 1.2f, -1.8f), 0.0f },
+            { _T("resource\\cube_red.x"), D3DXVECTOR3(4.0f, 0.5f, -2.6f), -0.15f },
+            { _T("resource\\sphere_pink.x"), D3DXVECTOR3(8.5f, 1.2f, -1.5f), 0.0f },
+            { _T("resource\\cube_green.x"), D3DXVECTOR3(-7.2f, 0.5f, 2.5f), -0.5f },
+            { _T("resource\\sphere_yellowgreen.x"), D3DXVECTOR3(-2.8f, 1.2f, 2.8f), 0.0f },
+            { _T("resource\\cube_blue.x"), D3DXVECTOR3(1.8f, 0.5f, 2.2f), 0.3f },
+            { _T("resource\\cube_white.x"), D3DXVECTOR3(6.2f, 0.5f, 3.0f), -0.1f },
+            { _T("resource\\sphere_orange.x"), D3DXVECTOR3(-5.0f, 1.2f, 7.0f), 0.0f },
+            { _T("resource\\cube_black.x"), D3DXVECTOR3(-0.8f, 0.5f, 7.8f), 0.55f },
+            { _T("resource\\sphere_pink.x"), D3DXVECTOR3(3.8f, 1.2f, 7.2f), 0.0f },
+            { _T("resource\\cube_red.x"), D3DXVECTOR3(8.0f, 0.5f, 6.5f), -0.4f },
+            { _T("resource\\sphere_yellowgreen.x"), D3DXVECTOR3(-8.6f, 8.4f, 5.5f), 0.0f },
+            { _T("resource\\sphere_pink.x"), D3DXVECTOR3(0.0f, 8.5f, -7.2f), 0.0f },
+            { _T("resource\\cube_blue.x"), D3DXVECTOR3(6.8f, 8.3f, 9.0f), 0.2f },
+            { _T("resource\\cube_green.x"), D3DXVECTOR3(-4.0f, 8.2f, -9.0f), -0.3f }
+        };
+
+        for (int placementIndex = 0; placementIndex < _countof(scenePlacements); ++placementIndex)
+        {
+            const ScenePlacement& placement = scenePlacements[placementIndex];
+            LoadSceneMeshInstance(placement.meshPath, placement.position, placement.yaw);
+        }
+    }
+}
+
 // 画面左上へ説明文字列を描く補助関数。
 void TextDraw(LPD3DXFONT pFont, TCHAR* text, int X, int Y)
 {
@@ -78,21 +124,9 @@ void InitD3D(HWND hWnd)
     assert(hResult == S_OK);
 
     // シーン用メッシュ群を読み込む。
-    LoadMeshWithTextures(_T("resource\\small_cube.x"), &g_pMesh, g_pMaterials, g_pTextures, &g_dwNumMaterials);
     LoadMeshWithTextures(_T("resource\\large_cube_inside.x"), &g_pLargeCubeMesh, g_pLargeCubeMaterials, g_pLargeCubeTextures, &g_dwLargeCubeNumMaterials);
     LoadMeshWithTextures(_T("resource\\plate.x"), &g_pPlateMesh, g_pPlateMaterials, g_pPlateTextures, &g_dwPlateNumMaterials);
-    LoadSceneMeshInstance(_T("resource\\cube_red.x"), D3DXVECTOR3(-8.0f, 0.5f, -6.0f), 0.0f);
-    LoadSceneMeshInstance(_T("resource\\cube_green.x"), D3DXVECTOR3(-3.5f, 0.5f, -7.5f), 0.0f);
-    LoadSceneMeshInstance(_T("resource\\cube_blue.x"), D3DXVECTOR3(2.5f, 0.5f, -6.5f), -0.4f);
-    LoadSceneMeshInstance(_T("resource\\sphere_orange.x"), D3DXVECTOR3(-6.5f, 1.2f, 3.0f), 0.0f);
-    LoadSceneMeshInstance(_T("resource\\sphere_pink.x"), D3DXVECTOR3(-1.5f, 1.2f, 5.0f), 0.0f);
-    LoadSceneMeshInstance(_T("resource\\sphere_yellowgreen.x"), D3DXVECTOR3(4.5f, 1.2f, 4.0f), 0.0f);
-    LoadSceneMeshInstance(_T("resource\\cube_white.x"), D3DXVECTOR3(-8.8f, 0.5f, -1.0f), 0.1f);
-    LoadSceneMeshInstance(_T("resource\\cube_black.x"), D3DXVECTOR3(8.6f, 0.5f, 2.5f), -0.2f);
-    LoadSceneMeshInstance(_T("resource\\sphere_orange.x"), D3DXVECTOR3(-8.6f, 8.4f, 5.5f), 0.0f);
-    LoadSceneMeshInstance(_T("resource\\sphere_pink.x"), D3DXVECTOR3(0.0f, 8.5f, -7.2f), 0.0f);
-    LoadSceneMeshInstance(_T("resource\\cube_red.x"), D3DXVECTOR3(6.8f, 8.3f, 9.0f), 0.0f);
-    LoadSceneMeshInstance(_T("resource\\cube_green.x"), D3DXVECTOR3(-4.0f, 8.2f, -9.0f), 0.0f);
+    PopulateSceneMeshes();
 
     // simple.fx はジオメトリ描画用。
     hResult = D3DXCreateEffectFromFile(g_pd3dDevice,
