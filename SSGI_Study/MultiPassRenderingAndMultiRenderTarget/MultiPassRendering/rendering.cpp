@@ -556,7 +556,24 @@ void RenderPass2()
     hResult = g_pEffect2->SetFloat("g_targetDepthBiasScale", g_targetDepthBiasScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_shadowStrength", g_shadowStrength); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_shadowSaturationStrength", g_shadowSaturationStrength); assert(hResult == S_OK);
-    hResult = g_pEffect2->SetBool("g_bUseShadowSaturation", g_bUseShadowSaturation ? TRUE : FALSE); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloat("g_indirectLightStrength", g_indirectLightStrength); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetFloat("g_indirectLightMaxContribution", g_indirectLightMaxContribution); assert(hResult == S_OK);
+    if (g_bUseShadowSaturation)
+    {
+        hResult = g_pEffect2->SetBool("g_bUseShadowSaturation", TRUE); assert(hResult == S_OK);
+    }
+    else
+    {
+        hResult = g_pEffect2->SetBool("g_bUseShadowSaturation", FALSE); assert(hResult == S_OK);
+    }
+    if (g_bLockSsaoRandomDirections)
+    {
+        hResult = g_pEffect2->SetBool("g_bLockSsaoRandomDirections", TRUE); assert(hResult == S_OK);
+    }
+    else
+    {
+        hResult = g_pEffect2->SetBool("g_bLockSsaoRandomDirections", FALSE); assert(hResult == S_OK);
+    }
     hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("depthTexture", g_pDepthRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("thicknessTexture", g_pThicknessRenderTarget); assert(hResult == S_OK);

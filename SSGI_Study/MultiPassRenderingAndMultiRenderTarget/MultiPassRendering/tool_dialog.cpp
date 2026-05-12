@@ -763,11 +763,115 @@ void CreateToolDialog()
     assert(g_hApplyShadowSaturationStrengthButton != NULL);
     ApplyToolDialogFont(g_hApplyShadowSaturationStrengthButton);
 
+    HWND hIndirectLightStrengthLabel = CreateWindow(_T("STATIC"),
+                                                    _T("Indirect light:"),
+                                                    WS_CHILD | WS_VISIBLE,
+                                                    20,
+                                                    732,
+                                                    130,
+                                                    20,
+                                                    g_hToolDialog,
+                                                    NULL,
+                                                    wc.hInstance,
+                                                    NULL);
+    ApplyToolDialogFont(hIndirectLightStrengthLabel);
+
+    g_hIndirectLightStrengthEdit = CreateWindow(_T("EDIT"),
+                                                _T("1.00"),
+                                                WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                                                160,
+                                                728,
+                                                60,
+                                                24,
+                                                g_hToolDialog,
+                                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogIndirectLightStrengthEditId)),
+                                                wc.hInstance,
+                                                NULL);
+    assert(g_hIndirectLightStrengthEdit != NULL);
+    ApplyToolDialogFont(g_hIndirectLightStrengthEdit);
+
+    g_hApplyIndirectLightStrengthButton = CreateWindow(_T("BUTTON"),
+                                                       _T("Apply"),
+                                                       WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                                       230,
+                                                       726,
+                                                       60,
+                                                       28,
+                                                       g_hToolDialog,
+                                                       reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogApplyIndirectLightStrengthButtonId)),
+                                                       wc.hInstance,
+                                                       NULL);
+    assert(g_hApplyIndirectLightStrengthButton != NULL);
+    ApplyToolDialogFont(g_hApplyIndirectLightStrengthButton);
+
+    g_hLockRandomDirectionsCheckbox = CreateWindow(_T("BUTTON"),
+                                                   _T("Keep random dirs fixed"),
+                                                   WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                                                   20,
+                                                   760,
+                                                   220,
+                                                   24,
+                                                   g_hToolDialog,
+                                                   reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogLockRandomDirectionsCheckboxId)),
+                                                   wc.hInstance,
+                                                   NULL);
+    assert(g_hLockRandomDirectionsCheckbox != NULL);
+    ApplyToolDialogFont(g_hLockRandomDirectionsCheckbox);
+    if (g_bLockSsaoRandomDirections)
+    {
+        SendMessage(g_hLockRandomDirectionsCheckbox, BM_SETCHECK, BST_CHECKED, 0);
+    }
+    else
+    {
+        SendMessage(g_hLockRandomDirectionsCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
+    }
+
+    HWND hIndirectLightMaxContributionLabel = CreateWindow(_T("STATIC"),
+                                                           _T("Indirect light max:"),
+                                                           WS_CHILD | WS_VISIBLE,
+                                                           20,
+                                                           792,
+                                                           130,
+                                                           20,
+                                                           g_hToolDialog,
+                                                           NULL,
+                                                           wc.hInstance,
+                                                           NULL);
+    ApplyToolDialogFont(hIndirectLightMaxContributionLabel);
+
+    g_hIndirectLightMaxContributionEdit = CreateWindow(_T("EDIT"),
+                                                       _T("1.00"),
+                                                       WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+                                                       160,
+                                                       788,
+                                                       60,
+                                                       24,
+                                                       g_hToolDialog,
+                                                       reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogIndirectLightMaxContributionEditId)),
+                                                       wc.hInstance,
+                                                       NULL);
+    assert(g_hIndirectLightMaxContributionEdit != NULL);
+    ApplyToolDialogFont(g_hIndirectLightMaxContributionEdit);
+
+    g_hApplyIndirectLightMaxContributionButton = CreateWindow(_T("BUTTON"),
+                                                              _T("Apply"),
+                                                              WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                                              230,
+                                                              786,
+                                                              60,
+                                                              28,
+                                                              g_hToolDialog,
+                                                              reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogApplyIndirectLightMaxContributionButtonId)),
+                                                              wc.hInstance,
+                                                              NULL);
+    assert(g_hApplyIndirectLightMaxContributionButton != NULL);
+    ApplyToolDialogFont(g_hApplyIndirectLightMaxContributionButton);
+
     g_hEnableThicknessCapCheckbox = CreateWindow(_T("BUTTON"),
                                                  _T("Enable thickness cap"),
                                                  WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                                  20,
-                                                 740,
+                                                 822,
                                                  180,
                                                  24,
                                                  g_hToolDialog,
@@ -789,7 +893,7 @@ void CreateToolDialog()
                                            _T("Thickness cap (m):"),
                                            WS_CHILD | WS_VISIBLE,
                                            20,
-                                           772,
+                                           854,
                                            130,
                                            20,
                                            g_hToolDialog,
@@ -802,7 +906,7 @@ void CreateToolDialog()
                                        _T("1.00"),
                                        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                        160,
-                                       768,
+                                       850,
                                        60,
                                        24,
                                        g_hToolDialog,
@@ -816,7 +920,7 @@ void CreateToolDialog()
                                               _T("Apply"),
                                               WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                               230,
-                                              766,
+                                              848,
                                               60,
                                               28,
                                               g_hToolDialog,
@@ -837,6 +941,14 @@ void CreateToolDialog()
     TCHAR sampleCountText[64] = { };
     _stprintf_s(sampleCountText, _T("%d"), g_simpleSsaoSampleCount);
     SetWindowText(g_hSampleCountEdit, sampleCountText);
+
+    TCHAR indirectLightStrengthText[64] = { };
+    _stprintf_s(indirectLightStrengthText, _T("%.2f"), g_indirectLightStrength);
+    SetWindowText(g_hIndirectLightStrengthEdit, indirectLightStrengthText);
+
+    TCHAR indirectLightMaxContributionText[64] = { };
+    _stprintf_s(indirectLightMaxContributionText, _T("%.2f"), g_indirectLightMaxContribution);
+    SetWindowText(g_hIndirectLightMaxContributionEdit, indirectLightMaxContributionText);
 
     TCHAR shadowStrengthText[64] = { };
     _stprintf_s(shadowStrengthText, _T("%.2f"), g_shadowStrength);
@@ -1123,6 +1235,11 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             g_bUseShadowSaturation = (SendMessage(g_hSaturateShadowCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
             return 0;
         }
+        if (LOWORD(wParam) == kToolDialogLockRandomDirectionsCheckboxId)
+        {
+            g_bLockSsaoRandomDirections = (SendMessage(g_hLockRandomDirectionsCheckbox, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            return 0;
+        }
         if (LOWORD(wParam) == kToolDialogApplyShadowSaturationStrengthButtonId)
         {
             TCHAR buffer[64] = { };
@@ -1143,6 +1260,52 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 TCHAR normalizedText[64] = { };
                 _stprintf_s(normalizedText, _T("%.2f"), g_shadowSaturationStrength);
                 SetWindowText(g_hShadowSaturationStrengthEdit, normalizedText);
+            }
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogApplyIndirectLightStrengthButtonId)
+        {
+            TCHAR buffer[64] = { };
+            GetWindowText(g_hIndirectLightStrengthEdit, buffer, _countof(buffer));
+            float indirectLightStrength = g_indirectLightStrength;
+            if (_stscanf_s(buffer, _T("%f"), &indirectLightStrength) == 1)
+            {
+                if (indirectLightStrength < 0.0f)
+                {
+                    indirectLightStrength = 0.0f;
+                }
+                if (indirectLightStrength > 5.0f)
+                {
+                    indirectLightStrength = 5.0f;
+                }
+                g_indirectLightStrength = indirectLightStrength;
+
+                TCHAR normalizedText[64] = { };
+                _stprintf_s(normalizedText, _T("%.2f"), g_indirectLightStrength);
+                SetWindowText(g_hIndirectLightStrengthEdit, normalizedText);
+            }
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogApplyIndirectLightMaxContributionButtonId)
+        {
+            TCHAR buffer[64] = { };
+            GetWindowText(g_hIndirectLightMaxContributionEdit, buffer, _countof(buffer));
+            float indirectLightMaxContribution = g_indirectLightMaxContribution;
+            if (_stscanf_s(buffer, _T("%f"), &indirectLightMaxContribution) == 1)
+            {
+                if (indirectLightMaxContribution < 0.0f)
+                {
+                    indirectLightMaxContribution = 0.0f;
+                }
+                if (indirectLightMaxContribution > 1.0f)
+                {
+                    indirectLightMaxContribution = 1.0f;
+                }
+                g_indirectLightMaxContribution = indirectLightMaxContribution;
+
+                TCHAR normalizedText[64] = { };
+                _stprintf_s(normalizedText, _T("%.2f"), g_indirectLightMaxContribution);
+                SetWindowText(g_hIndirectLightMaxContributionEdit, normalizedText);
             }
             return 0;
         }

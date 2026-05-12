@@ -73,6 +73,11 @@ namespace
     constexpr int kToolDialogSaturateShadowCheckboxId = 1033;
     constexpr int kToolDialogShadowSaturationStrengthEditId = 1034;
     constexpr int kToolDialogApplyShadowSaturationStrengthButtonId = 1035;
+    constexpr int kToolDialogIndirectLightStrengthEditId = 1037;
+    constexpr int kToolDialogApplyIndirectLightStrengthButtonId = 1038;
+    constexpr int kToolDialogLockRandomDirectionsCheckboxId = 1039;
+    constexpr int kToolDialogIndirectLightMaxContributionEditId = 1040;
+    constexpr int kToolDialogApplyIndirectLightMaxContributionButtonId = 1041;
     constexpr int kDebugViewNone = 0;
     constexpr int kDebugViewDepth = 1;
     constexpr int kDebugViewNormal = 2;
@@ -199,7 +204,10 @@ extern bool g_bEnableThicknessCap;
 extern float g_thicknessCapMeters;
 extern float g_shadowStrength;
 extern float g_shadowSaturationStrength;
+extern float g_indirectLightStrength;
+extern float g_indirectLightMaxContribution;
 extern bool g_bUseShadowSaturation;
+extern bool g_bLockSsaoRandomDirections;
 
 // カメラ状態
 extern float g_cameraYaw;
@@ -242,6 +250,11 @@ extern HWND g_hApplyShadowStrengthButton;
 extern HWND g_hSaturateShadowCheckbox;
 extern HWND g_hShadowSaturationStrengthEdit;
 extern HWND g_hApplyShadowSaturationStrengthButton;
+extern HWND g_hIndirectLightStrengthEdit;
+extern HWND g_hApplyIndirectLightStrengthButton;
+extern HWND g_hLockRandomDirectionsCheckbox;
+extern HWND g_hIndirectLightMaxContributionEdit;
+extern HWND g_hApplyIndirectLightMaxContributionButton;
 extern HWND g_hEnableThicknessCapCheckbox;
 extern HWND g_hThicknessCapEdit;
 extern HWND g_hApplyThicknessCapButton;

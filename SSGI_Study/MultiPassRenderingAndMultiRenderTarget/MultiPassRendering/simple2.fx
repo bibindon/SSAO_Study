@@ -17,6 +17,7 @@ bool g_bDepthScaledSampleDistance = false;
 bool g_bEnableThicknessCap = false;
 bool g_bUseFixedSsaoSampleDistance = false;
 bool g_bUseShadowSaturation = false;
+bool g_bLockSsaoRandomDirections = false;
 
 // half-pixel 補正や texel サイズ計算に使う。
 float2 g_screenSize = { 1600.0f, 900.0f };
@@ -34,6 +35,8 @@ float g_targetDepthBiasScale = 1.0f;
 float g_thicknessCap = 0.02f;
 float g_shadowStrength = 1.0f;
 float g_shadowSaturationStrength = 1.0f;
+float g_indirectLightStrength = 1.0f;
+float g_indirectLightMaxContribution = 1.0f;
 
 texture texture1;
 sampler textureSampler = sampler_state {
@@ -300,8 +303,17 @@ void ComputeSsaoData(float2 shiftedTexCoord,
                 float occluded = 0.0f;
                 float valid = 0.0f;
                 float3 hitColor = float3(0.0f, 0.0f, 0.0f);
-                float2 randomPair = float2(Random01(shiftedTexCoord * g_screenSize + float2(17.0f, 59.4f)),
-                                           Random01(shiftedTexCoord * g_screenSize + float2(83.1f, 11.7f)));
+                float2 randomPair = float2(0.0f, 0.0f);
+                if (g_bLockSsaoRandomDirections)
+                {
+                    randomPair = float2(Random01(float2(17.0f, 59.4f)),
+                                        Random01(float2(83.1f, 11.7f)));
+                }
+                else
+                {
+                    randomPair = float2(Random01(shiftedTexCoord * g_screenSize + float2(17.0f, 59.4f)),
+                                        Random01(shiftedTexCoord * g_screenSize + float2(83.1f, 11.7f)));
+                }
                 float3 sampleDirection = SampleRandomHemisphereDirection(currentNormal, randomPair);
                 ComputeOcclusionSample(shiftedTexCoord,
                                        currentDepth,
@@ -332,8 +344,19 @@ void ComputeSsaoData(float2 shiftedTexCoord,
                                                                                 sampleIndexFloat * 7.91f);
                     float randomValue = 0.0f;
                     float distanceScale = 0.f;;
-                    float2 randomPair = float2(Random01(sampleSeed + float2(17.0f, 59.4f)),
-                                               Random01(sampleSeed + float2(83.1f, 11.7f)));
+                    float2 randomPair = float2(0.0f, 0.0f);
+                    if (g_bLockSsaoRandomDirections)
+                    {
+                        randomPair = float2(Random01(float2(sampleIndexFloat * 13.37f + 17.0f,
+                                                             sampleIndexFloat * 7.91f + 59.4f)),
+                                            Random01(float2(sampleIndexFloat * 19.73f + 83.1f,
+                                                             sampleIndexFloat * 5.11f + 11.7f)));
+                    }
+                    else
+                    {
+                        randomPair = float2(Random01(sampleSeed + float2(17.0f, 59.4f)),
+                                            Random01(sampleSeed + float2(83.1f, 11.7f)));
+                    }
                     float3 sampleDirection = SampleRandomHemisphereDirection(currentNormal, randomPair);
 
                     if (g_bUseFixedSsaoSampleDistance)
@@ -460,7 +483,12 @@ void PixelShaderComposite(in float4 inPosition    : POSITION,
     float ssaoFactor = ssaoData.a;
     float3 indirectColor = ssaoData.rgb;
     float shadowAmount = saturate(g_shadowStrength * (1.0f - ssaoFactor));
-    workColor.rgb = workColor.rgb * ssaoFactor + indirectColor * shadowAmount;
+    float indirectLightAmount = saturate(g_indirectLightStrength * shadowAmount);
+    if (indirectLightAmount > g_indirectLightMaxContribution)
+    {
+        indirectLightAmount = g_indirectLightMaxContribution;
+    }
+    workColor.rgb = workColor.rgb * ssaoFactor + indirectColor * indirectLightAmount;
     if (g_bUseShadowSaturation)
     {
         float saturationAmount = saturate(g_shadowSaturationStrength * (1.0f - ssaoFactor));
