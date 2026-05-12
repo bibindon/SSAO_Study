@@ -164,30 +164,37 @@ float ComputeBlurSampleWeight(float baseWeight, float centerDepth, float sampleD
 }
 
 // 1 回分の遮蔽サンプル評価。
-float2 ComputeOcclusionSample(float2 shiftedTexCoord,
-                              float currentDepth,
-                              float3 currentNormal,
-                              float3 currentViewPosition,
-                              float sampleDistanceMeters,
-                              float distanceScale)
+void ComputeOcclusionSample(float2 shiftedTexCoord,
+                            float currentDepth,
+                            float3 currentNormal,
+                            float3 currentViewPosition,
+                            float sampleDistanceMeters,
+                            float distanceScale,
+                            out float occluded,
+                            out float valid,
+                            out float3 hitColor)
 {
+    occluded = 0.0f;
+    valid = 0.0f;
+    hitColor = float3(0.0f, 0.0f, 0.0f);
+
     float sampleDistanceMetersScaled = sampleDistanceMeters * distanceScale;
     float3 sampleViewPosition = currentViewPosition + currentNormal * sampleDistanceMetersScaled;
     if (sampleViewPosition.z <= 0.0f)
     {
-        return float2(0.0f, 0.0f);
+        return;
     }
 
     float2 sampleTexCoord = ProjectViewPositionToTexCoord(sampleViewPosition);
     if (sampleTexCoord.x < 0.0f || sampleTexCoord.x > 1.0f || sampleTexCoord.y < 0.0f || sampleTexCoord.y > 1.0f)
     {
-        return float2(0.0f, 0.0f);
+        return;
     }
     float4 sampleTexCoordLod = float4(sampleTexCoord, 0.0f, 0.0f);
     float sampleDepth = tex2Dlod(depthSampler, sampleTexCoordLod).r;
     if (sampleDepth >= 0.999f)
     {
-        return float2(0.0f, 0.0f);
+        return;
     }
 
     float expectedSampleDepth = saturate(sampleViewPosition.z / g_ssaoDepthRange);
@@ -208,12 +215,13 @@ float2 ComputeOcclusionSample(float2 shiftedTexCoord,
         backDepthWithMargin += fallbackThickness * g_thicknessScale;
     }
 
-    float occluded = 0.0f;
     if (frontDepthWithMargin <= currentDepth && currentDepth <= backDepthWithMargin)
     {
         occluded = 1.0f;
+        hitColor = tex2Dlod(textureSampler, sampleTexCoordLod).rgb;
     }
-    return float2(occluded, 1.0f);
+
+    valid = 1.0f;
 }
 
 // ポストプロセス用のフルスクリーンクアッド。
@@ -228,12 +236,15 @@ void VertexShader1(in  float4 inPosition  : POSITION,
 }
 
 // 現在ピクセルの SSAO 係数を計算する。
-float ComputeSsaoFactor(float2 shiftedTexCoord)
+void ComputeSsaoData(float2 shiftedTexCoord,
+                     out float ssaoFactor,
+                     out float3 indirectColor)
 {
     float currentDepth = tex2D(depthSampler, shiftedTexCoord).r;
     float3 currentNormal = tex2D(normalSampler, shiftedTexCoord).xyz * 2.0f - 1.0f;
     currentNormal = normalize(currentNormal);
-    float ssaoFactor = 1.0f;
+    indirectColor = float3(0.0f, 0.0f, 0.0f);
+    ssaoFactor = 1.0f;
 
     if (g_bEnableSimpleSsao)
     {
@@ -248,21 +259,29 @@ float ComputeSsaoFactor(float2 shiftedTexCoord)
             }
             if (g_simpleSsaoSampleCount <= 1)
             {
-                float2 occlusionSample = ComputeOcclusionSample(shiftedTexCoord,
-                                                                currentDepth,
-                                                                currentNormal,
-                                                                currentViewPosition,
-                                                                sampleDistanceMeters,
-                                                                1.0f);
-                if (occlusionSample.x > 0.5f)
+                float occluded = 0.0f;
+                float valid = 0.0f;
+                float3 hitColor = float3(0.0f, 0.0f, 0.0f);
+                ComputeOcclusionSample(shiftedTexCoord,
+                                       currentDepth,
+                                       currentNormal,
+                                       currentViewPosition,
+                                       sampleDistanceMeters,
+                                       1.0f,
+                                       occluded,
+                                       valid,
+                                       hitColor);
+                if (valid > 0.5f && occluded > 0.5f)
                 {
                     ssaoFactor = 0.0f;
+                    indirectColor = hitColor;
                 }
             }
             else
             {
                 float occlusionCount = 0.0f;
                 float validSampleCount = 0.0f;
+                float3 occlusionColorSum = float3(0.0f, 0.0f, 0.0f);
                 [loop]
                 for (int sampleIndex = 0; sampleIndex < 128; ++sampleIndex)
                 {
@@ -290,14 +309,21 @@ float ComputeSsaoFactor(float2 shiftedTexCoord)
 
                         distanceScale += (0.1 * currentDepth);
 
-                        float2 occlusionSample = ComputeOcclusionSample(shiftedTexCoord,
-                                                                        currentDepth,
-                                                                        currentNormal,
-                                                                        currentViewPosition,
-                                                                        sampleDistanceMeters,
-                                                                        distanceScale);
-                        occlusionCount += occlusionSample.x;
-                        validSampleCount += occlusionSample.y;
+                        float occluded = 0.0f;
+                        float valid = 0.0f;
+                        float3 hitColor = float3(0.0f, 0.0f, 0.0f);
+                        ComputeOcclusionSample(shiftedTexCoord,
+                                               currentDepth,
+                                               currentNormal,
+                                               currentViewPosition,
+                                               sampleDistanceMeters,
+                                               distanceScale,
+                                               occluded,
+                                               valid,
+                                               hitColor);
+                        occlusionCount += occluded;
+                        validSampleCount += valid;
+                        occlusionColorSum += hitColor * occluded;
                     }
                 }
 
@@ -306,11 +332,15 @@ float ComputeSsaoFactor(float2 shiftedTexCoord)
                     float occlusionRate = occlusionCount / validSampleCount;
                     ssaoFactor = 1.0f - occlusionRate;
                 }
+                if (occlusionCount > 0.0f)
+                {
+                    indirectColor = occlusionColorSum / occlusionCount;
+                }
             }
         }
     }
 
-    return saturate(ssaoFactor);
+    ssaoFactor = saturate(ssaoFactor);
 }
 
 void PixelShaderSsao(in float4 inPosition    : POSITION,
@@ -320,8 +350,10 @@ void PixelShaderSsao(in float4 inPosition    : POSITION,
 {
     float2 halfPixelOffset = 0.5f / g_screenSize;
     float2 shiftedTexCoord = inTexCood + halfPixelOffset;
-    float ssaoFactor = ComputeSsaoFactor(shiftedTexCoord);
-    outColor = float4(ssaoFactor, ssaoFactor, ssaoFactor, 1.0f);
+    float ssaoFactor = 1.0f;
+    float3 indirectColor = float3(0.0f, 0.0f, 0.0f);
+    ComputeSsaoData(shiftedTexCoord, ssaoFactor, indirectColor);
+    outColor = float4(indirectColor, ssaoFactor);
 }
 
 // 元カラーと SSAO を合成する。
@@ -333,15 +365,17 @@ void PixelShaderComposite(in float4 inPosition    : POSITION,
     float2 halfPixelOffset = 0.5f / g_screenSize;
     float2 shiftedTexCoord = inTexCood + halfPixelOffset;
     float4 workColor = tex2D(textureSampler, shiftedTexCoord);
-    float ssaoFactor = tex2D(ssaoSampler, shiftedTexCoord).r;
-    float shadowFactor = saturate(1.0f - g_shadowStrength * (1.0f - ssaoFactor));
-    workColor.rgb *= shadowFactor;
+    float4 ssaoData = tex2D(ssaoSampler, shiftedTexCoord);
+    float ssaoFactor = ssaoData.a;
+    float3 indirectColor = ssaoData.rgb;
+    float shadowAmount = saturate(g_shadowStrength * (1.0f - ssaoFactor));
+    workColor.rgb = workColor.rgb * ssaoFactor + indirectColor * shadowAmount;
     if (g_bUseShadowSaturation)
     {
-        float shadowAmount = saturate(g_shadowSaturationStrength * (1.0f - ssaoFactor));
+        float saturationAmount = saturate(g_shadowSaturationStrength * (1.0f - ssaoFactor));
         float luminance = dot(workColor.rgb, float3(0.299f, 0.587f, 0.114f));
         float3 grayscale = float3(luminance, luminance, luminance);
-        float saturationScale = 1.0f + shadowAmount;
+        float saturationScale = 1.0f + saturationAmount;
         workColor.rgb = grayscale + (workColor.rgb - grayscale) * saturationScale;
     }
     workColor = saturate(workColor);
@@ -359,7 +393,7 @@ void PixelShaderSsaoBlur5x5(in float4 inPosition    : POSITION,
     float2 texelSize = 1.0f / g_screenSize;
     float centerDepth = tex2D(depthSampler, shiftedTexCoord).r;
     float3 centerNormal = DecodeNormal(tex2D(normalSampler, shiftedTexCoord));
-    float blurredValue = 0.0f;
+    float4 blurredValue = float4(0.0f, 0.0f, 0.0f, 0.0f);
     float weightSum = 0.0f;
 
     [unroll]
@@ -373,17 +407,17 @@ void PixelShaderSsaoBlur5x5(in float4 inPosition    : POSITION,
             float sampleDepth = tex2D(depthSampler, sampleTexCoord).r;
             float3 sampleNormal = DecodeNormal(tex2D(normalSampler, sampleTexCoord));
             float weight = ComputeBlurSampleWeight(1.0f, centerDepth, sampleDepth, centerNormal, sampleNormal);
-            blurredValue += tex2D(ssaoSampler, sampleTexCoord).r * weight;
+            blurredValue += tex2D(ssaoSampler, sampleTexCoord) * weight;
             weightSum += weight;
         }
     }
 
-    float ssaoFactor = 1.0f;
+    float4 ssaoData = float4(0.0f, 0.0f, 0.0f, 1.0f);
     if (weightSum > 0.0f)
     {
-        ssaoFactor = blurredValue / weightSum;
+        ssaoData = blurredValue / weightSum;
     }
-    outColor = float4(ssaoFactor, ssaoFactor, ssaoFactor, 1.0f);
+    outColor = ssaoData;
 }
 
 // 11x11 ぼかし。
@@ -397,7 +431,7 @@ void PixelShaderSsaoBlur11x11(in float4 inPosition    : POSITION,
     float2 texelSize = 1.0f / g_screenSize;
     float centerDepth = tex2D(depthSampler, shiftedTexCoord).r;
     float3 centerNormal = DecodeNormal(tex2D(normalSampler, shiftedTexCoord));
-    float blurredValue = 0.0f;
+    float4 blurredValue = float4(0.0f, 0.0f, 0.0f, 0.0f);
     float weightSum = 0.0f;
 
     [loop]
@@ -411,17 +445,17 @@ void PixelShaderSsaoBlur11x11(in float4 inPosition    : POSITION,
             float sampleDepth = tex2D(depthSampler, sampleTexCoord).r;
             float3 sampleNormal = DecodeNormal(tex2D(normalSampler, sampleTexCoord));
             float weight = ComputeBlurSampleWeight(1.0f, centerDepth, sampleDepth, centerNormal, sampleNormal);
-            blurredValue += tex2D(ssaoSampler, sampleTexCoord).r * weight;
+            blurredValue += tex2D(ssaoSampler, sampleTexCoord) * weight;
             weightSum += weight;
         }
     }
 
-    float ssaoFactor = 1.0f;
+    float4 ssaoData = float4(0.0f, 0.0f, 0.0f, 1.0f);
     if (weightSum > 0.0f)
     {
-        ssaoFactor = blurredValue / weightSum;
+        ssaoData = blurredValue / weightSum;
     }
-    outColor = float4(ssaoFactor, ssaoFactor, ssaoFactor, 1.0f);
+    outColor = ssaoData;
 }
 
 // 21x21 ぼかし。
@@ -435,7 +469,7 @@ void PixelShaderSsaoBlur21x21(in float4 inPosition    : POSITION,
     float2 texelSize = 1.0f / g_screenSize;
     float centerDepth = tex2D(depthSampler, shiftedTexCoord).r;
     float3 centerNormal = DecodeNormal(tex2D(normalSampler, shiftedTexCoord));
-    float blurredValue = 0.0f;
+    float4 blurredValue = float4(0.0f, 0.0f, 0.0f, 0.0f);
     float weightSum = 0.0f;
 
     [loop]
@@ -449,17 +483,17 @@ void PixelShaderSsaoBlur21x21(in float4 inPosition    : POSITION,
             float sampleDepth = tex2D(depthSampler, sampleTexCoord).r;
             float3 sampleNormal = DecodeNormal(tex2D(normalSampler, sampleTexCoord));
             float weight = ComputeBlurSampleWeight(1.0f, centerDepth, sampleDepth, centerNormal, sampleNormal);
-            blurredValue += tex2D(ssaoSampler, sampleTexCoord).r * weight;
+            blurredValue += tex2D(ssaoSampler, sampleTexCoord) * weight;
             weightSum += weight;
         }
     }
 
-    float ssaoFactor = 1.0f;
+    float4 ssaoData = float4(0.0f, 0.0f, 0.0f, 1.0f);
     if (weightSum > 0.0f)
     {
-        ssaoFactor = blurredValue / weightSum;
+        ssaoData = blurredValue / weightSum;
     }
-    outColor = float4(ssaoFactor, ssaoFactor, ssaoFactor, 1.0f);
+    outColor = ssaoData;
 }
 
 // デバッグ表示用。

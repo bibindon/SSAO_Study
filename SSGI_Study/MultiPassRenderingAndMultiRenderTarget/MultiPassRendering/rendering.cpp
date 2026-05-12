@@ -539,6 +539,7 @@ void RenderPass2()
     hResult = g_pEffect2->SetFloat("g_shadowStrength", g_shadowStrength); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_shadowSaturationStrength", g_shadowSaturationStrength); assert(hResult == S_OK);
     hResult = g_pEffect2->SetBool("g_bUseShadowSaturation", g_bUseShadowSaturation ? TRUE : FALSE); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetTexture("texture1", g_pRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("depthTexture", g_pDepthRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("thicknessTexture", g_pThicknessRenderTarget); assert(hResult == S_OK);
     hResult = g_pEffect2->SetTexture("normalTexture", g_pNormalRenderTarget); assert(hResult == S_OK);

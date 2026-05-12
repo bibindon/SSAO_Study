@@ -1,5 +1,29 @@
 ﻿#include "app_shared.h"
 
+namespace
+{
+    bool IsWeekdayDaytimeForRemoteDesktopDefault()
+    {
+        SYSTEMTIME localTime = { };
+        GetLocalTime(&localTime);
+
+        if (localTime.wDayOfWeek == 0 || localTime.wDayOfWeek == 6)
+        {
+            return false;
+        }
+        if (localTime.wHour < 9)
+        {
+            return false;
+        }
+        if (localTime.wHour >= 18)
+        {
+            return false;
+        }
+
+        return true;
+    }
+}
+
 LPDIRECT3D9 g_pD3D = NULL;
 LPDIRECT3DDEVICE9 g_pd3dDevice = NULL;
 LPD3DXFONT g_pFont = NULL;
@@ -54,10 +78,10 @@ bool g_bEnableSimpleSsao = true;
 bool g_bEnableSsaoBlur = true;
 int g_ssaoBlurKernelSize = 11;
 bool g_bUseThicknessForSsao = true;
-bool g_bRemoteDesktopCameraMode = false;
+bool g_bRemoteDesktopCameraMode = IsWeekdayDaytimeForRemoteDesktopDefault();
 bool g_bAllowStraightUpDown = false;
 bool g_bDepthScaledSampleDistance = true;
-bool g_bAutoScaleSsaoByCenterDepth = true;
+bool g_bAutoScaleSsaoByCenterDepth = false;
 bool g_bSmoothAutoSsaoByCenterDepth = false;
 bool g_bUseFixedSsaoSampleDistance = true;
 bool g_bHasPreviousMousePosition = false;
