@@ -126,34 +126,6 @@ void DrawSceneGeometry(const D3DXMATRIX& View, const D3DXMATRIX& Proj)
         }
     }
 
-    for (int z = 0; z < kCubeGridDepth; ++z)
-    {
-        for (int x = 0; x < kCubeGridWidth; ++x)
-        {
-            D3DXMATRIX world;
-            D3DXMATRIX worldView;
-            D3DXMATRIX worldViewProj;
-
-            const float offsetX = (x - (kCubeGridWidth - 1) * 0.5f) * kCubeSpacing;
-            const float offsetZ = (z - (kCubeGridDepth - 1) * 0.5f) * kCubeSpacing;
-            const float offsetY = 0.15f * sinf(static_cast<float>(x) * 0.9f) + 0.15f * cosf(static_cast<float>(z) * 0.8f);
-
-            D3DXMatrixTranslation(&world, offsetX, offsetY, offsetZ);
-            worldView = world * View;
-            worldViewProj = world * View * Proj;
-
-            hResult = g_pEffect1->SetMatrix("g_matWorld", &world); assert(hResult == S_OK);
-            hResult = g_pEffect1->SetMatrix("g_matWorldView", &worldView); assert(hResult == S_OK);
-            hResult = g_pEffect1->SetMatrix("g_matWorldViewProj", &worldViewProj); assert(hResult == S_OK);
-
-            for (DWORD i = 0; i < g_dwNumMaterials; i++)
-            {
-                hResult = g_pEffect1->SetTexture("texture1", g_pTextures[i]); assert(hResult == S_OK);
-                hResult = g_pEffect1->CommitChanges();                         assert(hResult == S_OK);
-                hResult = g_pMesh->DrawSubset(i);                              assert(hResult == S_OK);
-            }
-        }
-    }
 }
 
 // 現在有効な SSAO サンプル距離を返す。
