@@ -33,6 +33,7 @@ float g_targetDepthBiasScale = 1.0f;
 float g_thicknessCap = 0.02f;
 float g_indirectLightStrength = 1.0f;
 float g_indirectLightMaxContribution = 1.0f;
+int g_indirectLightBlendMode = 0;
 
 texture texture1;
 sampler textureSampler = sampler_state {
@@ -479,7 +480,15 @@ void PixelShaderComposite(in float4 inPosition    : POSITION,
     {
         indirectLightAmount = g_indirectLightMaxContribution;
     }
-    workColor.rgb += indirectColor * indirectLightAmount;
+    if (g_indirectLightBlendMode == 1)
+    {
+        float3 multipliedIndirectColor = workColor.rgb * indirectColor;
+        workColor.rgb = workColor.rgb + (multipliedIndirectColor - workColor.rgb) * indirectLightAmount;
+    }
+    else
+    {
+        workColor.rgb = workColor.rgb + (indirectColor - workColor.rgb) * indirectLightAmount;
+    }
     workColor = saturate(workColor);
     outColor = workColor;
 }

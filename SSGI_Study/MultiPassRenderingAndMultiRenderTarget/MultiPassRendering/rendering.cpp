@@ -548,6 +548,7 @@ void RenderPass2()
     hResult = g_pEffect2->SetFloat("g_targetDepthBiasScale", g_targetDepthBiasScale); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_indirectLightStrength", g_indirectLightStrength); assert(hResult == S_OK);
     hResult = g_pEffect2->SetFloat("g_indirectLightMaxContribution", g_indirectLightMaxContribution); assert(hResult == S_OK);
+    hResult = g_pEffect2->SetInt("g_indirectLightBlendMode", g_indirectLightBlendMode); assert(hResult == S_OK);
     if (g_bLockSsaoRandomDirections)
     {
         hResult = g_pEffect2->SetBool("g_bLockSsaoRandomDirections", TRUE); assert(hResult == S_OK);

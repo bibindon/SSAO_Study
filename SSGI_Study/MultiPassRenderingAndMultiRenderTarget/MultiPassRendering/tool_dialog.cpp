@@ -722,11 +722,62 @@ void CreateToolDialog()
         SendMessage(g_hLockRandomDirectionsCheckbox, BM_SETCHECK, BST_UNCHECKED, 0);
     }
 
+    HWND hIndirectBlendLabel = CreateWindow(_T("STATIC"),
+                                            _T("Indirect blend:"),
+                                            WS_CHILD | WS_VISIBLE,
+                                            20,
+                                            700,
+                                            130,
+                                            20,
+                                            g_hToolDialog,
+                                            NULL,
+                                            wc.hInstance,
+                                            NULL);
+    ApplyToolDialogFont(hIndirectBlendLabel);
+
+    g_hIndirectBlendLerpRadio = CreateWindow(_T("BUTTON"),
+                                             _T("Lerp"),
+                                             WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON,
+                                             160,
+                                             698,
+                                             70,
+                                             22,
+                                             g_hToolDialog,
+                                             reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogIndirectBlendLerpRadioId)),
+                                             wc.hInstance,
+                                             NULL);
+    assert(g_hIndirectBlendLerpRadio != NULL);
+    ApplyToolDialogFont(g_hIndirectBlendLerpRadio);
+
+    g_hIndirectBlendMultiplyRadio = CreateWindow(_T("BUTTON"),
+                                                 _T("Multiply"),
+                                                 WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON,
+                                                 230,
+                                                 698,
+                                                 90,
+                                                 22,
+                                                 g_hToolDialog,
+                                                 reinterpret_cast<HMENU>(static_cast<INT_PTR>(kToolDialogIndirectBlendMultiplyRadioId)),
+                                                 wc.hInstance,
+                                                 NULL);
+    assert(g_hIndirectBlendMultiplyRadio != NULL);
+    ApplyToolDialogFont(g_hIndirectBlendMultiplyRadio);
+    if (g_indirectLightBlendMode == 1)
+    {
+        SendMessage(g_hIndirectBlendLerpRadio, BM_SETCHECK, BST_UNCHECKED, 0);
+        SendMessage(g_hIndirectBlendMultiplyRadio, BM_SETCHECK, BST_CHECKED, 0);
+    }
+    else
+    {
+        SendMessage(g_hIndirectBlendLerpRadio, BM_SETCHECK, BST_CHECKED, 0);
+        SendMessage(g_hIndirectBlendMultiplyRadio, BM_SETCHECK, BST_UNCHECKED, 0);
+    }
+
     HWND hIndirectLightMaxContributionLabel = CreateWindow(_T("STATIC"),
                                                            _T("Indirect light max:"),
                                                            WS_CHILD | WS_VISIBLE,
                                                            20,
-                                                           700,
+                                                           732,
                                                            130,
                                                            20,
                                                            g_hToolDialog,
@@ -739,7 +790,7 @@ void CreateToolDialog()
                                                        _T("1.00"),
                                                        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                                        160,
-                                                       696,
+                                                       728,
                                                        60,
                                                        24,
                                                        g_hToolDialog,
@@ -753,7 +804,7 @@ void CreateToolDialog()
                                                               _T("Apply"),
                                                               WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                                               230,
-                                                              694,
+                                                              726,
                                                               60,
                                                               28,
                                                               g_hToolDialog,
@@ -767,7 +818,7 @@ void CreateToolDialog()
                                                  _T("Enable thickness cap"),
                                                  WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
                                                  20,
-                                                 732,
+                                                 764,
                                                  180,
                                                  24,
                                                  g_hToolDialog,
@@ -789,7 +840,7 @@ void CreateToolDialog()
                                            _T("Thickness cap (m):"),
                                            WS_CHILD | WS_VISIBLE,
                                            20,
-                                           764,
+                                           796,
                                            130,
                                            20,
                                            g_hToolDialog,
@@ -802,7 +853,7 @@ void CreateToolDialog()
                                        _T("1.00"),
                                        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
                                        160,
-                                       760,
+                                       792,
                                        60,
                                        24,
                                        g_hToolDialog,
@@ -816,7 +867,7 @@ void CreateToolDialog()
                                               _T("Apply"),
                                               WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                                               230,
-                                              758,
+                                              790,
                                               60,
                                               28,
                                               g_hToolDialog,
@@ -1088,6 +1139,16 @@ LRESULT CALLBACK ToolDialogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         if (LOWORD(wParam) == kToolDialogSsaoBlur21x21RadioId)
         {
             g_ssaoBlurKernelSize = 21;
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogIndirectBlendLerpRadioId)
+        {
+            g_indirectLightBlendMode = 0;
+            return 0;
+        }
+        if (LOWORD(wParam) == kToolDialogIndirectBlendMultiplyRadioId)
+        {
+            g_indirectLightBlendMode = 1;
             return 0;
         }
         if (LOWORD(wParam) == kToolDialogFixedSsaoSampleDistanceCheckboxId)
